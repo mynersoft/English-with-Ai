@@ -16,4 +16,6 @@
     <string name="check_verification_cta">I Have Verified My Email</string>
     <string name="resend_verification_cta">Resend Verification Email</string>
     <string name="sign_out_cta">Sign Out</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_pattern">Pattern</string>
 </resources>

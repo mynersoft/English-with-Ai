@@ -1,20 +1,23 @@
 
 package com.englishai.feature.speaking
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -95,9 +98,19 @@ private enum class LearningPage {
 }
 
 @Composable
-fun SentenceLearningScreen() {
+fun SentenceLearningScreen(
+    onFullscreenModeChanged: (Boolean) -> Unit = {}
+) {
     var page by remember { mutableStateOf(LearningPage.LIST) }
     var selectedIndex by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(page) {
+        onFullscreenModeChanged(page != LearningPage.LIST)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { onFullscreenModeChanged(false) }
+    }
 
     val selectedPattern = patterns[selectedIndex]
 
@@ -112,6 +125,7 @@ fun SentenceLearningScreen() {
         }
 
         LearningPage.EXPLANATION -> {
+            BackHandler { page = LearningPage.LIST }
             PatternExplanationScreen(
                 pattern = selectedPattern,
                 onBack = { page = LearningPage.LIST },
@@ -120,6 +134,7 @@ fun SentenceLearningScreen() {
         }
 
         LearningPage.PRACTICE -> {
+            BackHandler { page = LearningPage.EXPLANATION }
             SpeakingPracticeScreen(
                 pattern = selectedPattern,
                 onBack = { page = LearningPage.EXPLANATION }
@@ -332,9 +347,12 @@ private fun PatternExplanationScreen(
             TopAppBar(
                 title = { Text("Pattern Explanation") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.testTag("pattern_explanation_back_button")
+                    ) {
                         Icon(
-                            Icons.Default.ArrowBack,
+                            Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -353,8 +371,10 @@ private fun PatternExplanationScreen(
                     onClick = onPractice,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .padding(16.dp)
-                        .height(54.dp),
+                        .height(54.dp)
+                        .testTag("start_speaking_practice_button"),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Green
@@ -367,7 +387,7 @@ private fun PatternExplanationScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Icon(
-                        Icons.Default.ArrowForward,
+                        Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = null
                     )
                 }
@@ -736,7 +756,7 @@ private fun SpeakingPracticeScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Icon(
-                    Icons.Default.ArrowForward,
+                    Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = null
                 )
             }
