@@ -46,6 +46,7 @@ import com.example.feature.dashboard.DeactivatedAccountScreen
 import com.example.feature.dashboard.ProfileScreen
 import com.example.feature.dashboard.SecuritySettingsScreen
 import com.example.feature.dashboard.SessionsScreen
+import com.example.feature.speaking.SpeakingRoute
 import com.example.ui.theme.EnglishAITheme
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
@@ -62,6 +63,7 @@ private object AppRoutes {
     const val PROFILE = "profile"
     const val SESSIONS = "sessions"
     const val SECURITY = "security"
+    const val SPEAKING = "speaking"
 }
 
 class MainActivity : ComponentActivity() {
@@ -306,7 +308,15 @@ private fun AuthenticatedNavGraph(
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.SECURITY)
                 },
+                onOpenSpeaking = { navController.navigate(AppRoutes.SPEAKING) },
                 onSignOut = { dashboardViewModel.signOut(credentialManager) }
+            )
+        }
+
+        composable(AppRoutes.SPEAKING) {
+            SpeakingRoute(
+                level = loadedProfile?.safeLevel?.name ?: "Beginner",
+                onBack = { navController.popBackStack() }
             )
         }
 
