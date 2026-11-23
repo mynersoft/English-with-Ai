@@ -115,6 +115,7 @@ dependencies {
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
   // implementation(libs.firebase.appcheck.recaptcha)
+implementation("androidx.compose.material:material-icons-extended")
   // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
