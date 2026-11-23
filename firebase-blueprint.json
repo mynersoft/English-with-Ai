@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated learner profile and 60-day course preferences",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Learner display name"
+        },
+        "authProvider": {
+          "type": "string",
+          "enum": ["google", "password", "multi"],
+          "description": "Primary or linked authentication provider"
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Whether the user's email address is verified"
+        },
+        "learningLevel": {
+          "type": "string",
+          "enum": ["Beginner", "Intermediate", "Advanced"],
+          "description": "English proficiency level"
+        },
+        "dailyGoalMinutes": {
+          "type": "integer",
+          "description": "Daily study goal in minutes (5-240)"
+        },
+        "banglaExplanations": {
+          "type": "boolean",
+          "description": "Whether Bangla explanations are enabled for lessons"
+        },
+        "accountStatus": {
+          "type": "string",
+          "enum": ["ACTIVE", "DEACTIVATED"],
+          "description": "Current lifecycle status of the learner account"
+        },
+        "currentDay": {
+          "type": "integer",
+          "description": "Current day in the 60-day curriculum (1-60)"
+        },
+        "streakDays": {
+          "type": "integer",
+          "description": "Consecutive active learning days"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was created (FieldValue.serverTimestamp())"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was last updated (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": [
+        "userId",
+        "email",
+        "displayName",
+        "authProvider",
+        "emailVerified",
+        "learningLevel",
+        "dailyGoalMinutes",
+        "banglaExplanations",
+        "accountStatus",
+        "currentDay",
+        "streakDays",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserSession": {
+      "title": "UserSession",
+      "description": "Active or past device login session for multi-device management",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID owning this session"
+        },
+        "deviceName": {
+          "type": "string",
+          "description": "Human-readable device model and OS label"
+        },
+        "platform": {
+          "type": "string",
+          "description": "Client platform identifier"
+        },
+        "authProvider": {
+          "type": "string",
+          "enum": ["google", "password", "multi"],
+          "description": "Authentication provider used for this session"
+        },
+        "activeSession": {
+          "type": "boolean",
+          "description": "Whether the session is currently active"
+        },
+        "lastActiveAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last session activity (FieldValue.serverTimestamp())"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when session was recorded (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": [
+        "userId",
+        "deviceName",
+        "platform",
+        "authProvider",
+        "activeSession",
+        "lastActiveAt",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Private learner profile, verification sync, learning settings, and account status"
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": {
+        "$ref": "#/entities/UserSession"
+      },
+      "description": "Per-user device session log supporting multi-device visibility and revocation"
+    }
+  }
+}

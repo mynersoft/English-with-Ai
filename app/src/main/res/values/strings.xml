@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">English AI</string>
+    <string name="tagline_subtitle">60-Day Guided English Mastery</string>
+    <string name="sign_in_title">Welcome Back</string>
+    <string name="sign_in_subtitle">Sign in to continue your 60-day English journey</string>
+    <string name="create_account_title">Create Learner Account</string>
+    <string name="create_account_subtitle">Start from Beginner to Advanced with verified progress sync</string>
+    <string name="forgot_password_title">Reset Your Password</string>
+    <string name="forgot_password_subtitle">Enter your registered email and we will send a secure Firebase recovery link.</string>
+    <string name="verify_email_title">Verify Your Email</string>
+    <string name="verify_email_subtitle">To protect your learning account, please confirm your email address before entering the dashboard.</string>
+    <string name="google_sign_in_cta">Continue with Google</string>
+    <string name="sign_in_cta">Sign In</string>
+    <string name="create_account_cta">Create Account</string>
+    <string name="send_reset_link_cta">Send Recovery Link</string>
+    <string name="check_verification_cta">I Have Verified My Email</string>
+    <string name="resend_verification_cta">Resend Verification Email</string>
+    <string name="sign_out_cta">Sign Out</string>
+</resources>
