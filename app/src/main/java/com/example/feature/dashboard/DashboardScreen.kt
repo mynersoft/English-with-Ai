@@ -83,6 +83,7 @@ fun DashboardScreen(
     onOpenSecurity: () -> Unit,
     onOpenSpeaking: () -> Unit = {},
     onOpenSentenceLearning: () -> Unit = {},
+    onOpenVocabulary: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     onRetryBackendSync: () -> Unit = {},
     onSignOut: () -> Unit
@@ -190,6 +191,7 @@ fun DashboardScreen(
                             AllScreensButtonGrid(
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
+                                onOpenVocabulary = onOpenVocabulary,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -287,6 +289,7 @@ fun DashboardScreen(
                             AllScreensButtonGrid(
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
+                                onOpenVocabulary = onOpenVocabulary,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -300,6 +303,16 @@ fun DashboardScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        item {
+                            AccountNavCard(
+                                icon = Icons.Filled.Translate,
+                                title = "Vocabulary Mastery",
+                                subtitle = "Daily 5-word learning, flashcards, Bangla quizzes, review & speaking",
+                                testTag = "nav_vocabulary_card",
+                                onClick = onOpenVocabulary
                             )
                         }
 
@@ -392,12 +405,22 @@ fun DashboardScreen(
 private fun AllScreensButtonGrid(
     onOpenSpeaking: () -> Unit,
     onOpenSentenceLearning: () -> Unit,
+    onOpenVocabulary: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAdmin: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ScreenQuickButton(
+            icon = Icons.Filled.Translate,
+            label = "Vocabulary Mastery (Daily 5 Words)",
+            testTag = "quick_nav_vocabulary_button",
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            onClick = onOpenVocabulary,
+            modifier = Modifier.fillMaxWidth()
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
