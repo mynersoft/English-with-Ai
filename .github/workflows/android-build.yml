@@ -3,15 +3,10 @@ name: Android APK Build
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - master
-    tags:
-      - 'v*'
+    branches: [main, master]
+    tags: ['v*']
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -35,18 +30,15 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      # ubuntu-latest already has the Android SDK; we only accept its licenses
-      # (android-actions/setup-android@v3 fails here with "Failed to find package 'tools'")
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      # gradle-version is used only when the repo has no gradlew (wrapper)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      - name: Choose Gradle command (wrapper if present, else installed Gradle)
+      - name: Choose Gradle command
         run: |
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
@@ -55,9 +47,6 @@ jobs:
             echo "GRADLE_CMD=gradle" >> "$GITHUB_ENV"
           fi
 
-      # Firebase config for the app (NOT the service account JSON).
-      # build.gradle.kts uses MissingGoogleServicesStrategy.WARN, so the build still
-      # works without it, but Firebase login will not work inside that APK.
       - name: Restore google-services.json
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
@@ -66,17 +55,45 @@ jobs:
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | tr -d ' \r\n' | base64 -d > app/google-services.json || true
           fi
           if [ -f app/google-services.json ] && ! grep -q '"project_info"' app/google-services.json; then
-            echo "::warning::app/google-services.json is not an Android Firebase config (service account JSON?). Removing it."
+            echo "::warning::Not an Android Firebase config (service account JSON?). Replacing with placeholder."
             rm -f app/google-services.json
           fi
           if [ ! -f app/google-services.json ]; then
-            echo "::warning::No valid google-services.json. APK will build, but Firebase will not work in it."
+            echo "::warning::No valid google-services.json secret. Using placeholder: APK builds, Firebase won't work."
+            cat > app/google-services.json <<'JSON'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "placeholder-project",
+              "storage_bucket": "placeholder-project.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": { "package_name": "com.mahir.engai" }
+                },
+                "oauth_client": [],
+                "api_key": [ { "current_key": "placeholder-api-key" } ],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          JSON
           fi
 
-      - name: Restore Debug Keystore
+      # debug.keystore is git-ignored but build.gradle.kts requires it
+      - name: Prepare Debug Keystore
         run: |
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
+          fi
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v -keystore debug.keystore \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
       - name: Configure Optional Environment Overrides
@@ -111,7 +128,7 @@ jobs:
             $GRADLE_CMD assembleRelease --no-daemon --stacktrace
             echo "built=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Skipping Release APK: add RELEASE_KEYSTORE_BASE64, STORE_PASSWORD, and KEY_PASSWORD GitHub Secrets (keyAlias: upload) to also build a signed release APK."
+            echo "Skipping Release APK (no signing secrets)."
             echo "built=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -130,14 +147,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Download Built APKs
         uses: actions/download-artifact@v4
         with:
           path: apks
           merge-multiple: true
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
