@@ -1,5 +1,5 @@
 {
-  "name": "English AI",
+  "name": "English with AI",
   "description": "60-Day English AI Learning App with Firebase Authentication, Google Sign-In, email verification, password recovery, and user profile management.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
