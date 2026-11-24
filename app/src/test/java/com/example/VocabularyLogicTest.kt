@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.repository.VocabularyRepository
 import com.example.domain.model.VocabDashboardData
 import com.example.domain.model.VocabSettings
+import com.example.feature.vocabulary.CsvImportHelper
 import com.example.feature.vocabulary.QuizUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -69,5 +70,19 @@ class VocabularyLogicTest {
         val quiz = QuizUiState()
         assertEquals(0, quiz.currentIndex)
         assertNull(quiz.result)
+    }
+
+    @Test
+    fun `csv helper strips BOM, counts quoted rows accurately, and splits large CSVs into batches`() {
+        val raw = "\uFEFFword,meaning,level\r\n" +
+            "\"calm\",\"শান্ত,\nনিরব\",A1\r\n" +
+            "brave,সাহসী,A1\r\n" +
+            "kind,দয়ালু,A1\r\n"
+        assertEquals(3, CsvImportHelper.countDataRows(raw))
+        val chunks = CsvImportHelper.splitIntoChunks(raw, maxRowsPerChunk = 2)
+        assertEquals(2, chunks.size)
+        assertEquals(2, CsvImportHelper.countDataRows(chunks[0]))
+        assertEquals(1, CsvImportHelper.countDataRows(chunks[1]))
+        assertTrue(chunks[1].startsWith("word,meaning,level\n"))
     }
 }

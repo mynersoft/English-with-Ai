@@ -99,6 +99,7 @@ class VocabAdminViewModel : ViewModel() {
             repo.adminSaveWord(word)
                 .onSuccess {
                     _state.update { it.copy(saving = false, message = "Word saved!", isError = false) }
+                    loadCategories()
                     loadWords()
                     onDone()
                 }
@@ -166,25 +167,72 @@ class VocabAdminViewModel : ViewModel() {
         }
     }
 
+    fun reportMessage(message: String, isError: Boolean = true) {
+        _state.update { it.copy(message = message, isError = isError) }
+    }
+
     fun importCsv(csvText: String) {
+        val chunks = CsvImportHelper.splitIntoChunks(csvText)
+        if (chunks.isEmpty()) {
+            _state.update {
+                it.copy(
+                    message = "CSV must contain a header row and at least 1 word row.",
+                    isError = true
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(saving = true, message = null, importSummary = null) }
-            repo.adminImportCsv(csvText)
-                .onSuccess { summary ->
+            var totalRows = 0
+            var totalInserted = 0
+            var totalDuplicates = 0
+            val allErrors = mutableListOf<String>()
+
+            for ((index, chunk) in chunks.withIndex()) {
+                val res = repo.adminImportCsv(chunk)
+                if (res.isFailure) {
+                    val err = res.exceptionOrNull()
+                    val partial = if (totalRows > 0) {
+                        CsvImportSummary(totalRows, totalInserted, totalDuplicates, allErrors)
+                    } else null
                     _state.update {
                         it.copy(
                             saving = false,
-                            importSummary = summary,
-                            message = "Imported ${summary.inserted} words (${summary.duplicates} duplicates skipped).",
-                            isError = false
+                            importSummary = partial,
+                            message = err?.message ?: "Import failed on batch ${index + 1}",
+                            isError = true
                         )
                     }
-                    loadCategories()
-                    loadWords(1)
+                    if (totalInserted > 0) {
+                        loadCategories()
+                        loadWords(1)
+                    }
+                    return@launch
                 }
-                .onFailure { err ->
-                    _state.update { it.copy(saving = false, message = err.message ?: "Import failed", isError = true) }
-                }
+                val s = res.getOrThrow()
+                totalRows += s.totalRows
+                totalInserted += s.inserted
+                totalDuplicates += s.duplicates
+                allErrors.addAll(s.errors)
+            }
+
+            val summary = CsvImportSummary(
+                totalRows = totalRows,
+                inserted = totalInserted,
+                duplicates = totalDuplicates,
+                errors = allErrors
+            )
+            _state.update {
+                it.copy(
+                    saving = false,
+                    importSummary = summary,
+                    message = "Imported $totalInserted words ($totalDuplicates duplicates skipped).",
+                    isError = false
+                )
+            }
+            loadCategories()
+            loadWords(1)
         }
     }
 }

@@ -189,6 +189,7 @@ fun DashboardScreen(
                         }
                         item {
                             AllScreensButtonGrid(
+                                isAdmin = actionState.isAdmin,
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
@@ -287,6 +288,7 @@ fun DashboardScreen(
 
                         item {
                             AllScreensButtonGrid(
+                                isAdmin = actionState.isAdmin,
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
@@ -375,14 +377,16 @@ fun DashboardScreen(
                             )
                         }
 
-                        item {
-                            AccountNavCard(
-                                icon = Icons.Filled.AdminPanelSettings,
-                                title = "Admin · Manage Patterns & Audio",
-                                subtitle = "Create, edit, and generate TTS or upload audio for patterns",
-                                testTag = "nav_admin_card",
-                                onClick = onOpenAdmin
-                            )
+                        if (actionState.isAdmin) {
+                            item {
+                                AccountNavCard(
+                                    icon = Icons.Filled.AdminPanelSettings,
+                                    title = "Admin Dashboard",
+                                    subtitle = "Post & edit patterns, vocabulary words, categories, audio & CSV import",
+                                    testTag = "nav_admin_card",
+                                    onClick = onOpenAdmin
+                                )
+                            }
                         }
 
                         item {
@@ -403,6 +407,7 @@ fun DashboardScreen(
 
 @Composable
 private fun AllScreensButtonGrid(
+    isAdmin: Boolean,
     onOpenSpeaking: () -> Unit,
     onOpenSentenceLearning: () -> Unit,
     onOpenVocabulary: () -> Unit,
@@ -480,15 +485,19 @@ private fun AllScreensButtonGrid(
                 onClick = onOpenSecurity,
                 modifier = Modifier.weight(1f)
             )
-            ScreenQuickButton(
-                icon = Icons.Filled.AdminPanelSettings,
-                label = "Admin",
-                testTag = "quick_nav_admin_button",
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onOpenAdmin,
-                modifier = Modifier.weight(1f)
-            )
+            if (isAdmin) {
+                ScreenQuickButton(
+                    icon = Icons.Filled.AdminPanelSettings,
+                    label = "Admin",
+                    testTag = "quick_nav_admin_button",
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = onOpenAdmin,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
     }
 }

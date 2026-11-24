@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { AppError } from "@/lib/errors";
 import { ok } from "@/lib/response";
 import { withAdmin } from "@/lib/adminGuard";
-import { CEFR_LEVELS, normalizeVocabularyPayload } from "@/lib/vocabSrs";
+import { CEFR_LEVELS, normalizeVocabularyPayload, slugify } from "@/lib/vocabSrs";
 import { readJson } from "@/validators/auth.validator";
 import Vocabulary from "@/models/Vocabulary";
 import VocabularyCategory from "@/models/VocabularyCategory";
@@ -90,16 +90,23 @@ export const POST = withAdmin(async (request) => {
   let catObjId;
   if (payload.categoryId) {
     catObjId = assertObjectId(payload.categoryId, "categoryId");
-  } else if (payload.category) {
-    const cat = await VocabularyCategory.findOne({
-      $or: [{ slug: payload.category.toLowerCase() }, { name: new RegExp(`^${payload.category}$`, "i") }],
+  } else {
+    const fallbackName = payload.category || "Daily Life";
+    const escapedName = fallbackName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const catSlug = slugify(fallbackName) || "daily-life";
+    let cat = await VocabularyCategory.findOne({
+      $or: [{ slug: catSlug }, { name: new RegExp(`^${escapedName}$`, "i") }],
     })
       .select("_id")
       .lean();
-    if (!cat) throw new AppError(400, "CATEGORY_NOT_FOUND", "Category not found.");
+    if (!cat) {
+      cat = await VocabularyCategory.create({
+        name: fallbackName,
+        slug: catSlug,
+        isActive: true,
+      });
+    }
     catObjId = cat._id;
-  } else {
-    throw new AppError(400, "CATEGORY_REQUIRED", "categoryId is required.");
   }
 
   const existing = await Vocabulary.findOne({ slug: payload.slug }).select("_id").lean();

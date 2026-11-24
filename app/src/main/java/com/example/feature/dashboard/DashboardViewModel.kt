@@ -15,6 +15,7 @@ import com.example.domain.model.AccountStatus
 import com.example.domain.model.LearningLevel
 import com.example.domain.model.UserProfile
 import com.example.domain.model.UserSession
+import com.example.feature.admin.AdminApi
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.auth
@@ -36,7 +37,8 @@ data class DashboardActionState(
     val bannerMessage: String? = null,
     val bannerTone: BannerTone = BannerTone.INFO,
     val backendSyncError: String? = null,
-    val isSyncingBackend: Boolean = false
+    val isSyncingBackend: Boolean = false,
+    val isAdmin: Boolean = false
 )
 
 class DashboardViewModel(
@@ -92,6 +94,14 @@ class DashboardViewModel(
 
     init {
         syncInitialProfileAndSession()
+        refreshAdminAccess()
+    }
+
+    fun refreshAdminAccess() {
+        viewModelScope.launch {
+            val admin = AdminApi.isAdmin()
+            _actionState.update { it.copy(isAdmin = admin) }
+        }
     }
 
     fun syncBackendUser(preferredName: String? = null) {
@@ -102,6 +112,7 @@ class DashboardViewModel(
                 _actionState.update {
                     it.copy(isSyncingBackend = false, backendSyncError = null)
                 }
+                refreshAdminAccess()
             }.onFailure { err ->
                 _actionState.update {
                     it.copy(

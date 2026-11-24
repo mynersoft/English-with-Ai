@@ -62,13 +62,13 @@ export const POST = withAdmin(async (request) => {
       continue;
     }
 
-    const catKey = (norm.category || "daily-life").trim().toLowerCase();
+    const catName = norm.category || "Daily Life";
+    const catKey = catName.trim().toLowerCase();
     let catId = catByKey.get(catKey) || catByKey.get(slugify(catKey));
-    if (!catId && norm.category) {
-      // Auto-create missing category only when explicitly named in CSV
+    if (!catId && slugify(catName)) {
       const createdCat = await VocabularyCategory.create({
-        name: norm.category,
-        slug: slugify(norm.category),
+        name: catName,
+        slug: slugify(catName),
       });
       catId = createdCat._id;
       catByKey.set(createdCat.slug, catId);

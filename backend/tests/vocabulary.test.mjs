@@ -136,15 +136,17 @@ function collectRouteFiles(dir) {
   return files;
 }
 
-test("CSV parser and normalizer handle quoted commas and invalid inputs cleanly", () => {
-  const csv = `word,meaning,pronunciation,partOfSpeech,level,category,example1En,example1Bn,synonyms
+test("CSV parser and normalizer handle quoted commas, UTF-8 BOM, header variants, and invalid inputs cleanly", () => {
+  const csv = `\uFEFFWord,Bengali Meaning,IPA,part_of_speech,CEFR,Category Name,example1_en,example1_bn,Synonyms\r
 "polite","ভদ্র, বিনয়ী","/pəˈlaɪt/","adjective","a2","Communication","Be polite to elders.","বড়দের প্রতি ভদ্র হও।","courteous;respectful"`;
   const { records } = parseVocabularyCsv(csv);
   assert.equal(records.length, 1);
   const norm = normalizeVocabularyPayload(records[0]);
   assert.equal(norm.word, "polite");
   assert.equal(norm.meaning, "ভদ্র, বিনয়ী");
+  assert.equal(norm.partOfSpeech, "adjective");
   assert.equal(norm.level, "A2");
+  assert.equal(norm.category, "Communication");
   assert.deepEqual(norm.synonyms, ["courteous", "respectful"]);
   assert.equal(norm.examples.length, 1);
 });

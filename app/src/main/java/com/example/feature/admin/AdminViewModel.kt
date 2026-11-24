@@ -13,6 +13,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+sealed interface AdminAccessState {
+    data object Checking : AdminAccessState
+    data object Allowed : AdminAccessState
+    data class Denied(val reason: String) : AdminAccessState
+}
+
 data class AdminListState(
     val loading: Boolean = false,
     val patterns: List<AdminPatternSummary> = emptyList(),
@@ -34,11 +40,29 @@ data class AdminEditState(
 
 class AdminViewModel : ViewModel() {
 
+    private val _access = MutableStateFlow<AdminAccessState>(AdminAccessState.Checking)
+    val access: StateFlow<AdminAccessState> = _access.asStateFlow()
+
     private val _list = MutableStateFlow(AdminListState())
     val list: StateFlow<AdminListState> = _list.asStateFlow()
 
     private val _edit = MutableStateFlow(AdminEditState())
     val edit: StateFlow<AdminEditState> = _edit.asStateFlow()
+
+    fun verifyAccessAndLoad() {
+        viewModelScope.launch {
+            _access.value = AdminAccessState.Checking
+            val ok = AdminApi.isAdmin()
+            if (ok) {
+                _access.value = AdminAccessState.Allowed
+                loadList()
+            } else {
+                _access.value = AdminAccessState.Denied(
+                    "Only verified administrators can access the Admin Dashboard."
+                )
+            }
+        }
+    }
 
     // ---------- list ----------
     fun loadList() {

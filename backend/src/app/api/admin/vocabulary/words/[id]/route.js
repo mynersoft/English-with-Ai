@@ -42,7 +42,7 @@ export const PUT = withAdmin(async (request, { params }) => {
     if (!CEFR_LEVELS.includes(lvl)) throw new AppError(400, "VALIDATION_ERROR", "Invalid CEFR level.");
     wordDoc.level = lvl;
   }
-  if (body.categoryId !== undefined) {
+  if (body.categoryId !== undefined && String(body.categoryId).trim()) {
     wordDoc.categoryId = assertObjectId(body.categoryId, "categoryId");
   }
   if (Array.isArray(body.examples)) {

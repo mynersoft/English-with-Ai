@@ -176,8 +176,48 @@ export function scoreQuizAnswers(items = []) {
   return { totalQuestions, correctAnswers, wrongAnswers, score, results };
 }
 
+const CSV_HEADER_ALIASES = {
+  word: "word",
+  english: "word",
+  englishword: "word",
+  meaning: "meaning",
+  bangla: "meaning",
+  bengali: "meaning",
+  bengalimeaning: "meaning",
+  banglameaning: "meaning",
+  pronunciation: "pronunciation",
+  ipa: "pronunciation",
+  partofspeech: "partOfSpeech",
+  pos: "partOfSpeech",
+  level: "level",
+  cefr: "level",
+  cefrlevel: "level",
+  category: "category",
+  categoryname: "category",
+  categoryid: "categoryId",
+  example1en: "example1En",
+  example1bn: "example1Bn",
+  example2en: "example2En",
+  example2bn: "example2Bn",
+  synonyms: "synonyms",
+  antonyms: "antonyms",
+  tags: "tags",
+  difficulty: "difficulty",
+  ispublished: "isPublished",
+  published: "isPublished",
+  audiourl: "audioUrl",
+  imageurl: "imageUrl",
+  sortorder: "sortOrder",
+};
+
+function canonicalCsvHeader(rawHeader) {
+  const trimmed = String(rawHeader || "").replace(/^\uFEFF/, "").trim();
+  const key = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return CSV_HEADER_ALIASES[key] || trimmed;
+}
+
 /**
- * Parses CSV text cleanly (handles quoted commas and escaped double quotes) into row objects.
+ * Parses CSV text cleanly (handles UTF-8 BOM, quoted commas, and escaped double quotes) into row objects.
  * Expected headers (case-insensitive):
  * word,meaning,pronunciation,partOfSpeech,level,category,example1En,example1Bn,example2En,example2Bn,synonyms,antonyms,tags,difficulty,isPublished
  */
@@ -186,7 +226,10 @@ export function parseVocabularyCsv(csvText) {
   let row = [];
   let cell = "";
   let inQuotes = false;
-  const text = String(csvText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const text = String(csvText || "")
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
 
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
@@ -220,11 +263,11 @@ export function parseVocabularyCsv(csvText) {
     return { headers: rows[0] || [], records: [] };
   }
 
-  const headers = rows[0].map((h) => h.trim());
+  const headers = rows[0].map(canonicalCsvHeader);
   const records = rows.slice(1).map((cols, idx) => {
     const obj = { _rowNumber: idx + 2 };
     headers.forEach((h, colIdx) => {
-      obj[h] = cols[colIdx] ?? "";
+      if (h) obj[h] = cols[colIdx] ?? "";
     });
     return obj;
   });

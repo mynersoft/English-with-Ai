@@ -394,7 +394,6 @@ class VocabularyRepository(context: Context? = null) {
             .put("imageUrl", word.imageUrl?.trim()?.takeIf { it.isNotBlank() })
             .put("partOfSpeech", word.partOfSpeech.trim())
             .put("level", word.level)
-            .put("categoryId", word.categoryId)
             .put("examples", exArr)
             .put("synonyms", JSONArray(word.synonyms))
             .put("antonyms", JSONArray(word.antonyms))
@@ -402,6 +401,12 @@ class VocabularyRepository(context: Context? = null) {
             .put("difficulty", word.difficulty)
             .put("isPublished", word.isPublished)
             .put("sortOrder", word.sortOrder)
+
+        if (word.categoryId.isNotBlank()) {
+            payload.put("categoryId", word.categoryId)
+        } else if (word.categoryName.isNotBlank()) {
+            payload.put("category", word.categoryName.trim())
+        }
 
         val data = if (word.id.isBlank()) {
             requestJson("POST", "/api/admin/vocabulary/words", payload)

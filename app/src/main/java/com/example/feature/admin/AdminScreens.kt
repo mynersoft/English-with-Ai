@@ -1,30 +1,38 @@
 package com.example.feature.admin
 
-import android.media.AudioAttributes
-import android.media.MediaPlayer
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,151 +41,554 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-
-// =====================================================================
-// Entry point: AdminRoute(onBack) -> list <-> editor (no extra NavHost needed)
-// =====================================================================
+import com.example.feature.vocabulary.VocabAdminPanel
+import com.example.feature.vocabulary.VocabAdminUiState
+import com.example.feature.vocabulary.VocabAdminViewModel
 
 @Composable
 fun AdminRoute(
     onBack: () -> Unit,
-    vm: AdminViewModel = viewModel()
+    vm: AdminViewModel = viewModel(),
+    vocabAdminVm: VocabAdminViewModel = viewModel()
 ) {
-    var showEditor by remember { mutableStateOf(false) }
+    val access by vm.access.collectAsStateWithLifecycle()
+    val patternListState by vm.list.collectAsStateWithLifecycle()
+    val vocabAdminState by vocabAdminVm.state.collectAsStateWithLifecycle()
+
+    var showPatternEditor by rememberSaveable { mutableStateOf(false) }
+    var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary
+    var vocabSubTab by rememberSaveable { mutableIntStateOf(0) }
+    var openAddWordTrigger by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        vm.verifyAccessAndLoad()
+    }
+
+    LaunchedEffect(access) {
+        if (access is AdminAccessState.Allowed) {
+            vocabAdminVm.loadInitial()
+        }
+    }
 
     BackHandler {
-        if (showEditor) {
-            showEditor = false
+        if (showPatternEditor) {
+            showPatternEditor = false
             vm.loadList()
         } else {
             onBack()
         }
     }
 
-    if (showEditor) {
-        AdminEditScreen(
-            vm = vm,
-            onClose = {
-                showEditor = false
-                vm.loadList()
+    when (val gate = access) {
+        is AdminAccessState.Checking -> {
+            AdminAccessGateScreen(
+                checking = true,
+                reason = "Verifying administrator permissions...",
+                onBack = onBack,
+                onRetry = { vm.verifyAccessAndLoad() }
+            )
+        }
+        is AdminAccessState.Denied -> {
+            AdminAccessGateScreen(
+                checking = false,
+                reason = gate.reason,
+                onBack = onBack,
+                onRetry = { vm.verifyAccessAndLoad() }
+            )
+        }
+        is AdminAccessState.Allowed -> {
+            if (showPatternEditor) {
+                AdminEditScreen(
+                    vm = vm,
+                    onClose = {
+                        showPatternEditor = false
+                        vm.loadList()
+                    }
+                )
+            } else {
+                AdminDashboardHub(
+                    activeTab = activeSectionTab,
+                    onSelectTab = { activeSectionTab = it },
+                    patternState = patternListState,
+                    vocabState = vocabAdminState,
+                    vocabSubTab = vocabSubTab,
+                    openAddWordTrigger = openAddWordTrigger,
+                    onBack = onBack,
+                    onRefreshAll = {
+                        vm.loadList()
+                        vocabAdminVm.loadInitial()
+                    },
+                    onNewPattern = {
+                        vm.openNew()
+                        showPatternEditor = true
+                    },
+                    onEditPattern = { id ->
+                        vm.openEdit(id)
+                        showPatternEditor = true
+                    },
+                    onDeletePattern = { id -> vm.deletePattern(id) },
+                    onClearPatternMessage = { vm.clearListMessage() },
+                    onQuickAddVocabulary = {
+                        vocabSubTab = 0
+                        activeSectionTab = 2
+                        openAddWordTrigger++
+                    },
+                    onQuickManageCategories = {
+                        vocabSubTab = 1
+                        activeSectionTab = 2
+                    },
+                    onQuickCsvImport = {
+                        vocabSubTab = 2
+                        activeSectionTab = 2
+                    },
+                    vocabAdminVm = vocabAdminVm
+                )
             }
-        )
-    } else {
-        AdminListScreen(
-            vm = vm,
-            onBack = onBack,
-            onNew = {
-                vm.openNew()
-                showEditor = true
-            },
-            onEdit = { id ->
-                vm.openEdit(id)
-                showEditor = true
-            }
-        )
+        }
     }
 }
 
-// =====================================================================
-// List screen
-// =====================================================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AdminAccessGateScreen(
+    checking: Boolean,
+    reason: String,
+    onBack: () -> Unit,
+    onRetry: () -> Unit
+) {
+    Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            TopAppBar(
+                title = { Text("Admin Dashboard") },
+                navigationIcon = {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.minimumInteractiveComponentSize()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier.widthIn(max = 420.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (checking) {
+                    CircularProgressIndicator()
+                    Text(reason, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Text(
+                        text = "Admin Access Only",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = reason,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = onBack, modifier = Modifier.minimumInteractiveComponentSize()) {
+                            Text("Go Back")
+                        }
+                        Button(onClick = onRetry, modifier = Modifier.minimumInteractiveComponentSize()) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Retry Check")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AdminListScreen(
-    vm: AdminViewModel,
+private fun AdminDashboardHub(
+    activeTab: Int,
+    onSelectTab: (Int) -> Unit,
+    patternState: AdminListState,
+    vocabState: VocabAdminUiState,
+    vocabSubTab: Int,
+    openAddWordTrigger: Int,
     onBack: () -> Unit,
-    onNew: () -> Unit,
-    onEdit: (String) -> Unit
+    onRefreshAll: () -> Unit,
+    onNewPattern: () -> Unit,
+    onEditPattern: (String) -> Unit,
+    onDeletePattern: (String) -> Unit,
+    onClearPatternMessage: () -> Unit,
+    onQuickAddVocabulary: () -> Unit,
+    onQuickManageCategories: () -> Unit,
+    onQuickCsvImport: () -> Unit,
+    vocabAdminVm: VocabAdminViewModel
 ) {
-    val state by vm.list.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    var confirmDelete by remember { mutableStateOf<AdminPatternSummary?>(null) }
+    var confirmDeletePattern by remember { mutableStateOf<AdminPatternSummary?>(null) }
 
-    LaunchedEffect(Unit) { vm.loadList() }
-    LaunchedEffect(state.message) {
-        state.message?.let {
+    LaunchedEffect(patternState.message) {
+        patternState.message?.let {
             snackbar.showSnackbar(it)
-            vm.clearListMessage()
+            onClearPatternMessage()
         }
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text("Admin · Patterns") },
+                title = { Text("Admin Dashboard") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("admin_dashboard_back_button")
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = onRefreshAll,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("admin_dashboard_refresh_button")
+                    ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh admin data")
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNew) {
-                Icon(Icons.Default.Add, contentDescription = "New pattern")
+            if (activeTab == 1) {
+                FloatingActionButton(
+                    onClick = onNewPattern,
+                    modifier = Modifier.testTag("admin_fab_new_pattern")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Post new pattern")
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when {
-                state.loading && state.patterns.isEmpty() ->
-                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            TabRow(
+                selectedTabIndex = activeTab,
+                modifier = Modifier.widthIn(max = 600.dp)
+            ) {
+                Tab(
+                    selected = activeTab == 0,
+                    onClick = { onSelectTab(0) },
+                    text = { Text("Overview") },
+                    modifier = Modifier.testTag("admin_tab_overview")
+                )
+                Tab(
+                    selected = activeTab == 1,
+                    onClick = { onSelectTab(1) },
+                    text = { Text("Patterns (${patternState.patterns.size})") },
+                    modifier = Modifier.testTag("admin_tab_patterns")
+                )
+                Tab(
+                    selected = activeTab == 2,
+                    onClick = { onSelectTab(2) },
+                    text = { Text("Vocabulary (${vocabState.total})") },
+                    modifier = Modifier.testTag("admin_tab_vocabulary")
+                )
+            }
 
-                state.patterns.isEmpty() ->
-                    Text("No patterns yet. Tap + to add one.", Modifier.align(Alignment.Center))
-
-                else -> LazyColumn(
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            when (activeTab) {
+                0 -> AdminOverviewTab(
+                    patternCount = patternState.patterns.size,
+                    vocabCount = vocabState.total,
+                    categoryCount = vocabState.categories.size,
+                    onPostNewPattern = onNewPattern,
+                    onOpenPatterns = { onSelectTab(1) },
+                    onPostNewVocabulary = onQuickAddVocabulary,
+                    onManageCategories = onQuickManageCategories,
+                    onCsvImport = onQuickCsvImport
+                )
+                1 -> AdminPatternsListTab(
+                    state = patternState,
+                    onNewPattern = onNewPattern,
+                    onEditPattern = onEditPattern,
+                    onRequestDelete = { confirmDeletePattern = it }
+                )
+                2 -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter
                 ) {
-                    items(state.patterns, key = { it.id }) { p ->
-                        PatternCard(p, onEdit = { onEdit(p.id) }, onDelete = { confirmDelete = p })
-                    }
+                    VocabAdminPanel(
+                        state = vocabState,
+                        requestedSubTab = vocabSubTab,
+                        openAddWordTrigger = openAddWordTrigger,
+                        onClearMessage = { vocabAdminVm.clearMessage() },
+                        onFilterChange = { s, l, c -> vocabAdminVm.updateFilters(s, l, c) },
+                        onPageChange = { p -> vocabAdminVm.loadWords(p) },
+                        onSaveWord = { w, done -> vocabAdminVm.saveWord(w, done) },
+                        onTogglePublish = { id, pub -> vocabAdminVm.togglePublish(id, pub) },
+                        onDeleteWord = { id -> vocabAdminVm.deleteWord(id) },
+                        onSaveCategory = { id, name, desc, parent, active ->
+                            vocabAdminVm.saveCategory(id, name, desc, parent, active)
+                        },
+                        onDeleteCategory = { id -> vocabAdminVm.deleteCategory(id) },
+                        onImportCsv = { csv -> vocabAdminVm.importCsv(csv) }
+                    )
                 }
             }
         }
     }
 
-    confirmDelete?.let { p ->
+    confirmDeletePattern?.let { p ->
         AlertDialog(
-            onDismissRequest = { confirmDelete = null },
+            onDismissRequest = { confirmDeletePattern = null },
             title = { Text("Delete pattern?") },
             text = { Text("\"${p.title}\" and all its audio will be deleted.") },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.deletePattern(p.id)
-                    confirmDelete = null
+                    onDeletePattern(p.id)
+                    confirmDeletePattern = null
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { confirmDeletePattern = null }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun AdminOverviewTab(
+    patternCount: Int,
+    vocabCount: Int,
+    categoryCount: Int,
+    onPostNewPattern: () -> Unit,
+    onOpenPatterns: () -> Unit,
+    onPostNewVocabulary: () -> Unit,
+    onManageCategories: () -> Unit,
+    onCsvImport: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .widthIn(max = 600.dp)
+            .fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                AdminStatTile("Patterns", patternCount.toString(), Modifier.weight(1f))
+                AdminStatTile("Words", vocabCount.toString(), Modifier.weight(1f))
+                AdminStatTile("Categories", categoryCount.toString(), Modifier.weight(1f))
+            }
+        }
+
+        item {
+            Text(
+                text = "Quick Content Actions (Admin Only)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.Add,
+                title = "Post New Sentence Pattern",
+                subtitle = "Create a new pattern, add Bangla examples & generate TTS audio",
+                testTag = "admin_quick_post_pattern",
+                onClick = onPostNewPattern
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.MenuBook,
+                title = "Manage & Edit Patterns",
+                subtitle = "Edit existing patterns, upload custom voice, or regenerate audio",
+                testTag = "admin_quick_manage_patterns",
+                onClick = onOpenPatterns
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.Translate,
+                title = "Post New Vocabulary Word",
+                subtitle = "Add word, Bangla meaning, IPA, examples, synonyms & CEFR level",
+                testTag = "admin_quick_post_vocab",
+                onClick = onPostNewVocabulary
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.Category,
+                title = "Manage Vocabulary Categories",
+                subtitle = "Add, edit, activate, or remove parent & sub categories",
+                testTag = "admin_quick_categories",
+                onClick = onManageCategories
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.UploadFile,
+                title = "Bulk CSV Vocabulary Import",
+                subtitle = "Paste CSV rows with duplicate detection & validation",
+                testTag = "admin_quick_csv_import",
+                onClick = onCsvImport
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminStatTile(label: String, value: String, modifier: Modifier) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun AdminActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    testTag: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier
+            .fillMaxWidth()
+            .minimumInteractiveComponentSize()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .testTag(testTag)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun AdminPatternsListTab(
+    state: AdminListState,
+    onNewPattern: () -> Unit,
+    onEditPattern: (String) -> Unit,
+    onRequestDelete: (AdminPatternSummary) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .widthIn(max = 600.dp)
+            .fillMaxSize()
+    ) {
+        when {
+            state.loading && state.patterns.isEmpty() ->
+                CircularProgressIndicator(Modifier.align(Alignment.Center))
+
+            state.patterns.isEmpty() ->
+                Column(
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("No patterns yet. Post your first sentence pattern.")
+                    Button(onClick = onNewPattern) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Post New Pattern")
+                    }
+                }
+
+            else -> LazyColumn(
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(state.patterns, key = { it.id }) { p ->
+                    PatternCard(
+                        p = p,
+                        onEdit = { onEditPattern(p.id) },
+                        onDelete = { onRequestDelete(p) }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -210,351 +621,4 @@ private fun PatternCard(p: AdminPatternSummary, onEdit: () -> Unit, onDelete: ()
             }
         }
     }
-}
-
-// =====================================================================
-// Add / edit screen
-// =====================================================================
-
-private class AudioActions(
-    val locked: Boolean,
-    val busyId: String?,
-    val player: PreviewPlayer,
-    val onGenerate: (AudioTarget, Boolean) -> Unit,
-    val onUpload: (AudioTarget) -> Unit,
-    val onDelete: (AudioTarget) -> Unit
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AdminEditScreen(vm: AdminViewModel, onClose: () -> Unit) {
-    val state by vm.edit.collectAsStateWithLifecycle()
-    val form = state.form
-    val context = LocalContext.current
-    val snackbar = remember { SnackbarHostState() }
-    val player = rememberPreviewPlayer()
-
-    var pendingTarget by remember { mutableStateOf<AudioTarget?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        val t = pendingTarget
-        if (uri != null && t != null) vm.upload(context.contentResolver, uri, t)
-        pendingTarget = null
-    }
-
-    LaunchedEffect(state.message) {
-        state.message?.let {
-            snackbar.showSnackbar(it)
-            vm.clearEditMessage()
-        }
-    }
-
-    val actions = AudioActions(
-        locked = state.audioLocked,
-        busyId = state.busyId,
-        player = player,
-        onGenerate = { t, force -> vm.generate(t, force) },
-        onUpload = { t ->
-            pendingTarget = t
-            picker.launch("audio/*")
-        },
-        onDelete = { t -> vm.deleteAudio(t) }
-    )
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (state.isNew) "New pattern" else "Edit pattern") },
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { vm.save() }, enabled = !state.saving && !state.loading) {
-                        Text(if (state.saving) "Saving..." else "Save")
-                    }
-                }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) }
-    ) { padding ->
-        if (state.loading) {
-            Box(Modifier.padding(padding).fillMaxSize()) {
-                CircularProgressIndicator(Modifier.align(Alignment.Center))
-            }
-            return@Scaffold
-        }
-
-        LazyColumn(
-            modifier = Modifier.padding(padding).imePadding(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (state.audioLocked) {
-                item {
-                    Surface(
-                        color = Color(0xFFFFF3CD),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            if (state.isNew) "Save the pattern first, then you can generate or upload audio."
-                            else "Unsaved changes. Save before generating or uploading audio.",
-                            color = Color(0xFF8A6D00),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(10.dp)
-                        )
-                    }
-                }
-            }
-
-            item {
-                OutlinedTextField(
-                    value = form.title,
-                    onValueChange = vm::setTitle,
-                    label = { Text("Title (English)") },
-                    placeholder = { Text("I'd like to + Verb") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            if (!state.isNew) {
-                item { AudioRow("Title audio", form.titleAudio, AudioTarget("title"), actions) }
-            }
-
-            item {
-                OutlinedTextField(
-                    value = form.meaning,
-                    onValueChange = vm::setMeaning,
-                    label = { Text("Meaning (Bangla)") },
-                    placeholder = { Text("আমি ... করতে চাই (ভদ্রভাবে)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            if (!state.isNew) {
-                item { AudioRow("Meaning audio", form.meaningAudio, AudioTarget("meaning"), actions) }
-            }
-
-            item {
-                OutlinedTextField(
-                    value = form.explanation,
-                    onValueChange = vm::setExplanation,
-                    label = { Text("Explanation (Bangla)") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = form.isPremium, onCheckedChange = vm::setPremium)
-                    Text("Premium", Modifier.padding(start = 8.dp, end = 24.dp))
-                    OutlinedTextField(
-                        value = form.order,
-                        onValueChange = vm::setOrder,
-                        label = { Text("Order") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Sentences (${form.examples.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (!state.isNew) {
-                        OutlinedButton(
-                            onClick = { vm.generateAll() },
-                            enabled = !state.audioLocked && state.busyId == null
-                        ) { Text(if (state.busyId == "all") "Generating..." else "Generate missing audio") }
-                    }
-                }
-            }
-
-            itemsIndexed(form.examples, key = { _, ex -> ex.key }) { i, ex ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Sentence ${i + 1}",
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = { vm.removeExample(i) }) {
-                                Text("Remove", color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                        OutlinedTextField(
-                            value = ex.en,
-                            onValueChange = { vm.setExampleEn(i, it) },
-                            label = { Text("English sentence") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (ex.id != null) {
-                            AudioRow("English audio", ex.enAudio, AudioTarget("example", i, "en"), actions)
-                        }
-                        OutlinedTextField(
-                            value = ex.bn,
-                            onValueChange = { vm.setExampleBn(i, it) },
-                            label = { Text("বাংলা অনুবাদ") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (ex.id != null) {
-                            AudioRow("Bangla audio", ex.bnAudio, AudioTarget("example", i, "bn"), actions)
-                        }
-                    }
-                }
-            }
-
-            item {
-                OutlinedButton(onClick = { vm.addExample() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("+ Add sentence")
-                }
-            }
-        }
-    }
-}
-
-// =====================================================================
-// Audio row (play / generate / upload / delete)
-// =====================================================================
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AudioRow(label: String, audio: AdminAudio, target: AudioTarget, a: AudioActions) {
-    val busy = a.busyId == target.busyId()
-    val disabled = a.locked || a.busyId != null
-    var confirmReplace by remember { mutableStateOf(false) }
-    val url = audio.url
-    val playing = url != null && a.player.playingUrl == url
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                if (busy) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                } else {
-                    StatusTag(audio)
-                }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (url != null) {
-                    TextButton(onClick = { a.player.toggle(url) }) {
-                        Text(if (playing) "■ Stop" else "▶ Play")
-                    }
-                }
-                TextButton(
-                    enabled = !disabled,
-                    onClick = {
-                        if (audio.source == "manual") confirmReplace = true
-                        else a.onGenerate(target, false)
-                    }
-                ) { Text(if (url != null) "Regenerate" else "Generate") }
-                TextButton(enabled = !disabled, onClick = { a.onUpload(target) }) { Text("Upload") }
-                if (url != null) {
-                    TextButton(enabled = !disabled, onClick = { a.onDelete(target) }) {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            }
-        }
-    }
-
-    if (confirmReplace) {
-        AlertDialog(
-            onDismissRequest = { confirmReplace = false },
-            title = { Text("Replace your recording?") },
-            text = { Text("This audio was uploaded by you. Regenerating will replace it with TTS audio.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmReplace = false
-                    a.onGenerate(target, true)
-                }) { Text("Replace") }
-            },
-            dismissButton = { TextButton(onClick = { confirmReplace = false }) { Text("Cancel") } }
-        )
-    }
-}
-
-@Composable
-private fun StatusTag(audio: AdminAudio) {
-    when {
-        audio.url == null -> Tag("No audio", Color(0xFFE5E7EB), Color(0xFF6B7280))
-        audio.stale -> Tag("Outdated", Color(0xFFFFF3CD), Color(0xFF8A6D00))
-        audio.source == "manual" -> Tag("Manual", Color(0xFFDCFCE7), Color(0xFF166534))
-        else -> Tag("TTS", Color(0xFFDCFCE7), Color(0xFF166534))
-    }
-}
-
-@Composable
-private fun Tag(text: String, bg: Color, fg: Color, modifier: Modifier = Modifier) {
-    Surface(color = bg, shape = RoundedCornerShape(6.dp), modifier = modifier) {
-        Text(
-            text,
-            color = fg,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-        )
-    }
-}
-
-// =====================================================================
-// Tiny audio preview player (MediaPlayer, no extra dependency)
-// =====================================================================
-
-private class PreviewPlayer {
-    private var mp: MediaPlayer? = null
-    var playingUrl by mutableStateOf<String?>(null)
-        private set
-
-    fun toggle(url: String) {
-        if (playingUrl == url) {
-            stop()
-            return
-        }
-        stop()
-        val player = MediaPlayer()
-        mp = player
-        playingUrl = url
-        try {
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .build()
-            )
-            player.setDataSource(url)
-            player.setOnPreparedListener { it.start() }
-            player.setOnCompletionListener { stop() }
-            player.setOnErrorListener { _, _, _ ->
-                stop()
-                true
-            }
-            player.prepareAsync()
-        } catch (e: Exception) {
-            stop()
-        }
-    }
-
-    fun stop() {
-        mp?.release()
-        mp = null
-        playingUrl = null
-    }
-}
-
-@Composable
-private fun rememberPreviewPlayer(): PreviewPlayer {
-    val player = remember { PreviewPlayer() }
-    DisposableEffect(Unit) { onDispose { player.stop() } }
-    return player
 }
