@@ -20,6 +20,10 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    val backendBaseUrl = (System.getenv("BACKEND_BASE_URL") ?: "")
+      .replace("\\", "\\\\")
+      .replace("\"", "\\\"")
+    buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,

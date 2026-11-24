@@ -86,7 +86,11 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
     }
 
     private fun post(path: String, token: String, body: JSONObject?): HttpResult {
-        val conn = URL(BuildConfig.BACKEND_BASE_URL.trimEnd('/') + path).openConnection() as HttpURLConnection
+        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
+        if (baseUrl.isBlank()) {
+            throw SpeakingException("Backend URL is not configured yet.")
+        }
+        val conn = URL(baseUrl + path).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
             conn.connectTimeout = 15_000

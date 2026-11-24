@@ -28,15 +28,18 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -56,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.core.common.UiState
 import com.example.core.ui.BannerTone
@@ -76,6 +80,7 @@ fun DashboardScreen(
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenSpeaking: () -> Unit = {},
+    onOpenSentenceLearning: () -> Unit = {},
     onSignOut: () -> Unit
 ) {
     Scaffold(
@@ -221,7 +226,26 @@ fun DashboardScreen(
 
                         item {
                             Text(
-                                text = "Account & Session Center",
+                                text = "Quick Screen Navigation",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        item {
+                            AllScreensButtonGrid(
+                                onOpenSpeaking = onOpenSpeaking,
+                                onOpenSentenceLearning = onOpenSentenceLearning,
+                                onOpenProfile = onOpenProfile,
+                                onOpenSessions = onOpenSessions,
+                                onOpenSecurity = onOpenSecurity
+                            )
+                        }
+
+                        item {
+                            Text(
+                                text = "Learning & Practice",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 modifier = Modifier.padding(top = 4.dp)
@@ -235,6 +259,25 @@ fun DashboardScreen(
                                 subtitle = "Talk in English with AI and see corrections for your mistakes",
                                 testTag = "nav_speaking_card",
                                 onClick = onOpenSpeaking
+                            )
+                        }
+
+                        item {
+                            AccountNavCard(
+                                icon = Icons.Filled.MenuBook,
+                                title = "Sentence Patterns",
+                                subtitle = "Practice spoken English structures with Bangla meaning & speaking drills",
+                                testTag = "nav_patterns_card",
+                                onClick = onOpenSentenceLearning
+                            )
+                        }
+
+                        item {
+                            Text(
+                                text = "Account & Session Center",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(top = 4.dp)
                             )
                         }
 
@@ -273,6 +316,112 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AllScreensButtonGrid(
+    onOpenSpeaking: () -> Unit,
+    onOpenSentenceLearning: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenSessions: () -> Unit,
+    onOpenSecurity: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ScreenQuickButton(
+                icon = Icons.Filled.Mic,
+                label = "AI Speaking",
+                testTag = "quick_nav_speaking_button",
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = onOpenSpeaking,
+                modifier = Modifier.weight(1f)
+            )
+            ScreenQuickButton(
+                icon = Icons.Filled.MenuBook,
+                label = "Patterns",
+                testTag = "quick_nav_patterns_button",
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                onClick = onOpenSentenceLearning,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ScreenQuickButton(
+                icon = Icons.Filled.ManageAccounts,
+                label = "Profile",
+                testTag = "quick_nav_profile_button",
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                onClick = onOpenProfile,
+                modifier = Modifier.weight(1f)
+            )
+            ScreenQuickButton(
+                icon = Icons.Filled.Devices,
+                label = "Sessions",
+                testTag = "quick_nav_sessions_button",
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = onOpenSessions,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        ScreenQuickButton(
+            icon = Icons.Filled.Security,
+            label = "Security & Account Settings",
+            testTag = "quick_nav_security_button",
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            onClick = onOpenSecurity,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun ScreenQuickButton(
+    icon: ImageVector,
+    label: String,
+    testTag: String,
+    containerColor: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        ),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+        modifier = modifier
+            .height(52.dp)
+            .minimumInteractiveComponentSize()
+            .testTag(testTag)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
