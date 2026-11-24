@@ -40,39 +40,43 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      - name: Setup Gradle 9.3.1
+      # gradle-version is used only when the repo has no gradlew (wrapper)
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      # Firebase needs app/google-services.json. It is normally git-ignored,
-      # so we restore it from a GitHub Secret.
+      - name: Choose Gradle command (wrapper if present, else installed Gradle)
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            echo "GRADLE_CMD=./gradlew" >> "$GITHUB_ENV"
+          else
+            echo "GRADLE_CMD=gradle" >> "$GITHUB_ENV"
+          fi
+
+      # Firebase config for the app (NOT the service account JSON).
+      # build.gradle.kts uses MissingGoogleServicesStrategy.WARN, so the build still
+      # works without it, but Firebase login will not work inside that APK.
       - name: Restore google-services.json
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | tr -d ' \r\n' | base64 -d > app/google-services.json
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | tr -d ' \r\n' | base64 -d > app/google-services.json || true
+          fi
+          if [ -f app/google-services.json ] && ! grep -q '"project_info"' app/google-services.json; then
+            echo "::warning::app/google-services.json is not an Android Firebase config (service account JSON?). Removing it."
+            rm -f app/google-services.json
           fi
           if [ ! -f app/google-services.json ]; then
-            echo "::error::app/google-services.json is missing. Add the GOOGLE_SERVICES_JSON_BASE64 secret."
-            exit 1
-          fi
-          if ! grep -q '"project_info"' app/google-services.json; then
-            echo "::error::app/google-services.json is not a valid Android Firebase client config (missing project_info). Do not put a service account JSON here."
-            exit 1
+            echo "::warning::No valid google-services.json. APK will build, but Firebase will not work in it."
           fi
 
       - name: Restore Debug Keystore
         run: |
           if [ -f debug.keystore.base64 ]; then
-            tr -d ' \r\n' < debug.keystore.base64 | base64 -d > debug.keystore
-          fi
-          if [ ! -s debug.keystore ]; then
-            keytool -genkeypair -v -keystore debug.keystore \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
+            base64 -d debug.keystore.base64 > debug.keystore
           fi
 
       - name: Configure Optional Environment Overrides
@@ -84,7 +88,7 @@ jobs:
           fi
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: $GRADLE_CMD assembleDebug --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -102,9 +106,9 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
-            printf '%s' "$RELEASE_KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "${{ github.workspace }}/my-upload-key.jks"
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "${{ github.workspace }}/my-upload-key.jks"
             export KEYSTORE_PATH="${{ github.workspace }}/my-upload-key.jks"
-            gradle assembleRelease --no-daemon --stacktrace
+            $GRADLE_CMD assembleRelease --no-daemon --stacktrace
             echo "built=true" >> "$GITHUB_OUTPUT"
           else
             echo "Skipping Release APK: add RELEASE_KEYSTORE_BASE64, STORE_PASSWORD, and KEY_PASSWORD GitHub Secrets (keyAlias: upload) to also build a signed release APK."
