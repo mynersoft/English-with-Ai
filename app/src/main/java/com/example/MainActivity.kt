@@ -30,6 +30,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.englishai.feature.speaking.SentenceLearningScreen
 import com.example.core.common.UiState
 import com.example.core.ui.attemptSilentGoogleAutoSignIn
 import com.example.data.repository.AuthRepository
@@ -64,6 +65,7 @@ private object AppRoutes {
     const val SESSIONS = "sessions"
     const val SECURITY = "security"
     const val SPEAKING = "speaking"
+    const val SENTENCE_LEARNING = "sentence-learning"
 }
 
 class MainActivity : ComponentActivity() {
@@ -308,7 +310,14 @@ private fun AuthenticatedNavGraph(
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.SECURITY)
                 },
-                onOpenSpeaking = { navController.navigate(AppRoutes.SPEAKING) },
+                onOpenSpeaking = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.SPEAKING)
+                },
+                onOpenSentenceLearning = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.SENTENCE_LEARNING)
+                },
                 onSignOut = { dashboardViewModel.signOut(credentialManager) }
             )
         }
@@ -316,6 +325,12 @@ private fun AuthenticatedNavGraph(
         composable(AppRoutes.SPEAKING) {
             SpeakingRoute(
                 level = loadedProfile?.safeLevel?.name ?: "Beginner",
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(AppRoutes.SENTENCE_LEARNING) {
+            SentenceLearningScreen(
                 onBack = { navController.popBackStack() }
             )
         }
