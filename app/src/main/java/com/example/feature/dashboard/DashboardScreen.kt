@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -81,6 +82,7 @@ fun DashboardScreen(
     onOpenSecurity: () -> Unit,
     onOpenSpeaking: () -> Unit = {},
     onOpenSentenceLearning: () -> Unit = {},
+    onOpenAdmin: () -> Unit = {},
     onSignOut: () -> Unit
 ) {
     Scaffold(
@@ -239,7 +241,8 @@ fun DashboardScreen(
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
-                                onOpenSecurity = onOpenSecurity
+                                onOpenSecurity = onOpenSecurity,
+                                onOpenAdmin = onOpenAdmin
                             )
                         }
 
@@ -311,6 +314,16 @@ fun DashboardScreen(
                             )
                         }
 
+                        item {
+                            AccountNavCard(
+                                icon = Icons.Filled.AdminPanelSettings,
+                                title = "Admin · Manage Patterns & Audio",
+                                subtitle = "Create, edit, and generate TTS or upload audio for patterns",
+                                testTag = "nav_admin_card",
+                                onClick = onOpenAdmin
+                            )
+                        }
+
                         item { Spacer(modifier = Modifier.height(12.dp)) }
                     }
                 }
@@ -325,7 +338,8 @@ private fun AllScreensButtonGrid(
     onOpenSentenceLearning: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
-    onOpenSecurity: () -> Unit
+    onOpenSecurity: () -> Unit,
+    onOpenAdmin: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -374,15 +388,29 @@ private fun AllScreensButtonGrid(
                 modifier = Modifier.weight(1f)
             )
         }
-        ScreenQuickButton(
-            icon = Icons.Filled.Security,
-            label = "Security & Account Settings",
-            testTag = "quick_nav_security_button",
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            onClick = onOpenSecurity,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ScreenQuickButton(
+                icon = Icons.Filled.Security,
+                label = "Security",
+                testTag = "quick_nav_security_button",
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = onOpenSecurity,
+                modifier = Modifier.weight(1f)
+            )
+            ScreenQuickButton(
+                icon = Icons.Filled.AdminPanelSettings,
+                label = "Admin",
+                testTag = "quick_nav_admin_button",
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = onOpenAdmin,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 

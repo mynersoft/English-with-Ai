@@ -20,10 +20,6 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    val backendBaseUrl = (System.getenv("BACKEND_BASE_URL") ?: "")
-      .replace("\\", "\\\\")
-      .replace("\"", "\\\"")
-    buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
@@ -125,7 +121,7 @@ implementation("androidx.compose.material:material-icons-extended")
   implementation(libs.kotlinx.coroutines.core)
   // implementation(libs.logging.interceptor)
   // implementation(libs.moshi.kotlin)
-  // implementation(libs.okhttp)
+  implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   // implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)

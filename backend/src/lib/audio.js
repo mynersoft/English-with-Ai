@@ -1,17 +1,41 @@
-import mongoose from "mongoose";
 import textToSpeech from "@google-cloud/text-to-speech";
 import { v2 as cloudinary } from "cloudinary";
+import { connectDB } from "@/lib/db";
+import { adminAuth } from "@/lib/firebaseAdmin";
+import User from "@/models/User";
 
 // ---------- DB ----------
-let conn = global._mongoose;
-export async function connectDB() {
-  if (!conn) conn = global._mongoose = mongoose.connect(process.env.MONGODB_URI);
-  return conn;
-}
+export { connectDB };
 
-// ---------- Admin guard (simple) ----------
-export function isAdmin(req) {
-  return req.headers.get("x-admin-key") === process.env.ADMIN_KEY;
+// ---------- Admin guard (Bearer token or x-admin-key) ----------
+export async function isAdmin(req) {
+  const adminKey = process.env.ADMIN_KEY;
+  if (adminKey && req.headers.get("x-admin-key") === adminKey) {
+    return true;
+  }
+
+  const header = req.headers.get("authorization") || "";
+  const match = header.match(/^Bearer (.+)$/i);
+  if (!match) return false;
+
+  try {
+    const decoded = await adminAuth().verifyIdToken(match[1], true);
+    if (decoded.admin === true) return true;
+
+    const allowedEmails = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    if (decoded.email && decoded.email_verified && allowedEmails.includes(decoded.email.toLowerCase())) {
+      return true;
+    }
+
+    await connectDB();
+    const user = await User.findOne({ firebaseUid: decoded.uid }).lean();
+    return Boolean(user && user.status === "active" && user.role === "admin");
+  } catch {
+    return false;
+  }
 }
 
 // ---------- Google TTS ----------

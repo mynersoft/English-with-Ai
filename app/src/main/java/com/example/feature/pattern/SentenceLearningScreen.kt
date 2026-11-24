@@ -99,6 +99,7 @@ private enum class LearningPage {
 
 @Composable
 fun SentenceLearningScreen(
+    onBack: (() -> Unit)? = null,
     onFullscreenModeChanged: (Boolean) -> Unit = {}
 ) {
     var page by remember { mutableStateOf(LearningPage.LIST) }
@@ -117,6 +118,7 @@ fun SentenceLearningScreen(
     when (page) {
         LearningPage.LIST -> {
             PatternListScreen(
+                onBack = onBack,
                 onPatternClick = { index ->
                     selectedIndex = index
                     page = LearningPage.EXPLANATION
@@ -150,6 +152,7 @@ fun SentenceLearningScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PatternListScreen(
+    onBack: (() -> Unit)? = null,
     onPatternClick: (Int) -> Unit
 ) {
     Scaffold(
@@ -161,6 +164,19 @@ private fun PatternListScreen(
                         "Spoken English",
                         fontWeight = FontWeight.Bold
                     )
+                },
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.testTag("sentence_learning_back_button")
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = AppBackground

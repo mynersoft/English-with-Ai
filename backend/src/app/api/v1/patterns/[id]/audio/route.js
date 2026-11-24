@@ -17,7 +17,7 @@ const unauthorized = () => NextResponse.json({ error: "Unauthorized" }, { status
 //  - "all": only missing or stale audio is generated
 //  - manual (your own recorded) audio is never overwritten unless force = true
 export async function POST(req, { params }) {
-  if (!isAdmin(req)) return unauthorized();
+  if (!(await isAdmin(req))) return unauthorized();
   const { id } = await params;
   await connectDB();
   const body = await req.json();
@@ -57,7 +57,7 @@ export async function POST(req, { params }) {
 // PUT /api/patterns/:id/audio  -> upload your own recorded mp3 (multipart/form-data)
 // fields: file, target, index?, lang?
 export async function PUT(req, { params }) {
-  if (!isAdmin(req)) return unauthorized();
+  if (!(await isAdmin(req))) return unauthorized();
   const { id } = await params;
   await connectDB();
   const form = await req.formData();
@@ -86,7 +86,7 @@ export async function PUT(req, { params }) {
 
 // DELETE /api/patterns/:id/audio  -> remove audio. body: { target, index?, lang? }
 export async function DELETE(req, { params }) {
-  if (!isAdmin(req)) return unauthorized();
+  if (!(await isAdmin(req))) return unauthorized();
   const { id } = await params;
   await connectDB();
   const body = await req.json();

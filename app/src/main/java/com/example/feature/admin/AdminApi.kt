@@ -1,5 +1,6 @@
 package com.example.feature.admin
 
+import com.example.BuildConfig
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.Dispatchers
@@ -75,9 +76,6 @@ data class AudioTarget(val target: String, val index: Int? = null, val lang: Str
 // ---------- API ----------
 
 object AdminApi {
-    // TODO: put your Next.js backend URL (no trailing slash). Use your existing config if you have one.
-    const val BASE_URL = "https://YOUR-BACKEND.example.com"
-
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
@@ -92,18 +90,33 @@ object AdminApi {
     }
 
     private suspend fun call(path: String, method: String, body: RequestBody? = null): String {
+        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
+        if (baseUrl.isBlank()) {
+            throw IOException("Backend URL is not configured yet.")
+        }
         val token = idToken()
         return withContext(Dispatchers.IO) {
             val request = Request.Builder()
-                .url("$BASE_URL/api/$path")
+                .url("$baseUrl/api/v1/$path")
                 .header("Authorization", "Bearer $token")
                 .method(method, body)
                 .build()
             client.newCall(request).execute().use { res ->
                 val text = res.body?.string().orEmpty()
                 if (!res.isSuccessful) {
-                    val msg = runCatching { JSONObject(text).optString("error") }.getOrNull().orEmpty()
-                    throw IOException(msg.ifBlank { "Error ${res.code}" })
+                    val msg = runCatching {
+                        val jsonErr = JSONObject(text)
+                        jsonErr.optJSONObject("error")?.optString("message")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: jsonErr.optString("error")
+                    }.getOrNull().orEmpty()
+                    val fallback = when (res.code) {
+                        401, 403 -> "Unauthorized (${res.code}): Ensure your backend is updated and your account has admin access."
+                        else -> "Error ${res.code}"
+                    }
+                    throw IOException(
+                        if (msg.isNotBlank() && res.code != 401 && res.code != 403) msg else fallback
+                    )
                 }
                 text
             }
@@ -149,7 +162,7 @@ object AdminApi {
         val o = JSONObject(call("patterns/$id", "GET"))
         val ex = o.optJSONArray("examples") ?: JSONArray()
         return PatternForm(
-            id = o.getString("id"),
+            id = o.optString("id").ifBlank { o.getString("_id") },
             title = o.optString("title"),
             meaning = o.optString("meaning"),
             explanation = if (o.isNull("explanation")) "" else o.optString("explanation"),
@@ -160,7 +173,7 @@ object AdminApi {
             examples = List(ex.length()) { i ->
                 val e = ex.getJSONObject(i)
                 ExampleForm(
-                    id = e.getString("id"),
+                    id = e.optString("id").ifBlank { e.optString("_id").ifBlank { null } },
                     en = e.optString("en"),
                     bn = e.optString("bn"),
                     enAudio = e.optJSONObject("enAudio").toAudio(),
@@ -191,7 +204,8 @@ object AdminApi {
             put("examples", examples)
         }
         return if (form.id == null) {
-            JSONObject(call("patterns", "POST", json(body))).getString("_id")
+            val created = JSONObject(call("patterns", "POST", json(body)))
+            created.optString("_id").ifBlank { created.getString("id") }
         } else {
             call("patterns/${form.id}", "PUT", json(body))
             form.id

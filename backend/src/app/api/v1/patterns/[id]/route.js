@@ -21,6 +21,7 @@ export async function GET(req, { params }) {
     meaning: p.meaning,
     explanation: p.explanation,
     isPremium: p.isPremium,
+    order: p.order ?? 0,
     titleAudio: audioInfo(p.titleAudio),
     meaningAudio: audioInfo(p.meaningAudio),
     examples: p.examples.map((e) => ({
@@ -36,7 +37,7 @@ export async function GET(req, { params }) {
 // PUT /api/patterns/:id -> edit text (admin). Changed text => audio marked stale.
 // Send existing examples with their "id" so their audio is kept.
 export async function PUT(req, { params }) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   await connectDB();
   const body = await req.json();
@@ -90,7 +91,7 @@ export async function PUT(req, { params }) {
 
 // DELETE /api/patterns/:id -> remove pattern + all its audio (admin)
 export async function DELETE(req, { params }) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   await connectDB();
   const p = await Pattern.findById(id);

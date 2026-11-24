@@ -36,6 +36,7 @@ import com.example.core.ui.attemptSilentGoogleAutoSignIn
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.UserRepository
 import com.example.domain.model.AccountStatus
+import com.example.feature.admin.AdminRoute
 import com.example.feature.auth.AuthViewModel
 import com.example.feature.auth.EmailVerificationScreen
 import com.example.feature.auth.ForgotPasswordScreen
@@ -66,6 +67,7 @@ private object AppRoutes {
     const val SECURITY = "security"
     const val SPEAKING = "speaking"
     const val SENTENCE_LEARNING = "sentence-learning"
+    const val ADMIN = "admin"
 }
 
 class MainActivity : ComponentActivity() {
@@ -318,6 +320,10 @@ private fun AuthenticatedNavGraph(
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.SENTENCE_LEARNING)
                 },
+                onOpenAdmin = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.ADMIN)
+                },
                 onSignOut = { dashboardViewModel.signOut(credentialManager) }
             )
         }
@@ -331,6 +337,12 @@ private fun AuthenticatedNavGraph(
 
         composable(AppRoutes.SENTENCE_LEARNING) {
             SentenceLearningScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(AppRoutes.ADMIN) {
+            AdminRoute(
                 onBack = { navController.popBackStack() }
             )
         }
