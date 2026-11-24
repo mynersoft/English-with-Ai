@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import com.example.BuildConfig
+import com.example.core.network.NetworkClient
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.EmailAuthProvider
@@ -29,12 +30,10 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 class AuthRepository(
     private val auth: FirebaseAuth = Firebase.auth
@@ -249,44 +248,18 @@ class AuthRepository(
             val tokenResult = user.getIdToken(false).await()
             val token = tokenResult.token
                 ?: return Result.failure(IllegalStateException("Firebase ID token is empty."))
-            val hasGoogle = user.providerData.any { it.providerId == GoogleAuthProvider.PROVIDER_ID }
-            val provider = tokenResult.signInProvider ?: if (hasGoogle) "google.com" else "password"
-            val primaryPath = when {
-                provider == "google.com" -> "/api/v1/auth/google"
-                isRegistration -> "/api/v1/auth/email/register"
-                else -> "/api/v1/auth/email/login"
-            }
             val safeName = (preferredName ?: user.displayName ?: user.email?.substringBefore("@") ?: "Learner")
                 .trim()
                 .let { if (it.length < 2) "Learner" else it.take(60) }
-            val payload = if (primaryPath == "/api/v1/auth/email/register") {
-                JSONObject().put("name", safeName).toString()
-            } else {
-                "{}"
-            }
+            val primaryPath = if (isRegistration) "/api/v1/auth/email/register" else "/api/v1/auth/sync"
+            val payload = JSONObject().put("name", safeName).toString()
 
             withContext(Dispatchers.IO) {
                 var response = executeAuthSyncCall(baseUrl, primaryPath, token, payload)
-                // Handle provider mismatch (e.g., cached token provider vs endpoint) or fallback to unified sync.
-                if (!response.isSuccess && (response.code == 400 || response.code == 404)) {
-                    val fallbackPath = if (primaryPath == "/api/v1/auth/google") {
-                        "/api/v1/auth/email/login"
-                    } else {
-                        "/api/v1/auth/google"
-                    }
-                    val fallbackRes = executeAuthSyncCall(baseUrl, fallbackPath, token, "{}")
-                    if (fallbackRes.isSuccess) {
-                        response = fallbackRes
-                    } else {
-                        val unifiedRes = executeAuthSyncCall(
-                            baseUrl,
-                            "/api/v1/auth/sync",
-                            token,
-                            JSONObject().put("name", safeName).toString()
-                        )
-                        if (unifiedRes.isSuccess) {
-                            response = unifiedRes
-                        }
+                if (!response.isSuccess && isRegistration && (response.code == 400 || response.code == 404)) {
+                    val unifiedRes = executeAuthSyncCall(baseUrl, "/api/v1/auth/sync", token, payload)
+                    if (unifiedRes.isSuccess) {
+                        response = unifiedRes
                     }
                 }
                 if (response.isSuccess) {
@@ -318,7 +291,7 @@ class AuthRepository(
     private fun probeHealthError(baseUrl: String): String? {
         return runCatching {
             val req = Request.Builder().url("$baseUrl/api/v1/health").get().build()
-            httpClient.newCall(req).execute().use { res ->
+            NetworkClient.standard.newCall(req).execute().use { res ->
                 val raw = res.body?.string().orEmpty()
                 val json = JSONObject(raw)
                 if (!json.has("firebaseAdmin") && !json.has("mongodb")) return@use null
@@ -340,7 +313,7 @@ class AuthRepository(
             .header("Authorization", "Bearer $token")
             .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
-        return httpClient.newCall(request).execute().use { res ->
+        return NetworkClient.standard.newCall(request).execute().use { res ->
             val raw = res.body?.string().orEmpty()
             val cleanedRaw = if (raw.trimStart().startsWith("<")) "Server error (${res.code})" else raw.take(160)
             val errMsg = runCatching {
@@ -408,12 +381,6 @@ class AuthRepository(
         const val TAG = "AuthRepository"
         const val EMAIL_PROVIDER_DISABLED_MSG =
             "Email/Password authentication is currently disabled in Firebase Console for this project. Enable it under Authentication > Sign-in method, or sign in with Google below."
-        val httpClient: OkHttpClient by lazy {
-            OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .build()
-        }
     }
 }
 

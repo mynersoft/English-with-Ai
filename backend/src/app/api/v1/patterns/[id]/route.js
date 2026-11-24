@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import Pattern from "@/models/Pattern";
-import { connectDB, isAdmin, deleteAudio, listSlots } from "@/lib/audio";
+import { connectDB } from "@/lib/db";
+import { isAdmin } from "@/lib/adminGuard";
+import { listSlots } from "@/lib/patternSlots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,23 +21,26 @@ export async function GET(req, { params }) {
     const p = await Pattern.findById(id).lean();
     if (!p) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    return NextResponse.json({
-      id: p._id,
-      title: p.title,
-      meaning: p.meaning,
-      explanation: p.explanation ?? "",
-      isPremium: p.isPremium,
-      order: p.order ?? 0,
-      titleAudio: audioInfo(p.titleAudio),
-      meaningAudio: audioInfo(p.meaningAudio),
-      examples: (p.examples || []).map((e) => ({
-        id: e._id,
-        en: e.en,
-        bn: e.bn,
-        enAudio: audioInfo(e.enAudio),
-        bnAudio: audioInfo(e.bnAudio),
-      })),
-    });
+    return NextResponse.json(
+      {
+        id: p._id,
+        title: p.title,
+        meaning: p.meaning,
+        explanation: p.explanation ?? "",
+        isPremium: p.isPremium,
+        order: p.order ?? 0,
+        titleAudio: audioInfo(p.titleAudio),
+        meaningAudio: audioInfo(p.meaningAudio),
+        examples: (p.examples || []).map((e) => ({
+          id: e._id,
+          en: e.en,
+          bn: e.bn,
+          enAudio: audioInfo(e.enAudio),
+          bnAudio: audioInfo(e.bnAudio),
+        })),
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     console.error("GET /api/v1/patterns/[id] failed:", err);
     return NextResponse.json(
@@ -49,10 +54,15 @@ export async function GET(req, { params }) {
 // Send existing examples with their "id" so their audio is kept.
 export async function PUT(req, { params }) {
   try {
-    if (!(await isAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { id } = await params;
+    const [{ id }, adminOk, body] = await Promise.all([
+      params,
+      isAdmin(req),
+      req.json().catch(() => null),
+    ]);
+    if (!adminOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+
     await connectDB();
-    const body = await req.json();
     const p = await Pattern.findById(id);
     if (!p) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -68,6 +78,7 @@ export async function PUT(req, { params }) {
     if (body.isPremium !== undefined) p.isPremium = !!body.isPremium;
     if (body.order !== undefined) p.order = body.order;
 
+    const publicIdsToDelete = [];
     if (Array.isArray(body.examples)) {
       const oldById = new Map(p.examples.map((e) => [String(e._id), e]));
       const keptIds = new Set();
@@ -87,17 +98,26 @@ export async function PUT(req, { params }) {
         return ex;
       });
 
-      // removed examples -> clean up their audio files
+      // collect audio publicIds of removed examples for parallel cleanup
       for (const old of p.examples) {
         if (!keptIds.has(String(old._id))) {
-          await deleteAudio(old.enAudio?.publicId);
-          await deleteAudio(old.bnAudio?.publicId);
+          if (old.enAudio?.publicId) publicIdsToDelete.push(old.enAudio.publicId);
+          if (old.bnAudio?.publicId) publicIdsToDelete.push(old.bnAudio.publicId);
         }
       }
       p.examples = next;
     }
 
-    await p.save();
+    if (publicIdsToDelete.length > 0) {
+      const { deleteAudio } = await import("@/lib/audio");
+      await Promise.all([
+        p.save(),
+        ...publicIdsToDelete.map((pid) => deleteAudio(pid)),
+      ]);
+    } else {
+      await p.save();
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("PUT /api/v1/patterns/[id] failed:", err);
@@ -111,14 +131,26 @@ export async function PUT(req, { params }) {
 // DELETE /api/v1/patterns/:id -> remove pattern + all its audio (admin)
 export async function DELETE(req, { params }) {
   try {
-    if (!(await isAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { id } = await params;
+    const [{ id }, adminOk] = await Promise.all([params, isAdmin(req)]);
+    if (!adminOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     await connectDB();
     const p = await Pattern.findById(id);
     if (!p) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    for (const s of listSlots(p)) await deleteAudio(s.holder[s.field]?.publicId);
-    await p.deleteOne();
+    const publicIds = listSlots(p)
+      .map((s) => s.holder[s.field]?.publicId)
+      .filter(Boolean);
+
+    if (publicIds.length > 0) {
+      const { deleteAudio } = await import("@/lib/audio");
+      await Promise.all([
+        p.deleteOne(),
+        ...publicIds.map((pid) => deleteAudio(pid)),
+      ]);
+    } else {
+      await p.deleteOne();
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("DELETE /api/v1/patterns/[id] failed:", err);
@@ -128,4 +160,3 @@ export async function DELETE(req, { params }) {
     );
   }
 }
-

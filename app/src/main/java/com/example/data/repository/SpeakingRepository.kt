@@ -1,15 +1,17 @@
 package com.example.data.repository
 
 import com.example.BuildConfig
+import com.example.core.network.NetworkClient
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -36,7 +38,7 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
         history: List<ChatTurn>
     ): Result<SpeakingReply> = withContext(Dispatchers.IO) {
         try {
-            val (token, provider) = idToken()
+            val token = idToken()
             val body = JSONObject()
                 .put("message", message)
                 .put("level", level.lowercase())
@@ -47,10 +49,8 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
 
             var response = post("/api/v1/ai/speaking/turn", token, body)
 
-            // The backend keeps its own MongoDB user. If this Firebase user is not synced yet, sync once and retry.
             if (response.status == 404 && response.errorCode == "USER_NOT_FOUND") {
-                val syncPath = if (provider == "google.com") "/api/v1/auth/google" else "/api/v1/auth/email/login"
-                post(syncPath, token, null)
+                post("/api/v1/auth/sync", token, null)
                 response = post("/api/v1/ai/speaking/turn", token, body)
             }
 
@@ -90,27 +90,22 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
         if (baseUrl.isBlank()) {
             throw SpeakingException("Backend URL is not configured yet.")
         }
-        val conn = URL(baseUrl + path).openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "POST"
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 35_000
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("Accept", "application/json")
-            conn.doOutput = true
-            conn.outputStream.use { it.write((body ?: JSONObject()).toString().toByteArray(Charsets.UTF_8)) }
-            val status = conn.responseCode
-            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+        val payload = (body ?: JSONObject()).toString().toRequestBody(JSON_MEDIA_TYPE)
+        val request = Request.Builder()
+            .url(baseUrl + path)
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(payload)
+            .build()
+
+        return NetworkClient.speaking.newCall(request).execute().use { res ->
+            val text = res.body?.string().orEmpty()
             val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
-            return HttpResult(status, json)
-        } finally {
-            conn.disconnect()
+            HttpResult(res.code, json)
         }
     }
 
-    private suspend fun idToken(): Pair<String, String?> = suspendCancellableCoroutine { cont ->
+    private suspend fun idToken(): String = suspendCancellableCoroutine { cont ->
         val user = auth.currentUser
         if (user == null) {
             cont.resumeWithException(SpeakingException("Please log in again."))
@@ -119,10 +114,14 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
         user.getIdToken(false).addOnCompleteListener { task ->
             val result = task.result
             if (task.isSuccessful && result?.token != null) {
-                cont.resume(result.token!! to result.signInProvider)
+                cont.resume(result.token!!)
             } else {
                 cont.resumeWithException(SpeakingException("Could not verify your login. Please log in again."))
             }
         }
+    }
+
+    private companion object {
+        val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }

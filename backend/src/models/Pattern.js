@@ -31,5 +31,7 @@ const PatternSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+PatternSchema.index({ order: 1, createdAt: 1 });
+
 export default mongoose.models.Pattern ||
   mongoose.model("Pattern", PatternSchema);

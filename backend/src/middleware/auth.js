@@ -5,11 +5,20 @@ import { apiHandler } from "@/lib/apiHandler";
 import User from "@/models/User";
 import { upsertUserFromToken } from "@/modules/auth/auth.service";
 
-/** Verifies the Firebase ID token from "Authorization: Bearer <token>". */
-export async function verifyRequestToken(request) {
+export function extractBearerToken(request) {
   const header = request.headers.get("authorization") || "";
   const match = header.match(/^Bearer (.+)$/i);
   if (!match) throw new AppError(401, "UNAUTHORIZED", "Missing authentication token.");
+  return match[1];
+}
+
+/**
+ * Verifies the Firebase ID token from "Authorization: Bearer <token>".
+ * Uses fast local cryptographic verification by default (<1ms via cached Google keys).
+ * Pass { checkRevoked: true } only for sensitive destructive operations (e.g. account deletion).
+ */
+export async function verifyRequestToken(request, { checkRevoked = false } = {}) {
+  const token = extractBearerToken(request);
   let authClient;
   try {
     authClient = adminAuth();
@@ -22,7 +31,7 @@ export async function verifyRequestToken(request) {
     );
   }
   try {
-    return await authClient.verifyIdToken(match[1], true); // true = reject revoked tokens
+    return await authClient.verifyIdToken(token, checkRevoked);
   } catch (err) {
     console.error("verifyIdToken failed:", err?.code || err?.message);
     throw new AppError(401, "UNAUTHORIZED", "Invalid or expired token. Please log in again.");
@@ -31,13 +40,15 @@ export async function verifyRequestToken(request) {
 
 /**
  * Protects a route: valid token + existing/auto-synced active user (+ optional role check).
- * handler receives (request, { decoded, user, params }).
+ * Runs token verification and MongoDB connection setup concurrently.
  */
-export function withAuth(handler, { roles, limit } = {}) {
+export function withAuth(handler, { roles, limit, checkRevoked = false } = {}) {
   return apiHandler(async (request, context) => {
-    const decoded = await verifyRequestToken(request);
-    await connectDB();
-    let user = await User.findOne({ firebaseUid: decoded.uid });
+    const [decoded] = await Promise.all([
+      verifyRequestToken(request, { checkRevoked }),
+      connectDB(),
+    ]);
+    let user = await User.findOne({ firebaseUid: decoded.uid }).lean();
     if (!user) {
       ({ user } = await upsertUserFromToken(decoded));
     }

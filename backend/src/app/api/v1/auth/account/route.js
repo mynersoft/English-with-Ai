@@ -9,8 +9,10 @@ export const dynamic = "force-dynamic";
 
 // DELETE /api/v1/auth/account  (permanent: removes app data and the Firebase account)
 export const DELETE = apiHandler(async (request) => {
-  const decoded = await verifyRequestToken(request);
-  await connectDB();
+  const [decoded] = await Promise.all([
+    verifyRequestToken(request, { checkRevoked: true }),
+    connectDB(),
+  ]);
   await deleteAccount(decoded);
   return ok({ deleted: true });
 }, { limit: 5 });

@@ -10,10 +10,12 @@ export const dynamic = "force-dynamic";
 
 // POST /api/v1/auth/sync  (Provider-agnostic sync for any valid Firebase ID token)
 export const POST = apiHandler(async (request) => {
-  const decoded = await verifyRequestToken(request);
-  const body = await readJson(request);
+  const [decoded, body] = await Promise.all([
+    verifyRequestToken(request),
+    readJson(request),
+    connectDB(),
+  ]);
   const name = typeof body?.name === "string" ? body.name.trim().slice(0, 60) : undefined;
-  await connectDB();
   const { user, isNewUser } = await upsertUserFromToken(decoded, { name });
   return ok({ user: toPublicUser(user), isNewUser }, isNewUser ? 201 : 200);
 }, { limit: 30 });

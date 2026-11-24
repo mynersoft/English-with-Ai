@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAdmin } from "@/lib/audio";
+import { isAdmin } from "@/lib/adminGuard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

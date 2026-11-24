@@ -1,6 +1,7 @@
 package com.example.feature.admin
 
 import com.example.BuildConfig
+import com.example.core.network.NetworkClient
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.Dispatchers
@@ -8,7 +9,6 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -16,7 +16,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 // ---------- models ----------
 
@@ -76,12 +75,6 @@ data class AudioTarget(val target: String, val index: Int? = null, val lang: Str
 // ---------- API ----------
 
 object AdminApi {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(180, TimeUnit.SECONDS) // "generate all audio" can take a while
-        .build()
-
     private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
 
     private suspend fun idToken(): String {
@@ -101,7 +94,7 @@ object AdminApi {
                 .header("Authorization", "Bearer $token")
                 .method(method, body)
                 .build()
-            client.newCall(request).execute().use { res ->
+            NetworkClient.admin.newCall(request).execute().use { res ->
                 val text = res.body?.string().orEmpty()
                 if (!res.isSuccessful) {
                     val msg = runCatching {

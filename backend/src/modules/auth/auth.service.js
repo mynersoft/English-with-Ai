@@ -31,10 +31,13 @@ export async function upsertUserFromToken(decoded, { name } = {}) {
   if (!email) throw new AppError(400, "EMAIL_REQUIRED", "Your account has no email address.");
   const provider = decoded.firebase?.sign_in_provider || "unknown";
 
-  let existing = await User.findOne({ firebaseUid: decoded.uid });
-  if (!existing) {
-    existing = await User.findOne({ email });
-  }
+  // Single indexed lookup across firebaseUid / email instead of two sequential round-trips.
+  const existing = await User.findOne({
+    $or: [{ firebaseUid: decoded.uid }, { email }],
+  })
+    .select("_id firebaseUid email photoUrl role status")
+    .lean();
+
   if (existing && existing.status !== "active") {
     throw new AppError(403, "ACCOUNT_DISABLED", "This account is deactivated.");
   }
@@ -64,7 +67,7 @@ export async function upsertUserFromToken(decoded, { name } = {}) {
         $addToSet: { authProviders: provider },
       },
       { new: true }
-    );
+    ).lean();
   } else {
     isNewUser = true;
     const setFields = { lastLoginAt: new Date() };
@@ -82,20 +85,26 @@ export async function upsertUserFromToken(decoded, { name } = {}) {
         $addToSet: { authProviders: provider },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    await UserSettings.updateOne(
+      { user: user._id },
+      { $setOnInsert: { user: user._id } },
+      { upsert: true }
     );
   }
 
-  await UserSettings.updateOne({ user: user._id }, { $setOnInsert: { user: user._id } }, { upsert: true });
   return { user, isNewUser };
 }
 
 /** Deletes app data first, then the Firebase account. Safe to retry if a step fails. */
 export async function deleteAccount(decoded) {
-  const user = await User.findOne({ firebaseUid: decoded.uid });
+  const user = await User.findOne({ firebaseUid: decoded.uid }).select("_id").lean();
   if (user) {
-    // Add deletes for lessonProgress, quizResults, conversations, etc. as those modules are built.
-    await UserSettings.deleteOne({ user: user._id });
-    await User.deleteOne({ _id: user._id });
+    await Promise.all([
+      UserSettings.deleteOne({ user: user._id }),
+      User.deleteOne({ _id: user._id }),
+    ]);
   }
   try {
     await adminAuth().deleteUser(decoded.uid);

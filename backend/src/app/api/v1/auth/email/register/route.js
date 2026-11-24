@@ -10,10 +10,13 @@ export const dynamic = "force-dynamic";
 
 // POST /api/v1/auth/email/register  body: { name }  (Bearer token from Firebase createUser)
 export const POST = apiHandler(async (request) => {
-  const decoded = await verifyRequestToken(request);
+  const [decoded, body] = await Promise.all([
+    verifyRequestToken(request),
+    readJson(request),
+    connectDB(),
+  ]);
   assertProvider(decoded, "password");
-  const { name } = validateRegister(await readJson(request));
-  await connectDB();
+  const { name } = validateRegister(body);
   const { user, isNewUser } = await upsertUserFromToken(decoded, { name });
   return ok({ user: toPublicUser(user), isNewUser }, isNewUser ? 201 : 200);
 }, { limit: 10 });

@@ -9,9 +9,8 @@ export const dynamic = "force-dynamic";
 
 // POST /api/v1/auth/email/login  (Bearer token from Firebase signInWithEmailAndPassword)
 export const POST = apiHandler(async (request) => {
-  const decoded = await verifyRequestToken(request);
+  const [decoded] = await Promise.all([verifyRequestToken(request), connectDB()]);
   assertProvider(decoded, "password");
-  await connectDB();
   const { user } = await upsertUserFromToken(decoded);
   return ok({ user: toPublicUser(user) });
 }, { limit: 20 });

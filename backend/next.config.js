@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
   reactStrictMode: true,
-  serverExternalPackages: ["firebase-admin", "mongoose"],
+  compress: true,
+  poweredByHeader: false,
+  serverExternalPackages: [
+    "firebase-admin",
+    "mongoose",
+    "@google-cloud/text-to-speech",
+    "cloudinary",
+  ],
 };

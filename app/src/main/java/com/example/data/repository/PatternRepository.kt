@@ -1,18 +1,14 @@
 package com.example.data.repository
 
 import com.example.BuildConfig
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
+import com.example.core.network.NetworkClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 data class PatternSummary(
     val id: String,
@@ -110,24 +106,18 @@ class PatternRepository {
         }
     }
 
-    private suspend fun executeGet(path: String): String {
+    private fun executeGet(path: String): String {
         val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
         if (baseUrl.isBlank()) {
             throw IOException("Backend URL is not configured.")
         }
-        val token = runCatching {
-            Firebase.auth.currentUser?.getIdToken(false)?.await()?.token
-        }.getOrNull()
-
-        val reqBuilder = Request.Builder()
+        val req = Request.Builder()
             .url("$baseUrl$path")
             .get()
             .header("Accept", "application/json")
-        if (!token.isNullOrBlank()) {
-            reqBuilder.header("Authorization", "Bearer $token")
-        }
+            .build()
 
-        return client.newCall(reqBuilder.build()).execute().use { res ->
+        return NetworkClient.standard.newCall(req).execute().use { res ->
             val body = res.body?.string().orEmpty()
             if (!res.isSuccessful) {
                 val msg = runCatching {
@@ -145,14 +135,5 @@ class PatternRepository {
     private fun JSONObject.optStringOrNull(key: String): String? {
         if (isNull(key)) return null
         return optString(key).takeIf { it.isNotBlank() }
-    }
-
-    private companion object {
-        val client: OkHttpClient by lazy {
-            OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .build()
-        }
     }
 }

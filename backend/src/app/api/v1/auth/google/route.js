@@ -9,9 +9,8 @@ export const dynamic = "force-dynamic";
 
 // POST /api/v1/auth/google  (Authorization: Bearer <Firebase ID token from Google sign-in>)
 export const POST = apiHandler(async (request) => {
-  const decoded = await verifyRequestToken(request);
+  const [decoded] = await Promise.all([verifyRequestToken(request), connectDB()]);
   assertProvider(decoded, "google.com");
-  await connectDB();
   const { user, isNewUser } = await upsertUserFromToken(decoded);
   return ok({ user: toPublicUser(user), isNewUser }, isNewUser ? 201 : 200);
 });

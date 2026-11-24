@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import Pattern from "@/models/Pattern";
-import { connectDB, isAdmin, listSlots } from "@/lib/audio";
+import { connectDB } from "@/lib/db";
+import { isAdmin } from "@/lib/adminGuard";
+import { listSlots } from "@/lib/patternSlots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,7 +11,14 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await connectDB();
-    const patterns = await Pattern.find().sort({ order: 1, createdAt: 1 }).lean();
+    // Project only list-view fields so large explanations and sentence texts aren't transferred.
+    const patterns = await Pattern.find()
+      .select(
+        "title meaning isPremium order titleAudio.url titleAudio.stale meaningAudio.url meaningAudio.stale examples._id examples.enAudio.url examples.enAudio.stale examples.bnAudio.url examples.bnAudio.stale"
+      )
+      .sort({ order: 1, createdAt: 1 })
+      .lean();
+
     return NextResponse.json(
       patterns.map((p) => {
         const slots = listSlots(p);
@@ -21,14 +30,15 @@ export async function GET() {
           meaning: p.meaning,
           isPremium: p.isPremium,
           order: p.order ?? 0,
-          sentenceCount: p.examples.length,
+          sentenceCount: (p.examples || []).length,
           audioTotal: slots.length,
           audioReady,
           audioStale,
           titleAudioUrl: p.titleAudio?.url ?? null,
           meaningAudioUrl: p.meaningAudio?.url ?? null,
         };
-      })
+      }),
+      { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
     console.error("GET /api/v1/patterns failed:", err);
@@ -42,9 +52,12 @@ export async function GET() {
 // POST /api/v1/patterns  -> add new pattern (admin)
 export async function POST(req) {
   try {
-    if (!(await isAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const [adminOk, body] = await Promise.all([isAdmin(req), req.json().catch(() => null)]);
+    if (!adminOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!body || !body.title || !body.meaning) {
+      return NextResponse.json({ error: "title and meaning are required" }, { status: 400 });
+    }
     await connectDB();
-    const body = await req.json();
     const pattern = await Pattern.create({
       title: body.title,
       meaning: body.meaning,
