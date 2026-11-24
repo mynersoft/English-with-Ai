@@ -8,6 +8,7 @@ import com.example.core.ui.BannerTone
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.UserRepository
 import com.example.domain.model.LearningLevel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class AuthUiState(
     val isLoading: Boolean = false,
@@ -40,6 +42,10 @@ class AuthViewModel(
 
     fun clearBanner() {
         _uiState.update { it.copy(bannerMessage = null, isEmailProviderDisabled = false) }
+    }
+
+    fun resetTransientLoading() {
+        _uiState.update { it.copy(isLoading = false, isGoogleLoading = false) }
     }
 
     fun setGoogleLoading(loading: Boolean) {
@@ -80,14 +86,18 @@ class AuthViewModel(
             }
             val result = authRepository.signInWithEmail(trimmedEmail, password)
             result.onSuccess { user ->
+                // Sync MongoDB user immediately in background so a slow Firestore DB never blocks it.
+                viewModelScope.launch { authRepository.syncCurrentUserToBackend() }
                 val provider = authRepository.resolveAuthProviderLabel(user)
-                userRepository.ensureUserProfile(user = user, authProvider = provider)
-                userRepository.upsertCurrentSession(
-                    userId = user.uid,
-                    sessionId = ValidationUtils.currentDeviceSessionId(),
-                    deviceName = ValidationUtils.currentDeviceName(),
-                    authProvider = provider
-                )
+                withTimeoutOrNull(4000L) {
+                    userRepository.ensureUserProfile(user = user, authProvider = provider)
+                    userRepository.upsertCurrentSession(
+                        userId = user.uid,
+                        sessionId = ValidationUtils.currentDeviceSessionId(),
+                        deviceName = ValidationUtils.currentDeviceName(),
+                        authProvider = provider
+                    )
+                }
                 _uiState.update { it.copy(isLoading = false) }
             }.onFailure { error ->
                 handleAuthThrowable(error, "Sign-in failed.")
@@ -129,19 +139,27 @@ class AuthViewModel(
             }
             val result = authRepository.registerWithEmail(trimmedName, trimmedEmail, password)
             result.onSuccess { user ->
-                userRepository.ensureUserProfile(
-                    user = user,
-                    authProvider = "password",
-                    learningLevel = learningLevel,
-                    dailyGoalMinutes = dailyGoalMinutes,
-                    preferredName = trimmedName
-                )
-                userRepository.upsertCurrentSession(
-                    userId = user.uid,
-                    sessionId = ValidationUtils.currentDeviceSessionId(),
-                    deviceName = ValidationUtils.currentDeviceName(),
-                    authProvider = "password"
-                )
+                viewModelScope.launch {
+                    authRepository.syncCurrentUserToBackend(
+                        preferredName = trimmedName,
+                        isRegistration = true
+                    )
+                }
+                withTimeoutOrNull(4000L) {
+                    userRepository.ensureUserProfile(
+                        user = user,
+                        authProvider = "password",
+                        learningLevel = learningLevel,
+                        dailyGoalMinutes = dailyGoalMinutes,
+                        preferredName = trimmedName
+                    )
+                    userRepository.upsertCurrentSession(
+                        userId = user.uid,
+                        sessionId = ValidationUtils.currentDeviceSessionId(),
+                        deviceName = ValidationUtils.currentDeviceName(),
+                        authProvider = "password"
+                    )
+                }
                 startVerificationCooldown()
                 _uiState.update {
                     it.copy(
@@ -161,14 +179,17 @@ class AuthViewModel(
             _uiState.update { it.copy(isGoogleLoading = true, bannerMessage = null) }
             val result = authRepository.signInWithGoogleIdToken(idToken)
             result.onSuccess { user ->
+                viewModelScope.launch { authRepository.syncCurrentUserToBackend() }
                 val provider = authRepository.resolveAuthProviderLabel(user)
-                userRepository.ensureUserProfile(user = user, authProvider = provider)
-                userRepository.upsertCurrentSession(
-                    userId = user.uid,
-                    sessionId = ValidationUtils.currentDeviceSessionId(),
-                    deviceName = ValidationUtils.currentDeviceName(),
-                    authProvider = provider
-                )
+                withTimeoutOrNull(4000L) {
+                    userRepository.ensureUserProfile(user = user, authProvider = provider)
+                    userRepository.upsertCurrentSession(
+                        userId = user.uid,
+                        sessionId = ValidationUtils.currentDeviceSessionId(),
+                        deviceName = ValidationUtils.currentDeviceName(),
+                        authProvider = provider
+                    )
+                }
                 _uiState.update { it.copy(isGoogleLoading = false) }
             }.onFailure { error ->
                 handleAuthThrowable(error, "Google Sign-In failed.")
@@ -236,8 +257,11 @@ class AuthViewModel(
             val result = authRepository.reloadCurrentUser()
             result.onSuccess { user ->
                 if (user.isEmailVerified) {
+                    viewModelScope.launch { authRepository.syncCurrentUserToBackend() }
                     val provider = authRepository.resolveAuthProviderLabel(user)
-                    userRepository.syncEmailVerified(user.uid, true, provider)
+                    withTimeoutOrNull(4000L) {
+                        userRepository.syncEmailVerified(user.uid, true, provider)
+                    }
                     _uiState.update { it.copy(isLoading = false) }
                     onVerified()
                 } else {
@@ -257,12 +281,23 @@ class AuthViewModel(
 
     fun signOut(credentialManager: CredentialManager) {
         viewModelScope.launch {
-            val uid = authRepository.currentUser()?.uid
-            if (!uid.isNullOrBlank()) {
-                userRepository.markSessionInactive(uid, ValidationUtils.currentDeviceSessionId())
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val uid = authRepository.currentUser()?.uid
+                if (!uid.isNullOrBlank()) {
+                    withTimeoutOrNull(800L) {
+                        try {
+                            userRepository.markSessionInactive(uid, ValidationUtils.currentDeviceSessionId())
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                authRepository.signOut(credentialManager)
+            } finally {
+                _uiState.update { AuthUiState() }
             }
-            authRepository.signOut(credentialManager)
-            _uiState.update { AuthUiState() }
         }
     }
 

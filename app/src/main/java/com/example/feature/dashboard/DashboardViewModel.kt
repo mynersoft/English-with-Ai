@@ -29,11 +29,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class DashboardActionState(
     val isBusy: Boolean = false,
     val bannerMessage: String? = null,
-    val bannerTone: BannerTone = BannerTone.INFO
+    val bannerTone: BannerTone = BannerTone.INFO,
+    val backendSyncError: String? = null,
+    val isSyncingBackend: Boolean = false
 )
 
 class DashboardViewModel(
@@ -89,6 +92,25 @@ class DashboardViewModel(
 
     init {
         syncInitialProfileAndSession()
+    }
+
+    fun syncBackendUser(preferredName: String? = null) {
+        viewModelScope.launch {
+            _actionState.update { it.copy(isSyncingBackend = true) }
+            val result = authRepository.syncCurrentUserToBackend(preferredName = preferredName)
+            result.onSuccess {
+                _actionState.update {
+                    it.copy(isSyncingBackend = false, backendSyncError = null)
+                }
+            }.onFailure { err ->
+                _actionState.update {
+                    it.copy(
+                        isSyncingBackend = false,
+                        backendSyncError = err.message ?: "Could not sync account to MongoDB backend."
+                    )
+                }
+            }
+        }
     }
 
     private fun syncInitialProfileAndSession() {
@@ -305,18 +327,24 @@ class DashboardViewModel(
     fun deactivateAccount(credentialManager: CredentialManager) {
         viewModelScope.launch {
             _actionState.update { it.copy(isBusy = true, bannerMessage = null) }
-            val result = userRepository.updateAccountStatus(currentUserId, AccountStatus.DEACTIVATED)
-            result.onSuccess {
-                userRepository.markSessionInactive(currentUserId, currentSessionId)
-                authRepository.signOut(credentialManager)
-            }.onFailure { error ->
-                _actionState.update {
-                    it.copy(
-                        isBusy = false,
-                        bannerMessage = error.message ?: "Failed to deactivate account.",
-                        bannerTone = BannerTone.ERROR
-                    )
+            try {
+                val result = userRepository.updateAccountStatus(currentUserId, AccountStatus.DEACTIVATED)
+                result.onSuccess {
+                    withTimeoutOrNull(800L) {
+                        runCatching { userRepository.markSessionInactive(currentUserId, currentSessionId) }
+                    }
+                    authRepository.signOut(credentialManager)
+                }.onFailure { error ->
+                    _actionState.update {
+                        it.copy(
+                            isBusy = false,
+                            bannerMessage = error.message ?: "Failed to deactivate account.",
+                            bannerTone = BannerTone.ERROR
+                        )
+                    }
                 }
+            } finally {
+                _actionState.update { it.copy(isBusy = false) }
             }
         }
     }
@@ -364,36 +392,51 @@ class DashboardViewModel(
     }
 
     private suspend fun performAccountDeletion(credentialManager: CredentialManager) {
-        val dataResult = userRepository.deleteAllUserData(currentUserId)
-        dataResult.onFailure { error ->
-            _actionState.update {
-                it.copy(
-                    isBusy = false,
-                    bannerMessage = error.message ?: "Could not delete cloud data.",
-                    bannerTone = BannerTone.ERROR
-                )
+        try {
+            val dataResult = userRepository.deleteAllUserData(currentUserId)
+            dataResult.onFailure { error ->
+                _actionState.update {
+                    it.copy(
+                        isBusy = false,
+                        bannerMessage = error.message ?: "Could not delete cloud data.",
+                        bannerTone = BannerTone.ERROR
+                    )
+                }
+                return
             }
-            return
-        }
-        val authResult = authRepository.deleteCurrentAuthUser()
-        authResult.onSuccess {
-            authRepository.signOut(credentialManager)
-        }.onFailure { error ->
-            _actionState.update {
-                it.copy(
-                    isBusy = false,
-                    bannerMessage = error.message ?: "Could not delete authentication account.",
-                    bannerTone = BannerTone.ERROR
-                )
+            val authResult = authRepository.deleteCurrentAuthUser()
+            authResult.onSuccess {
+                authRepository.signOut(credentialManager)
+            }.onFailure { error ->
+                _actionState.update {
+                    it.copy(
+                        isBusy = false,
+                        bannerMessage = error.message ?: "Could not delete authentication account.",
+                        bannerTone = BannerTone.ERROR
+                    )
+                }
             }
+        } finally {
+            _actionState.update { it.copy(isBusy = false) }
         }
     }
 
     fun signOut(credentialManager: CredentialManager) {
         viewModelScope.launch {
             _actionState.update { it.copy(isBusy = true) }
-            userRepository.markSessionInactive(currentUserId, currentSessionId)
-            authRepository.signOut(credentialManager)
+            try {
+                withTimeoutOrNull(800L) {
+                    try {
+                        userRepository.markSessionInactive(currentUserId, currentSessionId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                    }
+                }
+                authRepository.signOut(credentialManager)
+            } finally {
+                _actionState.update { DashboardActionState() }
+            }
         }
     }
 

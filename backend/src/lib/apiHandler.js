@@ -2,7 +2,7 @@ import { AppError } from "@/lib/errors";
 import { fail } from "@/lib/response";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
-/** Wraps a route handler: rate limiting + consistent error responsedfdf. */
+/** Wraps a route handler: rate limiting + consistent error response. */
 export function apiHandler(handler, { limit = 30 } = {}) {
   return async (request, context) => {
     try {
@@ -15,7 +15,10 @@ export function apiHandler(handler, { limit = 30 } = {}) {
       if (err instanceof AppError) return fail(err.status, err.code, err.message);
       if (err?.code === 11000) return fail(409, "DUPLICATE", "An account with this email already exists.");
       console.error("Unhandled API error:", err);
-      return fail(500, "INTERNAL_ERROR", "Something went wrong. Please try again.");
+      const safeDetail = String(err?.message || "Internal server error")
+        .replace(/mongodb(\+srv)?:\/\/[^@\s]+@/gi, "mongodb$1://***@")
+        .slice(0, 180);
+      return fail(500, "INTERNAL_ERROR", `${err?.name || "ServerError"}: ${safeDetail}`);
     }
   };
 }

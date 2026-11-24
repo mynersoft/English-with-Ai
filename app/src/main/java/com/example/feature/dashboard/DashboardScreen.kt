@@ -45,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,6 +84,7 @@ fun DashboardScreen(
     onOpenSpeaking: () -> Unit = {},
     onOpenSentenceLearning: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
+    onRetryBackendSync: () -> Unit = {},
     onSignOut: () -> Unit
 ) {
     Scaffold(
@@ -158,13 +160,49 @@ fun DashboardScreen(
                     }
                 }
                 is UiState.Error -> {
-                    Column(
+                    LazyColumn(
                         modifier = Modifier
                             .widthIn(max = 600.dp)
-                            .padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        StatusBanner(message = profileState.message, tone = BannerTone.ERROR)
+                        item {
+                            StatusBanner(message = profileState.message, tone = BannerTone.ERROR)
+                        }
+                        if (!actionState.backendSyncError.isNullOrBlank()) {
+                            item {
+                                BackendSyncWarningCard(
+                                    error = actionState.backendSyncError,
+                                    isSyncing = actionState.isSyncingBackend,
+                                    onRetry = onRetryBackendSync
+                                )
+                            }
+                        }
+                        item {
+                            Text(
+                                text = "Quick Screen Navigation",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                        item {
+                            AllScreensButtonGrid(
+                                onOpenSpeaking = onOpenSpeaking,
+                                onOpenSentenceLearning = onOpenSentenceLearning,
+                                onOpenProfile = onOpenProfile,
+                                onOpenSessions = onOpenSessions,
+                                onOpenSecurity = onOpenSecurity,
+                                onOpenAdmin = onOpenAdmin
+                            )
+                        }
+                        item {
+                            SignOutButtonCard(
+                                isBusy = actionState.isBusy,
+                                testTag = "dashboard_error_sign_out_button",
+                                onSignOut = onSignOut
+                            )
+                        }
                     }
                 }
                 is UiState.Success -> {
@@ -184,6 +222,16 @@ fun DashboardScreen(
                                 message = actionState.bannerMessage,
                                 tone = actionState.bannerTone
                             )
+                        }
+
+                        if (!actionState.backendSyncError.isNullOrBlank()) {
+                            item {
+                                BackendSyncWarningCard(
+                                    error = actionState.backendSyncError,
+                                    isSyncing = actionState.isSyncingBackend,
+                                    onRetry = onRetryBackendSync
+                                )
+                            }
                         }
 
                         item {
@@ -321,6 +369,14 @@ fun DashboardScreen(
                                 subtitle = "Create, edit, and generate TTS or upload audio for patterns",
                                 testTag = "nav_admin_card",
                                 onClick = onOpenAdmin
+                            )
+                        }
+
+                        item {
+                            SignOutButtonCard(
+                                isBusy = actionState.isBusy,
+                                testTag = "dashboard_bottom_sign_out_button",
+                                onSignOut = onSignOut
                             )
                         }
 
@@ -671,5 +727,79 @@ private fun AccountNavCard(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+private fun BackendSyncWarningCard(
+    error: String,
+    isSyncing: Boolean,
+    onRetry: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Backend Account Sync Failed",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            OutlinedButton(
+                onClick = onRetry,
+                enabled = !isSyncing,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("retry_backend_sync_button")
+            ) {
+                Text(if (isSyncing) "Syncing..." else "Retry MongoDB Sync")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignOutButtonCard(
+    isBusy: Boolean,
+    testTag: String,
+    onSignOut: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onSignOut,
+        enabled = !isBusy,
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.error
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .minimumInteractiveComponentSize()
+            .height(50.dp)
+            .testTag(testTag)
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Logout,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "Sign Out",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }

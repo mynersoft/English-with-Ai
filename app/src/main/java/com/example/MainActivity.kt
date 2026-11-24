@@ -5,9 +5,26 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -160,6 +179,10 @@ private fun UnauthenticatedNavGraph(
     val navController = rememberNavController()
     val uiState by authViewModel.uiState.collectAsStateWithLifecycle()
 
+    LaunchedEffect(Unit) {
+        authViewModel.resetTransientLoading()
+    }
+
     NavHost(
         navController = navController,
         startDestination = AuthRoutes.LOGIN
@@ -271,10 +294,15 @@ private fun AuthenticatedNavGraph(
     val actionState by dashboardViewModel.actionState.collectAsStateWithLifecycle()
 
     val loadedProfile = (profileState as? UiState.Success)?.data
+    LaunchedEffect(currentUserId) {
+        dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
+    }
+
     if (profileState is UiState.Loading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
+        ProfileLoadingFallbackScreen(
+            isBusy = actionState.isBusy,
+            onSignOut = { dashboardViewModel.signOut(credentialManager) }
+        )
         return
     }
 
@@ -323,6 +351,9 @@ private fun AuthenticatedNavGraph(
                 onOpenAdmin = {
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.ADMIN)
+                },
+                onRetryBackendSync = {
+                    dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
                 },
                 onSignOut = { dashboardViewModel.signOut(credentialManager) }
             )
@@ -404,6 +435,61 @@ private fun AuthenticatedNavGraph(
                 },
                 onClearBanner = { dashboardViewModel.clearBanner() }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileLoadingFallbackScreen(
+    isBusy: Boolean,
+    onSignOut: () -> Unit
+) {
+    Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            TopAppBar(
+                title = { Text("English AI") },
+                actions = {
+                    IconButton(
+                        onClick = onSignOut,
+                        enabled = !isBusy,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("loading_top_sign_out_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = "Sign Out"
+                        )
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                CircularProgressIndicator()
+                Text("Loading your account...")
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onSignOut,
+                    enabled = !isBusy,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("loading_sign_out_button")
+                ) {
+                    Text("Sign Out")
+                }
+            }
         }
     }
 }

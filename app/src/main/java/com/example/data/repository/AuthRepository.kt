@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
+import com.example.BuildConfig
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.EmailAuthProvider
@@ -19,12 +20,21 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 class AuthRepository(
     private val auth: FirebaseAuth = Firebase.auth
@@ -35,6 +45,7 @@ class AuthRepository(
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             trySend(firebaseAuth.currentUser)
         }
+        trySend(auth.currentUser)
         auth.addAuthStateListener(listener)
         awaitClose { auth.removeAuthStateListener(listener) }
     }
@@ -187,11 +198,17 @@ class AuthRepository(
     suspend fun signOut(credentialManager: CredentialManager) {
         withContext(NonCancellable) {
             try {
-                credentialManager.clearCredentialState(ClearCredentialStateRequest())
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to clear credential state: ${e.message}")
-            } finally {
                 auth.signOut()
+            } finally {
+                withTimeoutOrNull(1200L) {
+                    try {
+                        credentialManager.clearCredentialState(ClearCredentialStateRequest())
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "Failed to clear credential state: ${e.message}")
+                    }
+                }
             }
         }
     }
@@ -212,6 +229,128 @@ class AuthRepository(
         val usesPassword = providers.contains(EmailAuthProvider.PROVIDER_ID)
         val usesGoogle = providers.contains(GoogleAuthProvider.PROVIDER_ID)
         return usesPassword && !usesGoogle && !user.isEmailVerified
+    }
+
+    /**
+     * Syncs the current Firebase user into the backend MongoDB `users`
+     * and `usersettings` collections so backend features & admin roles work seamlessly.
+     */
+    suspend fun syncCurrentUserToBackend(
+        preferredName: String? = null,
+        isRegistration: Boolean = false
+    ): Result<Unit> {
+        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
+        if (baseUrl.isBlank()) {
+            return Result.failure(IllegalStateException("BACKEND_BASE_URL is not configured."))
+        }
+        val user = auth.currentUser
+            ?: return Result.failure(IllegalStateException("No signed-in Firebase user."))
+        return try {
+            val tokenResult = user.getIdToken(false).await()
+            val token = tokenResult.token
+                ?: return Result.failure(IllegalStateException("Firebase ID token is empty."))
+            val hasGoogle = user.providerData.any { it.providerId == GoogleAuthProvider.PROVIDER_ID }
+            val provider = tokenResult.signInProvider ?: if (hasGoogle) "google.com" else "password"
+            val primaryPath = when {
+                provider == "google.com" -> "/api/v1/auth/google"
+                isRegistration -> "/api/v1/auth/email/register"
+                else -> "/api/v1/auth/email/login"
+            }
+            val safeName = (preferredName ?: user.displayName ?: user.email?.substringBefore("@") ?: "Learner")
+                .trim()
+                .let { if (it.length < 2) "Learner" else it.take(60) }
+            val payload = if (primaryPath == "/api/v1/auth/email/register") {
+                JSONObject().put("name", safeName).toString()
+            } else {
+                "{}"
+            }
+
+            withContext(Dispatchers.IO) {
+                var response = executeAuthSyncCall(baseUrl, primaryPath, token, payload)
+                // Handle provider mismatch (e.g., cached token provider vs endpoint) or fallback to unified sync.
+                if (!response.isSuccess && (response.code == 400 || response.code == 404)) {
+                    val fallbackPath = if (primaryPath == "/api/v1/auth/google") {
+                        "/api/v1/auth/email/login"
+                    } else {
+                        "/api/v1/auth/google"
+                    }
+                    val fallbackRes = executeAuthSyncCall(baseUrl, fallbackPath, token, "{}")
+                    if (fallbackRes.isSuccess) {
+                        response = fallbackRes
+                    } else {
+                        val unifiedRes = executeAuthSyncCall(
+                            baseUrl,
+                            "/api/v1/auth/sync",
+                            token,
+                            JSONObject().put("name", safeName).toString()
+                        )
+                        if (unifiedRes.isSuccess) {
+                            response = unifiedRes
+                        }
+                    }
+                }
+                if (response.isSuccess) {
+                    Result.success(Unit)
+                } else {
+                    val detail = if (response.code >= 500 &&
+                        (response.message.contains("Something went wrong", ignoreCase = true) ||
+                            response.message.contains("<html", ignoreCase = true))
+                    ) {
+                        probeHealthError(baseUrl) ?: "${response.message}. Check Vercel MONGODB_URI / FIREBASE_* env vars and MongoDB Atlas IP Access (0.0.0.0/0)."
+                    } else {
+                        response.message
+                    }
+                    val msg = "Backend user sync failed (HTTP ${response.code}): $detail"
+                    Log.w(TAG, msg)
+                    Result.failure(IOException(msg))
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Backend user sync skipped: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private data class SyncResponse(val isSuccess: Boolean, val code: Int, val message: String)
+
+    private fun probeHealthError(baseUrl: String): String? {
+        return runCatching {
+            val req = Request.Builder().url("$baseUrl/api/v1/health").get().build()
+            httpClient.newCall(req).execute().use { res ->
+                val raw = res.body?.string().orEmpty()
+                val json = JSONObject(raw)
+                if (!json.has("firebaseAdmin") && !json.has("mongodb")) return@use null
+                val fb = json.optString("firebaseAdmin", "unknown")
+                val db = json.optString("mongodb", "unknown")
+                "firebaseAdmin=$fb, mongodb=$db"
+            }
+        }.getOrNull()
+    }
+
+    private fun executeAuthSyncCall(
+        baseUrl: String,
+        path: String,
+        token: String,
+        payload: String
+    ): SyncResponse {
+        val request = Request.Builder()
+            .url("$baseUrl$path")
+            .header("Authorization", "Bearer $token")
+            .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        return httpClient.newCall(request).execute().use { res ->
+            val raw = res.body?.string().orEmpty()
+            val cleanedRaw = if (raw.trimStart().startsWith("<")) "Server error (${res.code})" else raw.take(160)
+            val errMsg = runCatching {
+                val j = JSONObject(raw)
+                j.optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() }
+                    ?: j.optString("error").takeIf { it.isNotBlank() }
+                    ?: cleanedRaw
+            }.getOrDefault(cleanedRaw).ifBlank { res.message }
+            SyncResponse(res.isSuccessful, res.code, errMsg)
+        }
     }
 
     private fun mapAuthError(e: Exception): String {
@@ -269,6 +408,12 @@ class AuthRepository(
         const val TAG = "AuthRepository"
         const val EMAIL_PROVIDER_DISABLED_MSG =
             "Email/Password authentication is currently disabled in Firebase Console for this project. Enable it under Authentication > Sign-in method, or sign in with Google below."
+        val httpClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .build()
+        }
     }
 }
 
