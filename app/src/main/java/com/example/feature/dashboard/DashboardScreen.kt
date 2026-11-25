@@ -24,12 +24,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
@@ -330,7 +330,7 @@ fun DashboardScreen(
 
                         item {
                             AccountNavCard(
-                                icon = Icons.Filled.MenuBook,
+                                icon = Icons.AutoMirrored.Filled.MenuBook,
                                 title = "Sentence Patterns",
                                 subtitle = "Practice spoken English structures with Bangla meaning & speaking drills",
                                 testTag = "nav_patterns_card",
@@ -440,7 +440,7 @@ private fun AllScreensButtonGrid(
                 modifier = Modifier.weight(1f)
             )
             ScreenQuickButton(
-                icon = Icons.Filled.MenuBook,
+                icon = Icons.AutoMirrored.Filled.MenuBook,
                 label = "Patterns",
                 testTag = "quick_nav_patterns_button",
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,

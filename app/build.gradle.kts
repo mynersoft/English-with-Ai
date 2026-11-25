@@ -20,6 +20,25 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    val backendBaseUrl = run {
+      val envFile = rootProject.file(".env")
+      val exampleFile = rootProject.file(".env.example")
+      fun readKey(file: java.io.File): String? {
+        if (!file.exists()) return null
+        return file.readLines()
+          .firstOrNull { it.trimStart().startsWith("BACKEND_BASE_URL=") }
+          ?.substringAfter("=")
+          ?.trim()
+          ?.trim('"', '\'')
+      }
+      val fromEnv = readKey(envFile)
+      val fromSys = System.getenv("BACKEND_BASE_URL")?.trim()
+      val fromExample = readKey(exampleFile)
+      listOfNotNull(fromEnv, fromSys, fromExample).firstOrNull { it.isNotBlank() }.orEmpty()
+    }
+    val escapedBackendUrl = backendBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+    buildConfigField("String", "BACKEND_BASE_URL", "\"$escapedBackendUrl\"")
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
@@ -81,6 +100,9 @@ secrets {
   ignoreList.add("FIREBASE_PROJECT_ID")
   ignoreList.add("MONGODB_URI")
   ignoreList.add("AI_PROVIDER")
+  ignoreList.add("AI_API_KEY")
+  ignoreList.add("API_BASE_URL")
+  ignoreList.add("BACKEND_BASE_URL")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
@@ -120,7 +142,6 @@ dependencies {
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
   // implementation(libs.firebase.appcheck.recaptcha)
-implementation("androidx.compose.material:material-icons-extended")
   // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)

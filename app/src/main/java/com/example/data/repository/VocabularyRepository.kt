@@ -423,8 +423,7 @@ class VocabularyRepository(context: Context? = null) {
     }
 
     suspend fun adminDeleteWord(wordId: String): Result<Unit> = safeCall {
-        requestJson("DELETE", "/api/admin/vocabulary/words/$wordId")
-        Unit
+        requestJson("DELETE", "/api/admin/vocabulary/words/$wordId").let { }
     }
 
     suspend fun adminListCategories(): Result<List<VocabCategorySummary>> = safeCall {
@@ -453,8 +452,7 @@ class VocabularyRepository(context: Context? = null) {
     }
 
     suspend fun adminDeleteCategory(categoryId: String): Result<Unit> = safeCall {
-        requestJson("DELETE", "/api/admin/vocabulary/categories/$categoryId")
-        Unit
+        requestJson("DELETE", "/api/admin/vocabulary/categories/$categoryId").let { }
     }
 
     suspend fun adminImportCsv(csvText: String): Result<CsvImportSummary> = safeCall {
