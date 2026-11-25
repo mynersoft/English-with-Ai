@@ -79,6 +79,8 @@ class PassageReaderViewModel(
     providerConfig: AudioProviderConfig = AudioProviderConfig()
 ) : AndroidViewModel(application) {
 
+    constructor(application: Application) : this(application, ReadingRepository(), AudioProviderConfig())
+
     private val registry = ProviderRegistry(application, providerConfig)
     val audioManager = AudioManager(registry)
 

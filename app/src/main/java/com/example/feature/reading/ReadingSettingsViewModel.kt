@@ -28,6 +28,8 @@ class ReadingSettingsViewModel(
     private val repository: ReadingRepository = ReadingRepository()
 ) : AndroidViewModel(application) {
 
+    constructor(application: Application) : this(application, ReadingRepository())
+
     private val ttsProvider = ProviderRegistry(application).createTtsProvider()
 
     private val _uiState = MutableStateFlow(ReadingSettingsUiState())

@@ -90,4 +90,17 @@ class ReadingLogicTest {
             AudioStatus.entries.map { it.label }
         )
     }
+
+    @Test
+    fun `android reading viewmodels expose single-arg Application constructor for ViewModelProvider`() {
+        val settingsCtor = com.example.feature.reading.ReadingSettingsViewModel::class.java
+            .getConstructor(android.app.Application::class.java)
+        val readerCtor = com.example.feature.reading.PassageReaderViewModel::class.java
+            .getConstructor(android.app.Application::class.java)
+        val dashboardCtor = com.example.feature.reading.ReadingDashboardViewModel::class.java
+            .getConstructor()
+        val adminCtor = com.example.feature.reading.ReadingAdminViewModel::class.java
+            .getConstructor()
+        assertTrue(settingsCtor != null && readerCtor != null && dashboardCtor != null && adminCtor != null)
+    }
 }

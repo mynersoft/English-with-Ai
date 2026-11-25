@@ -57,3 +57,13 @@ test("Student dashboard, activity & pattern progress routes enforce withAuth", (
     assert.ok(!/body\.userId|searchParams\.get\(["']userId/.test(src), `${rel} must not trust client userId`);
   }
 });
+
+test("Student dashboard service computes readingReport, readingActive, and reading module", () => {
+  const src = fs.readFileSync(path.join(__dirname, "../src/modules/student/student.service.js"), "utf8");
+  assert.match(src, /readingReport\s*:/);
+  assert.match(src, /readingActive\s*:/);
+  assert.match(src, /key:\s*"reading"/);
+  assert.match(src, /ReadingPassage/);
+  assert.match(src, /UserReadingProgress/);
+  assert.match(src, /ReadingAttempt/);
+});

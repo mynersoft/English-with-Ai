@@ -4,6 +4,8 @@ import com.example.BuildConfig
 import com.example.core.network.NetworkClient
 import com.example.domain.model.CourseReportData
 import com.example.domain.model.CourseReportModule
+import com.example.domain.model.ReadingReportRecentAttempt
+import com.example.domain.model.ReadingReportSummary
 import com.example.domain.model.StreakCalendarData
 import com.example.domain.model.StudentDashboardData
 import com.example.domain.model.StudentDashboardStats
@@ -31,6 +33,8 @@ class StudentDashboardRepository {
             val weekArr = data.optJSONArray("weeklyActivity") ?: JSONArray()
             val calObj = data.optJSONObject("streakCalendar") ?: JSONObject()
             val activeDaysArr = calObj.optJSONArray("activeDaysOfMonth") ?: JSONArray()
+            val readRepObj = data.optJSONObject("readingReport") ?: JSONObject()
+            val recentAttArr = readRepObj.optJSONArray("recentAttempts") ?: JSONArray()
             val reportObj = data.optJSONObject("courseReport") ?: JSONObject()
             val modulesArr = reportObj.optJSONArray("modules") ?: JSONArray()
 
@@ -53,7 +57,9 @@ class StudentDashboardRepository {
                         speakingSessions = statsObj.optInt("speakingSessions", 0),
                         chatMessagesSent = statsObj.optInt("chatMessagesSent", 0),
                         quizzesCompleted = statsObj.optInt("quizzesCompleted", 0),
-                        activeChatRooms = statsObj.optInt("activeChatRooms", 0)
+                        activeChatRooms = statsObj.optInt("activeChatRooms", 0),
+                        readingPassagesCompleted = statsObj.optInt("readingPassagesCompleted", 0),
+                        readingMinutes = statsObj.optInt("readingMinutes", 0)
                     ),
                     weekRangeLabel = data.optString("weekRangeLabel"),
                     weeklyActivity = List(weekArr.length()) { i ->
@@ -66,6 +72,7 @@ class StudentDashboardRepository {
                             patternsActive = d.optBoolean("patternsActive", false),
                             speakingActive = d.optBoolean("speakingActive", false),
                             vocabularyActive = d.optBoolean("vocabularyActive", false),
+                            readingActive = d.optBoolean("readingActive", false),
                             practiceActive = d.optBoolean("practiceActive", false)
                         )
                     },
@@ -79,6 +86,31 @@ class StudentDashboardRepository {
                         activeDaysOfMonth = List(activeDaysArr.length()) { i -> activeDaysArr.optInt(i) },
                         longestStreak = calObj.optInt("longestStreak", 0),
                         totalActiveDays = calObj.optInt("totalActiveDays", 0)
+                    ),
+                    readingReport = ReadingReportSummary(
+                        completedPassages = readRepObj.optInt("completedPassages", 0),
+                        inProgressPassages = readRepObj.optInt("inProgressPassages", 0),
+                        totalPassages = readRepObj.optInt("totalPassages", 0),
+                        completionPercent = readRepObj.optInt("completionPercent", 0),
+                        totalMinutes = readRepObj.optInt("totalMinutes", 0),
+                        todayMinutes = readRepObj.optInt("todayMinutes", 0),
+                        dailyGoalMinutes = readRepObj.optInt("dailyGoalMinutes", 15),
+                        quizAttemptsCount = readRepObj.optInt("quizAttemptsCount", 0),
+                        averageQuizScore = readRepObj.optInt("averageQuizScore", 0),
+                        readAloudCount = readRepObj.optInt("readAloudCount", 0),
+                        averageReadAloudScore = readRepObj.optInt("averageReadAloudScore", 0),
+                        recentAttempts = List(recentAttArr.length()) { i ->
+                            val a = recentAttArr.getJSONObject(i)
+                            ReadingReportRecentAttempt(
+                                id = a.optString("id"),
+                                passageId = a.optString("passageId"),
+                                passageTitle = a.optString("passageTitle"),
+                                level = a.optString("level", "A1"),
+                                mode = a.optString("mode", "comprehension"),
+                                scorePercent = a.optInt("scorePercent", 0),
+                                createdAt = a.optString("createdAt")
+                            )
+                        }
                     ),
                     courseReport = CourseReportData(
                         overallPercent = reportObj.optInt("overallPercent", 0),

@@ -247,6 +247,8 @@ fun StudentProfileDashboardScreen(
                                 vocabCount = data.stats.vocabularyLearned,
                                 patternsCount = data.stats.patternsPracticed,
                                 speakingCount = data.stats.speakingSessions,
+                                readingCount = data.stats.readingPassagesCompleted,
+                                readingMinutes = data.stats.readingMinutes,
                                 isRefreshing = isRefreshing,
                                 onBack = onBackToHome,
                                 onOpenSettings = { showSettingsSheet = true },
@@ -281,6 +283,22 @@ fun StudentProfileDashboardScreen(
                         }
 
                         item {
+                            ReadingReportSection(
+                                report = data.readingReport,
+                                onOpenReading = { onNavigateRoute("reading") }
+                            )
+                        }
+
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(10.dp)
+                                    .background(SectionBandBg)
+                            )
+                        }
+
+                        item {
                             CourseReportSection(
                                 overallPercent = data.courseReport.overallPercent,
                                 modules = data.courseReport.modules,
@@ -290,59 +308,6 @@ fun StudentProfileDashboardScreen(
                                 },
                                 onOpenModule = onNavigateRoute
                             )
-                        }
-
-                        item {
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = Color(0xFFE6F4EC),
-                                border = BorderStroke(1.dp, BrandEmerald.copy(alpha = 0.25f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 4.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .clickable { onNavigateRoute("reading") }
-                                    .testTag("student_dashboard_reading_card")
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(BrandEmerald),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.AutoStories,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Reading Practice",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = TextDark
-                                        )
-                                        Text(
-                                            text = "Listen & read passages, Read Aloud & quizzes",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextMuted
-                                        )
-                                    }
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = BrandEmerald
-                                    )
-                                }
-                            }
                         }
                     }
 
@@ -437,6 +402,8 @@ private fun ProfileHeaderSection(
     vocabCount: Int,
     patternsCount: Int,
     speakingCount: Int,
+    readingCount: Int = 0,
+    readingMinutes: Int = 0,
     isRefreshing: Boolean,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -658,6 +625,30 @@ private fun ProfileHeaderSection(
             )
         }
 
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            InlineStatMetric(
+                icon = Icons.Filled.AutoStories,
+                iconTint = VocabGreen,
+                valueText = "$readingCount",
+                labelText = "passages",
+                modifier = Modifier.weight(1f)
+            )
+            InlineStatMetric(
+                icon = Icons.Outlined.MenuBook,
+                iconTint = Color(0xFF0F766E),
+                valueText = "${readingMinutes}m",
+                labelText = "reading",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
         Spacer(modifier = Modifier.height(18.dp))
 
         OutlinedButton(
@@ -778,6 +769,13 @@ private fun LearningActivitySection(
             iconTint = BrandEmerald,
             label = "Vocabulary",
             activeList = weeklyActivity.map { it.vocabularyActive }
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        ActivityMatrixRow(
+            icon = Icons.Filled.AutoStories,
+            iconTint = Color(0xFF0F766E),
+            label = "Reading",
+            activeList = weeklyActivity.map { it.readingActive }
         )
         Spacer(modifier = Modifier.height(14.dp))
         ActivityMatrixRow(

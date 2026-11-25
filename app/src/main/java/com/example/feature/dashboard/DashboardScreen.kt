@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import com.example.core.common.UiState
 import com.example.core.ui.BannerTone
 import com.example.core.ui.StatusBanner
+import com.example.domain.model.ReadingReportSummary
 import com.example.domain.model.UserProfile
 import com.example.domain.model.UserSession
 import com.example.ui.theme.SuccessGreen
@@ -80,6 +81,7 @@ fun DashboardScreen(
     fallbackEmail: String,
     isEmailVerified: Boolean,
     actionState: DashboardActionState,
+    readingReport: ReadingReportSummary? = null,
     bottomBar: @Composable () -> Unit = {},
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
@@ -349,10 +351,15 @@ fun DashboardScreen(
                         }
 
                         item {
+                            val readingSub = if (readingReport != null && readingReport.totalPassages > 0) {
+                                "${readingReport.completedPassages}/${readingReport.totalPassages} passages completed · ${readingReport.totalMinutes} min read · ${readingReport.quizAttemptsCount} quizzes"
+                            } else {
+                                "Listen & read passages, Read Aloud text matching, comprehension quizzes & saved words"
+                            }
                             AccountNavCard(
                                 icon = Icons.Filled.AutoStories,
                                 title = "Reading Practice",
-                                subtitle = "Listen & read passages, Read Aloud text matching, comprehension quizzes & saved words",
+                                subtitle = readingSub,
                                 testTag = "nav_reading_card",
                                 onClick = onOpenReading
                             )

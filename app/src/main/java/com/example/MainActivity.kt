@@ -343,7 +343,7 @@ private fun AuthenticatedNavGraph(
     ) {
         composable(AppRoutes.DASHBOARD) {
             LaunchedEffect(activeTab) {
-                if (activeTab == AppMainTab.PROGRESS) {
+                if (activeTab == AppMainTab.PROGRESS || activeTab == AppMainTab.HOME) {
                     studentDashboardViewModel.loadDashboard(silent = true)
                 }
             }
@@ -371,6 +371,7 @@ private fun AuthenticatedNavGraph(
                         fallbackEmail = dashboardViewModel.currentEmail(),
                         isEmailVerified = dashboardViewModel.isEmailVerified(),
                         actionState = actionState,
+                        readingReport = (studentDashboardState as? UiState.Success)?.data?.readingReport,
                         bottomBar = bottomBarContent,
                         onOpenProfile = {
                             dashboardViewModel.clearBanner()
@@ -505,7 +506,10 @@ private fun AuthenticatedNavGraph(
         composable(AppRoutes.READING) {
             ReadingRoute(
                 isAdmin = actionState.isAdmin,
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    navController.popBackStack()
+                    studentDashboardViewModel.loadDashboard(silent = true)
+                }
             )
         }
 

@@ -12,6 +12,11 @@ import Pattern from "@/models/Pattern";
 import UserPatternProgress from "@/models/UserPatternProgress";
 import ChatMessage from "@/models/ChatMessage";
 import ChatRoom from "@/models/ChatRoom";
+import ReadingPassage from "@/models/ReadingPassage";
+import UserReadingProgress from "@/models/UserReadingProgress";
+import ReadingAttempt from "@/models/ReadingAttempt";
+import ReadingDailyActivity from "@/models/ReadingDailyActivity";
+import { normalizeReadingGoalMinutes } from "@/lib/readingUtils";
 
 function formatLevelLabel(level) {
   const raw = String(level || "beginner").trim().toLowerCase();
@@ -61,7 +66,7 @@ export async function recordStudentActivity({ userDoc, type, patternId = null, n
 
 export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
   const userId = userDoc.firebaseUid;
-  const settingsDoc = await UserSettings.findOne({ user: userDoc._id }).select("vocabulary").lean();
+  const settingsDoc = await UserSettings.findOne({ user: userDoc._id }).select("vocabulary reading").lean();
   const timezone = normalizeTimezone(settingsDoc?.vocabulary?.timezone || DEFAULT_TIMEZONE);
   const todayStr = getLocalDateString(now, timezone);
   const sixtyDaysAgoStr = shiftLocalDate(todayStr, -60);
@@ -79,6 +84,10 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
     chatMessagesTotal,
     recentChatMessages,
     activeChatRoomsCount,
+    totalReadingPassages,
+    readingProgressDocs,
+    readingAttemptsDocs,
+    readingDailyDocs,
   ] = await Promise.all([
     VocabularyDailyActivity.find({
       userId,
@@ -104,10 +113,27 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
     ChatRoom.countDocuments({
       $or: [{ roomType: "group" }, { roomType: "direct", memberIds: userDoc._id }],
     }),
+    ReadingPassage.countDocuments({ isPublished: true }),
+    UserReadingProgress.find({ userId })
+      .select("status totalSeconds lastReadAt completedAt passageId")
+      .lean(),
+    ReadingAttempt.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .select("mode scorePercent correctCount totalCount passageId createdAt")
+      .populate("passageId", "title level")
+      .lean(),
+    ReadingDailyActivity.find({
+      userId,
+      date: { $gte: sixtyDaysAgoStr, $lte: todayStr },
+    })
+      .select("date readingSeconds completedPassageIds")
+      .lean(),
   ]);
 
   // Index daily activities by YYYY-MM-DD
   const activityByDate = new Map(dailyActivities.map((a) => [a.date, a]));
+  const readingByDate = new Map(readingDailyDocs.map((r) => [r.date, r]));
 
   // Aggregate unique patterns practiced/learned & total speaking/practice across recent history
   const uniquePatternIds = new Set();
@@ -143,6 +169,44 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
     if (m.createdAt) chatDates.add(toLocalDateKey(m.createdAt, timezone));
   }
 
+  // Compute Reading Report metrics from MongoDB
+  let readingCompletedCount = 0;
+  let readingInProgressCount = 0;
+  let readingTotalSeconds = 0;
+  for (const p of readingProgressDocs) {
+    if (p.status === "completed") readingCompletedCount += 1;
+    else if (p.status === "in_progress") readingInProgressCount += 1;
+    readingTotalSeconds += Number(p.totalSeconds || 0);
+  }
+  const readingTotalMinutes = Math.round(readingTotalSeconds / 60);
+  const readingDailyGoalMinutes = normalizeReadingGoalMinutes(
+    settingsDoc?.reading?.dailyGoalMinutes ?? userDoc.dailyGoalMinutes ?? 15
+  );
+  const todayReadingDoc = readingByDate.get(todayStr);
+  const readingTodayMinutes = Math.round((todayReadingDoc?.readingSeconds || 0) / 60);
+
+  const compAttempts = readingAttemptsDocs.filter((a) => a.mode === "comprehension");
+  const readAloudAttempts = readingAttemptsDocs.filter((a) => a.mode === "read_aloud");
+  const averageQuizScore = compAttempts.length
+    ? Math.round(compAttempts.reduce((sum, a) => sum + Number(a.scorePercent || 0), 0) / compAttempts.length)
+    : 0;
+  const averageReadAloudScore = readAloudAttempts.length
+    ? Math.round(readAloudAttempts.reduce((sum, a) => sum + Number(a.scorePercent || 0), 0) / readAloudAttempts.length)
+    : 0;
+
+  const readingDates = new Set();
+  for (const rd of readingDailyDocs) {
+    if ((rd.readingSeconds || 0) > 0 || (rd.completedPassageIds || []).length > 0) {
+      readingDates.add(rd.date);
+    }
+  }
+  for (const att of readingAttemptsDocs) {
+    if (att.createdAt) {
+      const k = toLocalDateKey(att.createdAt, timezone);
+      readingDates.add(k);
+    }
+  }
+
   // Build set of ALL active dates (any module active on that local day)
   const activeDates = new Set();
   for (const [dateKey, a] of activityByDate.entries()) {
@@ -157,6 +221,7 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
   for (const d of vocabSpeakingDates) activeDates.add(d);
   for (const d of chatDates) activeDates.add(d);
   for (const d of completedPatternDates) activeDates.add(d);
+  for (const d of readingDates) activeDates.add(d);
 
   const { currentStreak, longestStreak } = computeStreaksFromActiveDates(activeDates, todayStr);
   const { weekRangeLabel, days } = buildWeekWindow(todayStr);
@@ -171,6 +236,7 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       patternsActive: Boolean((a && (a.patternsPracticed || 0) > 0) || completedPatternDates.has(d.date)),
       speakingActive: Boolean((a && ((a.aiSpeakingTurns || 0) > 0 || (a.speakingMinutes || 0) > 0)) || vocabSpeakingDates.has(d.date)),
       vocabularyActive: Boolean(a && ((a.newWords || 0) > 0 || (a.reviewedWords || 0) > 0)),
+      readingActive: readingDates.has(d.date),
       practiceActive: Boolean((a && (a.quizCount || 0) > 0) || chatDates.has(d.date)),
     };
   });
@@ -184,12 +250,25 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
   const patternsPercent = totalPatternsCount > 0
     ? Math.min(100, Math.round((uniquePatternIds.size / totalPatternsCount) * 100))
     : 0;
+  const readingPercent = totalReadingPassages > 0
+    ? Math.min(100, Math.round((readingCompletedCount / totalReadingPassages) * 100))
+    : 0;
   // Target benchmark of 20 speaking sessions & 30 chat messages for percentage display
   const speakingPercent = Math.min(100, Math.round((totalSpeakingSessions / 20) * 100));
   const chatPercent = Math.min(100, Math.round((chatMessagesTotal / 30) * 100));
-  const overallPercent = Math.round((vocabPercent + patternsPercent + speakingPercent + chatPercent) / 4);
+  const overallPercent = Math.round((vocabPercent + patternsPercent + readingPercent + speakingPercent + chatPercent) / 5);
 
   const levelLabel = formatLevelLabel(userDoc.learningLevel);
+
+  const recentReadingAttempts = readingAttemptsDocs.slice(0, 3).map((att) => ({
+    id: String(att._id),
+    passageId: att.passageId?._id ? String(att.passageId._id) : "",
+    passageTitle: att.passageId?.title || "Reading Passage",
+    level: att.passageId?.level || "A1",
+    mode: att.mode,
+    scorePercent: Number(att.scorePercent || 0),
+    createdAt: att.createdAt ? new Date(att.createdAt).toISOString() : "",
+  }));
 
   return {
     user: {
@@ -210,6 +289,8 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       chatMessagesSent: chatMessagesTotal,
       quizzesCompleted: totalQuizAttempts,
       activeChatRooms: activeChatRoomsCount,
+      readingPassagesCompleted: readingCompletedCount,
+      readingMinutes: readingTotalMinutes,
     },
     weekRangeLabel,
     weeklyActivity,
@@ -218,9 +299,30 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       longestStreak,
       totalActiveDays: activeDates.size,
     },
+    readingReport: {
+      completedPassages: readingCompletedCount,
+      inProgressPassages: readingInProgressCount,
+      totalPassages: totalReadingPassages,
+      completionPercent: readingPercent,
+      totalMinutes: readingTotalMinutes,
+      todayMinutes: readingTodayMinutes,
+      dailyGoalMinutes: readingDailyGoalMinutes,
+      quizAttemptsCount: compAttempts.length,
+      averageQuizScore,
+      readAloudCount: readAloudAttempts.length,
+      averageReadAloudScore,
+      recentAttempts: recentReadingAttempts,
+    },
     courseReport: {
       overallPercent,
       modules: [
+        {
+          key: "reading",
+          title: "Reading Practice",
+          percent: readingPercent,
+          summary: `${readingCompletedCount} of ${totalReadingPassages} passages completed · ${readingTotalMinutes} min read · ${compAttempts.length} quizzes`,
+          route: "reading",
+        },
         {
           key: "vocabulary",
           title: "Vocabulary",

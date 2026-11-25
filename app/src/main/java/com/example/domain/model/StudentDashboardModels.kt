@@ -18,7 +18,9 @@ data class StudentDashboardStats(
     val speakingSessions: Int = 0,
     val chatMessagesSent: Int = 0,
     val quizzesCompleted: Int = 0,
-    val activeChatRooms: Int = 0
+    val activeChatRooms: Int = 0,
+    val readingPassagesCompleted: Int = 0,
+    val readingMinutes: Int = 0
 )
 
 data class WeeklyActivityDay(
@@ -29,6 +31,7 @@ data class WeeklyActivityDay(
     val patternsActive: Boolean,
     val speakingActive: Boolean,
     val vocabularyActive: Boolean,
+    val readingActive: Boolean = false,
     val practiceActive: Boolean
 )
 
@@ -57,11 +60,37 @@ data class CourseReportData(
     val modules: List<CourseReportModule> = emptyList()
 )
 
+data class ReadingReportRecentAttempt(
+    val id: String = "",
+    val passageId: String = "",
+    val passageTitle: String = "",
+    val level: String = "A1",
+    val mode: String = "comprehension",
+    val scorePercent: Int = 0,
+    val createdAt: String = ""
+)
+
+data class ReadingReportSummary(
+    val completedPassages: Int = 0,
+    val inProgressPassages: Int = 0,
+    val totalPassages: Int = 0,
+    val completionPercent: Int = 0,
+    val totalMinutes: Int = 0,
+    val todayMinutes: Int = 0,
+    val dailyGoalMinutes: Int = 15,
+    val quizAttemptsCount: Int = 0,
+    val averageQuizScore: Int = 0,
+    val readAloudCount: Int = 0,
+    val averageReadAloudScore: Int = 0,
+    val recentAttempts: List<ReadingReportRecentAttempt> = emptyList()
+)
+
 data class StudentDashboardData(
     val user: StudentProfileSummary = StudentProfileSummary(),
     val stats: StudentDashboardStats = StudentDashboardStats(),
     val weekRangeLabel: String = "",
     val weeklyActivity: List<WeeklyActivityDay> = emptyList(),
     val streakCalendar: StreakCalendarData = StreakCalendarData(),
+    val readingReport: ReadingReportSummary = ReadingReportSummary(),
     val courseReport: CourseReportData = CourseReportData()
 )
