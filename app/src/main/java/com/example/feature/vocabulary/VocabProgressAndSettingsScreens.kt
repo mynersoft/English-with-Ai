@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material3.Button
@@ -38,7 +41,6 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,6 +52,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.core.common.UiState
 import com.example.domain.model.VocabCategorySummary
@@ -308,7 +311,11 @@ fun VocabSettingsScreen(
 ) {
     val pal = vocabPalette()
     val loaded = (settingsState as? UiState.Success)?.data
-    var dailyGoal by remember(loaded) { mutableIntStateOf(loaded?.dailyGoal ?: 5) }
+    var dailyGoalInput by remember(loaded) {
+        mutableStateOf((loaded?.dailyGoal ?: 5).coerceAtLeast(5).toString())
+    }
+    val parsedDailyGoal = dailyGoalInput.toIntOrNull()
+    val isDailyGoalValid = parsedDailyGoal != null && parsedDailyGoal in 5..500
     var preferredLevel by remember(loaded) { mutableStateOf(loaded?.preferredLevel ?: "A1") }
     var selectedCats by remember(loaded) { mutableStateOf(loaded?.preferredCategoryIds?.toSet() ?: emptySet()) }
     var autoPronounce by remember(loaded) { mutableStateOf(loaded?.autoPronounce ?: true) }
@@ -325,6 +332,63 @@ fun VocabSettingsScreen(
                 subtitle = "Customize daily pace & pronunciation",
                 onBack = onBack
             )
+        },
+        bottomBar = {
+            if (settingsState is UiState.Success) {
+                Surface(
+                    color = pal.background,
+                    border = BorderStroke(1.dp, pal.border)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            modifier = Modifier.widthIn(max = 600.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (!feedback.message.isNullOrBlank()) {
+                                VocabFeedbackBanner(message = feedback.message, isError = feedback.isError)
+                            }
+                            Button(
+                                onClick = {
+                                    onSave(
+                                        VocabSettings(
+                                            dailyGoal = (parsedDailyGoal ?: 5).coerceIn(5, 500),
+                                            preferredLevel = preferredLevel,
+                                            preferredCategoryIds = selectedCats.toList(),
+                                            autoPronounce = autoPronounce,
+                                            reminderEnabled = reminderEnabled,
+                                            reminderTime = reminderTime.trim().ifBlank { "20:00" },
+                                            timezone = timezone.trim().ifBlank { "Asia/Dhaka" }
+                                        )
+                                    )
+                                },
+                                enabled = !feedback.busy && isDailyGoalValid,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = pal.primary,
+                                    contentColor = pal.onPrimary
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("vocab_settings_save_button")
+                            ) {
+                                Text(
+                                    text = if (feedback.busy) "Saving..." else "Save Settings",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     ) { innerPadding ->
         Box(
@@ -349,10 +413,6 @@ fun VocabSettingsScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        if (!feedback.message.isNullOrBlank()) {
-                            item { VocabFeedbackBanner(message = feedback.message, isError = feedback.isError) }
-                        }
-
                         item {
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
@@ -361,12 +421,33 @@ fun VocabSettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("Daily New Words Goal (Max 5)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = pal.textPrimary)
+                                    Text("Daily New Words Goal (5 or more)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = pal.textPrimary)
+                                    OutlinedTextField(
+                                        value = dailyGoalInput,
+                                        onValueChange = { raw ->
+                                            dailyGoalInput = raw.filter { it.isDigit() }.take(3)
+                                        },
+                                        label = { Text("Words per day") },
+                                        placeholder = { Text("Enter 5 or more") },
+                                        isError = !isDailyGoalValid,
+                                        supportingText = {
+                                            Text(
+                                                if (!isDailyGoalValid) "Enter between 5 and 500 words per day."
+                                                else "Daily goal: $parsedDailyGoal words / day"
+                                            )
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("vocab_daily_goal_input")
+                                    )
                                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        (1..5).forEach { goal ->
+                                        listOf(5, 10, 15, 20, 30).forEach { goal ->
                                             FilterChip(
-                                                selected = dailyGoal == goal,
-                                                onClick = { dailyGoal = goal },
+                                                selected = parsedDailyGoal == goal,
+                                                onClick = { dailyGoalInput = goal.toString() },
                                                 label = { Text("$goal / day") }
                                             )
                                         }
@@ -453,34 +534,6 @@ fun VocabSettingsScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
-                            }
-                        }
-
-                        item {
-                            Button(
-                                onClick = {
-                                    onSave(
-                                        VocabSettings(
-                                            dailyGoal = dailyGoal,
-                                            preferredLevel = preferredLevel,
-                                            preferredCategoryIds = selectedCats.toList(),
-                                            autoPronounce = autoPronounce,
-                                            reminderEnabled = reminderEnabled,
-                                            reminderTime = reminderTime.trim().ifBlank { "20:00" },
-                                            timezone = timezone.trim().ifBlank { "Asia/Dhaka" }
-                                        )
-                                    )
-                                },
-                                enabled = !feedback.busy,
-                                colors = ButtonDefaults.buttonColors(containerColor = pal.primary, contentColor = pal.onPrimary),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("vocab_settings_save_button")
-                            ) {
-                                Text(if (feedback.busy) "Saving..." else "Save Settings", fontWeight = FontWeight.Bold)
                             }
                         }
                     }

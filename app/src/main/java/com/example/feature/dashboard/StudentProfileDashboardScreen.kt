@@ -247,6 +247,7 @@ fun StudentProfileDashboardScreen(
                                 vocabCount = data.stats.vocabularyLearned,
                                 patternsCount = data.stats.patternsPracticed,
                                 speakingCount = data.stats.speakingSessions,
+                                speakingMinutes = data.stats.speakingMinutes,
                                 readingCount = data.stats.readingPassagesCompleted,
                                 readingMinutes = data.stats.readingMinutes,
                                 isRefreshing = isRefreshing,
@@ -302,6 +303,7 @@ fun StudentProfileDashboardScreen(
                             CourseReportSection(
                                 overallPercent = data.courseReport.overallPercent,
                                 modules = data.courseReport.modules,
+                                speakingMinutes = data.stats.speakingMinutes,
                                 expandedMap = expandedModules,
                                 onToggleModule = { key ->
                                     expandedModules[key] = !(expandedModules[key] ?: false)
@@ -402,6 +404,7 @@ private fun ProfileHeaderSection(
     vocabCount: Int,
     patternsCount: Int,
     speakingCount: Int,
+    speakingMinutes: Int = 0,
     readingCount: Int = 0,
     readingMinutes: Int = 0,
     isRefreshing: Boolean,
@@ -619,8 +622,8 @@ private fun ProfileHeaderSection(
             InlineStatMetric(
                 icon = Icons.Filled.RecordVoiceOver,
                 iconTint = SpeakingIndigo,
-                valueText = "$speakingCount sessions",
-                labelText = "speaking",
+                valueText = "${speakingMinutes}m",
+                labelText = if (speakingCount > 0) "AI talk ($speakingCount)" else "AI talk",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -903,6 +906,7 @@ private fun ActivityMatrixRow(
 private fun CourseReportSection(
     overallPercent: Int,
     modules: List<CourseReportModule>,
+    speakingMinutes: Int,
     expandedMap: MutableMap<String, Boolean>,
     onToggleModule: (String) -> Unit,
     onOpenModule: (String) -> Unit
@@ -969,15 +973,25 @@ private fun CourseReportSection(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
-                        Text(
-                            text = mod.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextDark,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = mod.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextDark,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (mod.key == "speaking" || mod.route == "speaking") {
+                                Text(
+                                    text = "$speakingMinutes min talked with AI",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = SpeakingIndigo,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                         Text(
                             text = "${mod.percent}%",
                             style = MaterialTheme.typography.titleSmall,

@@ -11,7 +11,7 @@ const userSettingsSchema = new mongoose.Schema(
     },
     explanationLanguage: { type: String, default: "bn" },
     vocabulary: {
-      dailyGoal: { type: Number, default: 5, min: 1, max: 5 },
+      dailyGoal: { type: Number, default: 5, min: 5, max: 500 },
       preferredLevel: {
         type: String,
         enum: ["ALL", "A1", "A2", "B1", "B2", "C1", "C2"],

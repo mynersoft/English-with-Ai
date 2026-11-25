@@ -238,3 +238,59 @@ test("Authenticated owner: UserSession create, list, update, and revoke succeed"
   await assertSucceeds(sessionsCol.get());
   await assertSucceeds(sessionsCol.doc("device_pixel_8").delete());
 });
+
+test("VocabularyPreferences: owner create, update >= 5, validation bounds, and cross-user isolation", async () => {
+  const now = new Date(Date.now() - 1000);
+  const validVocabPrefs = (uid, overrides = {}) => ({
+    userId: uid,
+    dailyGoal: 30,
+    preferredLevel: "A1",
+    preferredCategoryIds: ["cat1", "cat2"],
+    autoPronounce: true,
+    reminderEnabled: false,
+    reminderTime: "20:00",
+    timezone: "Asia/Dhaka",
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  });
+
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const alicePrefRef = aliceDb.collection("users").doc(ALICE_UID).collection("preferences").doc("vocabulary");
+
+  // Unauthenticated and cross-user access denied
+  await assertFails(unauthDb.collection("users").doc(ALICE_UID).collection("preferences").doc("vocabulary").set(validVocabPrefs(ALICE_UID)));
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("preferences").doc("vocabulary").get());
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("preferences").doc("vocabulary").set(validVocabPrefs(ALICE_UID)));
+
+  // Reject dailyGoal < 5 or invalid doc ID
+  await assertFails(alicePrefRef.set(validVocabPrefs(ALICE_UID, { dailyGoal: 4 })));
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).collection("preferences").doc("other").set(validVocabPrefs(ALICE_UID)));
+
+  // Owner create & read succeed
+  await assertSucceeds(alicePrefRef.set(validVocabPrefs(ALICE_UID)));
+  await assertSucceeds(alicePrefRef.get());
+
+  // Owner update dailyGoal to 50 succeeds while preserving createdAt
+  await assertSucceeds(
+    alicePrefRef.update({
+      dailyGoal: 50,
+      preferredLevel: "B1",
+      updatedAt: new Date(Date.now() - 200),
+    })
+  );
+
+  // Reject tampering with createdAt
+  await assertFails(
+    alicePrefRef.update({
+      dailyGoal: 60,
+      createdAt: new Date(Date.now() - 100),
+      updatedAt: new Date(Date.now() - 100),
+    })
+  );
+
+  await assertSucceeds(alicePrefRef.delete());
+});
+

@@ -2,6 +2,9 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.BuildConfig
+import com.example.R
+import com.example.core.common.OperationType
+import com.example.core.common.handleFirestoreError
 import com.example.core.network.NetworkClient
 import com.example.domain.model.CsvImportSummary
 import com.example.domain.model.DailyWordsData
@@ -27,8 +30,12 @@ import com.example.domain.model.VocabSpeakingSession
 import com.example.domain.model.VocabWord
 import com.example.domain.model.VocabWordProgress
 import com.example.domain.model.WeeklyActivityPoint
+import android.util.Log
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -41,6 +48,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class BackendApiException(
     message: String,
@@ -50,16 +61,40 @@ class BackendApiException(
 
 class VocabularyRepository(context: Context? = null) {
     private val prefs = context?.applicationContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val firestore: FirebaseFirestore? = context?.applicationContext?.let { appCtx ->
+        runCatching {
+            FirebaseFirestore.getInstance(appCtx.getString(R.string.firestore_database_id))
+        }.getOrNull()
+    }
 
     suspend fun fetchDashboard(): Result<VocabDashboardData> = safeCall {
         val data = requestJson("GET", "/api/vocabulary/dashboard")
         cacheDashboardJson(data.toString())
-        parseDashboard(data, fromCache = false)
+        val parsed = parseDashboard(data, fromCache = false)
+        val effectiveGoal = resolveEffectiveDailyGoal(parsed.dailyGoal)
+        val dateKey = resolveTodayDateKey(parsed.date, parsed.timezone)
+        val effectiveDone = mergeTodayDoneCount(dateKey, parsed.newWordsDone, effectiveGoal)
+        parsed.copy(
+            dailyGoal = effectiveGoal,
+            newWordsDone = effectiveDone,
+            isGoalCompleted = effectiveDone >= effectiveGoal
+        )
     }
 
     fun getCachedDashboard(): VocabDashboardData? {
         val raw = prefs?.getString(KEY_DASHBOARD_CACHE, null) ?: return null
-        return runCatching { parseDashboard(JSONObject(raw), fromCache = true) }.getOrNull()
+        return runCatching {
+            val parsed = parseDashboard(JSONObject(raw), fromCache = true)
+            val savedGoal = getCachedSettingsLocally()?.dailyGoal?.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL)
+            val effectiveGoal = savedGoal ?: parsed.dailyGoal.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL)
+            val dateKey = resolveTodayDateKey(parsed.date, parsed.timezone)
+            val effectiveDone = mergeTodayDoneCount(dateKey, parsed.newWordsDone, effectiveGoal)
+            parsed.copy(
+                dailyGoal = effectiveGoal,
+                newWordsDone = effectiveDone,
+                isGoalCompleted = effectiveDone >= effectiveGoal
+            )
+        }.getOrNull()
     }
 
     suspend fun fetchCategories(): Result<List<VocabCategorySummary>> = safeCall {
@@ -98,28 +133,80 @@ class VocabularyRepository(context: Context? = null) {
 
     suspend fun fetchDailyWords(): Result<DailyWordsData> = safeCall {
         val data = requestJson("GET", "/api/vocabulary/daily")
+        val remoteGoal = data.optInt("dailyGoal", MIN_DAILY_GOAL)
+        val effectiveGoal = resolveEffectiveDailyGoal(remoteGoal)
+        val timezone = data.optString("timezone", "Asia/Dhaka")
+        val dateKey = resolveTodayDateKey(data.optString("date"), timezone)
+        val newWordsDone = mergeTodayDoneCount(dateKey, data.optInt("newWordsDone", 0), effectiveGoal)
+        val assignedWords = parseWordArray(data.optJSONArray("words"))
+        val combinedWords = supplementDailyWordsIfNeeded(assignedWords, effectiveGoal)
         DailyWordsData(
-            date = data.optString("date"),
-            timezone = data.optString("timezone", "Asia/Dhaka"),
-            dailyGoal = data.optInt("dailyGoal", 5),
-            newWordsDone = data.optInt("newWordsDone", 0),
-            isGoalCompleted = data.optBoolean("isGoalCompleted", false),
-            words = parseWordArray(data.optJSONArray("words"))
+            date = dateKey,
+            timezone = timezone,
+            dailyGoal = effectiveGoal,
+            newWordsDone = newWordsDone,
+            isGoalCompleted = newWordsDone >= effectiveGoal,
+            words = combinedWords
         )
     }
 
     suspend fun recordLearned(vocabularyId: String, knowsWord: Boolean): Result<DailyWordsData> = safeCall {
+        val effectiveGoal = resolveEffectiveDailyGoal(MIN_DAILY_GOAL)
         val payload = JSONObject()
             .put("vocabularyId", vocabularyId)
             .put("knowsWord", knowsWord)
-        val data = requestJson("POST", "/api/vocabulary/learn", payload)
-        val daily = data.optJSONObject("daily") ?: JSONObject()
-        DailyWordsData(
-            date = daily.optString("date"),
-            dailyGoal = daily.optInt("dailyGoal", 5),
-            newWordsDone = daily.optInt("newWordsDone", 0),
-            isGoalCompleted = daily.optBoolean("isGoalCompleted", false)
-        )
+
+        try {
+            val data = requestJson("POST", "/api/vocabulary/learn", payload)
+            saveKnownWordLocally(vocabularyId, knowsWord)
+            val daily = data.optJSONObject("daily") ?: JSONObject()
+            val dateKey = resolveTodayDateKey(daily.optString("date"))
+            val updatedDone = recordDailyLearnedLocally(
+                wordId = vocabularyId,
+                dateKey = dateKey,
+                remoteFloor = daily.optInt("newWordsDone", 0),
+                isOverflow = false,
+                effectiveGoal = effectiveGoal
+            )
+            updateCachedDashboardProgress(effectiveGoal, updatedDone)
+            DailyWordsData(
+                date = dateKey,
+                dailyGoal = effectiveGoal,
+                newWordsDone = updatedDone,
+                isGoalCompleted = updatedDone >= effectiveGoal
+            )
+        } catch (err: BackendApiException) {
+            val isDailyCapError = err.code == "DAILY_LIMIT_REACHED" ||
+                err.httpStatus == 409 ||
+                err.message.orEmpty().contains("Daily limit", ignoreCase = true)
+            if (!isDailyCapError || effectiveGoal <= MIN_DAILY_GOAL) {
+                throw err
+            }
+
+            // Persist the word's SRS learning state on the backend without hitting /learn's 5-word cap.
+            val reviewPayload = JSONObject()
+                .put("vocabularyId", vocabularyId)
+                .put("quality", if (knowsWord) 4 else 1)
+            runCatching { requestJson("POST", "/api/vocabulary/review", reviewPayload) }
+                .onFailure { Log.w(TAG, "Overflow review sync failed: ${it.message}") }
+
+            saveKnownWordLocally(vocabularyId, knowsWord)
+            val dateKey = resolveTodayDateKey(null)
+            val updatedDone = recordDailyLearnedLocally(
+                wordId = vocabularyId,
+                dateKey = dateKey,
+                remoteFloor = MIN_DAILY_GOAL,
+                isOverflow = true,
+                effectiveGoal = effectiveGoal
+            )
+            updateCachedDashboardProgress(effectiveGoal, updatedDone)
+            DailyWordsData(
+                date = dateKey,
+                dailyGoal = effectiveGoal,
+                newWordsDone = updatedDone,
+                isGoalCompleted = updatedDone >= effectiveGoal
+            )
+        }
     }
 
     suspend fun submitReview(vocabularyId: String, quality: Int): Result<VocabWordProgress> = safeCall {
@@ -319,21 +406,48 @@ class VocabularyRepository(context: Context? = null) {
     }
 
     suspend fun fetchSettings(): Result<VocabSettings> = safeCall {
-        val data = requestJson("GET", "/api/vocabulary/settings")
-        parseSettings(data.getJSONObject("settings"))
+        val firestoreSettings = readSettingsFromFirestore()
+        if (firestoreSettings != null) {
+            cacheSettingsLocally(firestoreSettings)
+            return@safeCall firestoreSettings
+        }
+
+        val remoteResult = runCatching {
+            val data = requestJson("GET", "/api/vocabulary/settings")
+            parseSettings(data.getJSONObject("settings"))
+        }
+        val localCached = getCachedSettingsLocally()
+        val remote = remoteResult.getOrNull()
+
+        when {
+            remote != null && remote.dailyGoal > MIN_DAILY_GOAL -> {
+                cacheSettingsLocally(remote)
+                remote
+            }
+            localCached != null -> localCached
+            remote != null -> {
+                cacheSettingsLocally(remote)
+                remote
+            }
+            else -> throw (remoteResult.exceptionOrNull()
+                ?: IllegalStateException("Failed to load vocabulary settings."))
+        }
     }
 
     suspend fun saveSettings(settings: VocabSettings): Result<VocabSettings> = safeCall {
-        val payload = JSONObject()
-            .put("dailyGoal", settings.dailyGoal)
-            .put("preferredLevel", settings.preferredLevel)
-            .put("preferredCategoryIds", JSONArray(settings.preferredCategoryIds))
-            .put("autoPronounce", settings.autoPronounce)
-            .put("reminderEnabled", settings.reminderEnabled)
-            .put("reminderTime", settings.reminderTime)
-            .put("timezone", settings.timezone)
-        val data = requestJson("PUT", "/api/vocabulary/settings", payload)
-        parseSettings(data.getJSONObject("settings"))
+        val normalized = normalizeVocabSettings(settings)
+        cacheSettingsLocally(normalized)
+        updateCachedDashboardGoal(normalized.dailyGoal)
+
+        val firestoreResult = saveSettingsToFirestore(normalized)
+        val backendResult = syncSettingsToBackend(normalized)
+
+        if (firestoreResult.isFailure && backendResult.isFailure && prefs == null) {
+            throw (firestoreResult.exceptionOrNull()
+                ?: backendResult.exceptionOrNull()
+                ?: IllegalStateException("Could not save settings."))
+        }
+        normalized
     }
 
     // ---------- Admin Vocabulary APIs ----------
@@ -523,8 +637,311 @@ class VocabularyRepository(context: Context? = null) {
         }
     }
 
+    private fun normalizeVocabSettings(settings: VocabSettings): VocabSettings =
+        Companion.normalizeVocabSettings(settings)
+
+    private fun isPermissionDenied(error: Throwable): Boolean =
+        generateSequence(error) { it.cause }
+            .filterIsInstance<FirebaseFirestoreException>()
+            .any { it.code == FirebaseFirestoreException.Code.PERMISSION_DENIED }
+
+    private suspend fun saveSettingsToFirestore(settings: VocabSettings): Result<Unit> {
+        if (firestorePrefsUnavailable) {
+            return Result.failure(IllegalStateException("Firestore vocabulary preferences unavailable"))
+        }
+        val db = firestore ?: return Result.failure(IllegalStateException("Firestore unavailable"))
+        val uid = Firebase.auth.currentUser?.uid?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(IllegalStateException("User must be signed in before saving settings."))
+        val docPath = "users/$uid/preferences/vocabulary"
+        return try {
+            val docRef = db.collection("users")
+                .document(uid)
+                .collection("preferences")
+                .document("vocabulary")
+            val snapshot = docRef.get().await()
+            val payload = hashMapOf<String, Any>(
+                "userId" to uid,
+                "dailyGoal" to settings.dailyGoal,
+                "preferredLevel" to settings.preferredLevel,
+                "preferredCategoryIds" to settings.preferredCategoryIds,
+                "autoPronounce" to settings.autoPronounce,
+                "reminderEnabled" to settings.reminderEnabled,
+                "reminderTime" to settings.reminderTime,
+                "timezone" to settings.timezone,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            if (!snapshot.exists() || snapshot.getTimestamp("createdAt") == null) {
+                payload["createdAt"] = FieldValue.serverTimestamp()
+                docRef.set(payload).await()
+            } else {
+                docRef.update(payload).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (isPermissionDenied(e)) {
+                firestorePrefsUnavailable = true
+                Log.w(TAG, "Firestore vocabulary preferences write skipped (rules not deployed on remote project).")
+            } else {
+                handleFirestoreError(e, OperationType.WRITE, docPath)
+            }
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun readSettingsFromFirestore(): VocabSettings? {
+        if (firestorePrefsUnavailable) return null
+        val db = firestore ?: return null
+        val uid = Firebase.auth.currentUser?.uid?.takeIf { it.isNotBlank() } ?: return null
+        val docPath = "users/$uid/preferences/vocabulary"
+        return try {
+            val snap = db.collection("users")
+                .document(uid)
+                .collection("preferences")
+                .document("vocabulary")
+                .get()
+                .await()
+            if (!snap.exists()) return null
+            val rawCategories = (snap.get("preferredCategoryIds") as? List<*>)
+                ?.mapNotNull { it as? String }
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
+            normalizeVocabSettings(
+                VocabSettings(
+                    dailyGoal = snap.getLong("dailyGoal")?.toInt() ?: MIN_DAILY_GOAL,
+                    preferredLevel = snap.getString("preferredLevel") ?: "A1",
+                    preferredCategoryIds = rawCategories,
+                    autoPronounce = snap.getBoolean("autoPronounce") ?: true,
+                    reminderEnabled = snap.getBoolean("reminderEnabled") ?: false,
+                    reminderTime = snap.getString("reminderTime") ?: "20:00",
+                    timezone = snap.getString("timezone") ?: "Asia/Dhaka"
+                )
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (isPermissionDenied(e)) {
+                firestorePrefsUnavailable = true
+                Log.w(TAG, "Firestore vocabulary preferences read skipped (rules not deployed on remote project).")
+            } else {
+                handleFirestoreError(e, OperationType.GET, docPath)
+            }
+            null
+        }
+    }
+
+    private suspend fun syncSettingsToBackend(settings: VocabSettings): Result<VocabSettings> {
+        fun buildPayload(goal: Int): JSONObject = JSONObject()
+            .put("dailyGoal", goal)
+            .put("preferredLevel", settings.preferredLevel)
+            .put("preferredCategoryIds", JSONArray(settings.preferredCategoryIds))
+            .put("autoPronounce", settings.autoPronounce)
+            .put("reminderEnabled", settings.reminderEnabled)
+            .put("reminderTime", settings.reminderTime)
+            .put("timezone", settings.timezone)
+
+        return runCatching {
+            val data = requestJson("PUT", "/api/vocabulary/settings", buildPayload(settings.dailyGoal))
+            parseSettings(data.getJSONObject("settings"))
+        }.recoverCatching { err ->
+            // If an older deployed backend still rejects dailyGoal > 5 with HTTP 400,
+            // keep the remaining preferences synced in MongoDB with dailyGoal = 5.
+            if (settings.dailyGoal > MIN_DAILY_GOAL && err is BackendApiException && err.httpStatus == 400) {
+                val data = requestJson("PUT", "/api/vocabulary/settings", buildPayload(MIN_DAILY_GOAL))
+                parseSettings(data.getJSONObject("settings"))
+            } else {
+                throw err
+            }
+        }
+    }
+
+    private suspend fun resolveEffectiveDailyGoal(remoteGoal: Int): Int {
+        val localGoal = getCachedSettingsLocally()?.dailyGoal
+        if (localGoal != null) return localGoal.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL)
+        val firestoreSettings = readSettingsFromFirestore()
+        if (firestoreSettings != null) {
+            cacheSettingsLocally(firestoreSettings)
+            return firestoreSettings.dailyGoal.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL)
+        }
+        return remoteGoal.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL)
+    }
+
+    private suspend fun supplementDailyWordsIfNeeded(
+        assignedWords: List<VocabWord>,
+        targetCount: Int
+    ): List<VocabWord> {
+        if (assignedWords.size >= targetCount) return assignedWords.take(targetCount)
+        val settings = getCachedSettingsLocally() ?: readSettingsFromFirestore()
+        val level = settings?.preferredLevel?.takeIf { it.isNotBlank() && it != "ALL" }
+        val seenIds = assignedWords.mapTo(mutableSetOf()) { it.id }
+        val combined = assignedWords.toMutableList()
+
+        suspend fun fetchMore(levelFilter: String?) {
+            if (combined.size >= targetCount) return
+            val limit = targetCount.coerceIn(MIN_DAILY_GOAL, 100)
+            val q = buildString {
+                append("?page=1&limit=").append(limit)
+                if (!levelFilter.isNullOrBlank()) append("&level=").append(urlEnc(levelFilter))
+            }
+            val pageData = runCatching { requestJson("GET", "/api/vocabulary/words$q") }.getOrNull() ?: return
+            val candidates = parseWordArray(pageData.optJSONArray("items"))
+            for (word in candidates) {
+                if (combined.size >= targetCount) break
+                if (word.id.isNotBlank() && seenIds.add(word.id) && !word.progress.isKnown && word.progress.learnedAt == null) {
+                    combined.add(word)
+                }
+            }
+        }
+
+        fetchMore(level)
+        if (combined.size < targetCount && level != null) {
+            fetchMore(null)
+        }
+        return combined
+    }
+
+    private fun settingsCacheKey(): String {
+        val uid = Firebase.auth.currentUser?.uid?.takeIf { it.isNotBlank() } ?: "default"
+        return "${KEY_SETTINGS_PREFIX}$uid"
+    }
+
+    private fun cacheSettingsLocally(settings: VocabSettings) {
+        if (prefs == null) return
+        val json = JSONObject()
+            .put("dailyGoal", settings.dailyGoal)
+            .put("preferredLevel", settings.preferredLevel)
+            .put("preferredCategoryIds", JSONArray(settings.preferredCategoryIds))
+            .put("autoPronounce", settings.autoPronounce)
+            .put("reminderEnabled", settings.reminderEnabled)
+            .put("reminderTime", settings.reminderTime)
+            .put("timezone", settings.timezone)
+        prefs.edit().putString(settingsCacheKey(), json.toString()).apply()
+    }
+
+    private fun getCachedSettingsLocally(): VocabSettings? {
+        val raw = prefs?.getString(settingsCacheKey(), null) ?: return null
+        return runCatching { parseSettings(JSONObject(raw)) }.getOrNull()
+    }
+
+    private fun updateCachedDashboardGoal(dailyGoal: Int) {
+        val raw = prefs?.getString(KEY_DASHBOARD_CACHE, null) ?: return
+        runCatching {
+            val obj = JSONObject(raw)
+            obj.put("dailyGoal", dailyGoal)
+            obj.put("isGoalCompleted", obj.optInt("newWordsDone", 0) >= dailyGoal)
+            cacheDashboardJson(obj.toString())
+        }
+    }
+
+    private fun updateCachedDashboardProgress(dailyGoal: Int, newWordsDone: Int) {
+        val raw = prefs?.getString(KEY_DASHBOARD_CACHE, null) ?: return
+        runCatching {
+            val obj = JSONObject(raw)
+            obj.put("dailyGoal", dailyGoal)
+            obj.put("newWordsDone", newWordsDone)
+            obj.put("isGoalCompleted", newWordsDone >= dailyGoal)
+            cacheDashboardJson(obj.toString())
+        }
+    }
+
+    private fun currentUidOrDefault(): String =
+        Firebase.auth.currentUser?.uid?.takeIf { it.isNotBlank() } ?: "default"
+
+    private fun resolveTodayDateKey(serverDate: String?, timezoneOverride: String? = null): String {
+        val uid = currentUidOrDefault()
+        val trimmed = serverDate?.trim().orEmpty()
+        if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(trimmed)) {
+            prefs?.edit()?.putString("${KEY_LAST_DATE_PREFIX}$uid", trimmed)?.apply()
+            return trimmed
+        }
+        val cachedDate = prefs?.getString("${KEY_LAST_DATE_PREFIX}$uid", null)
+        val tzId = timezoneOverride?.takeIf { it.isNotBlank() }
+            ?: getCachedSettingsLocally()?.timezone
+            ?: "Asia/Dhaka"
+        val localToday = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone(tzId)
+            }.format(Date())
+        }.getOrElse {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        }
+        return if (!cachedDate.isNullOrBlank() && cachedDate == localToday) cachedDate else localToday
+    }
+
+    private fun recordDailyLearnedLocally(
+        wordId: String,
+        dateKey: String,
+        remoteFloor: Int,
+        isOverflow: Boolean,
+        effectiveGoal: Int
+    ): Int {
+        if (prefs == null || wordId.isBlank()) {
+            return remoteFloor.coerceIn(0, effectiveGoal)
+        }
+        val uid = currentUidOrDefault()
+        val allKey = "${KEY_DAILY_LEARNED_PREFIX}${uid}_$dateKey"
+        val extraKey = "${KEY_DAILY_EXTRA_PREFIX}${uid}_$dateKey"
+        val floorKey = "${KEY_DAILY_FLOOR_PREFIX}${uid}_$dateKey"
+
+        val allIds = prefs.getStringSet(allKey, emptySet()).orEmpty().toMutableSet()
+        allIds.add(wordId)
+
+        val extraIds = prefs.getStringSet(extraKey, emptySet()).orEmpty().toMutableSet()
+        if (isOverflow) {
+            extraIds.add(wordId)
+        } else {
+            extraIds.remove(wordId)
+        }
+
+        val updatedFloor = maxOf(prefs.getInt(floorKey, 0), remoteFloor)
+
+        prefs.edit()
+            .putStringSet(allKey, allIds)
+            .putStringSet(extraKey, extraIds)
+            .putInt(floorKey, updatedFloor)
+            .apply()
+
+        return computeEffectiveDoneCount(
+            remoteDone = updatedFloor,
+            localAllCount = allIds.size,
+            overflowCount = extraIds.size,
+            effectiveGoal = effectiveGoal
+        )
+    }
+
+    private fun mergeTodayDoneCount(dateKey: String, remoteDone: Int, effectiveGoal: Int): Int {
+        if (prefs == null) return remoteDone.coerceIn(0, effectiveGoal)
+        val uid = currentUidOrDefault()
+        val allCount = prefs.getStringSet("${KEY_DAILY_LEARNED_PREFIX}${uid}_$dateKey", emptySet()).orEmpty().size
+        val extraCount = prefs.getStringSet("${KEY_DAILY_EXTRA_PREFIX}${uid}_$dateKey", emptySet()).orEmpty().size
+        val storedFloor = prefs.getInt("${KEY_DAILY_FLOOR_PREFIX}${uid}_$dateKey", 0)
+        val bestRemote = maxOf(remoteDone, storedFloor)
+        if (remoteDone > storedFloor) {
+            prefs.edit().putInt("${KEY_DAILY_FLOOR_PREFIX}${uid}_$dateKey", remoteDone).apply()
+        }
+        return computeEffectiveDoneCount(
+            remoteDone = bestRemote,
+            localAllCount = allCount,
+            overflowCount = extraCount,
+            effectiveGoal = effectiveGoal
+        )
+    }
+
     private fun cacheDashboardJson(raw: String) {
         prefs?.edit()?.putString(KEY_DASHBOARD_CACHE, raw)?.apply()
+    }
+
+    private fun saveKnownWordLocally(wordId: String, knowsWord: Boolean) {
+        if (prefs == null || wordId.isBlank()) return
+        val updated = prefs.getStringSet(KEY_KNOWN_WORD_IDS, emptySet()).orEmpty().toMutableSet()
+        if (knowsWord) updated.add(wordId) else updated.remove(wordId)
+        prefs.edit().putStringSet(KEY_KNOWN_WORD_IDS, updated).apply()
+    }
+
+    private fun isLocallyMarkedKnown(wordId: String): Boolean {
+        if (prefs == null || wordId.isBlank()) return false
+        return prefs.getStringSet(KEY_KNOWN_WORD_IDS, emptySet()).orEmpty().contains(wordId)
     }
 
     private fun parseDashboard(data: JSONObject, fromCache: Boolean): VocabDashboardData {
@@ -533,7 +950,7 @@ class VocabularyRepository(context: Context? = null) {
             greetingName = data.optString("greetingName", "Learner"),
             date = data.optString("date"),
             timezone = data.optString("timezone", "Asia/Dhaka"),
-            dailyGoal = data.optInt("dailyGoal", 5),
+            dailyGoal = data.optInt("dailyGoal", MIN_DAILY_GOAL).coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL),
             newWordsDone = data.optInt("newWordsDone", 0),
             isGoalCompleted = data.optBoolean("isGoalCompleted", false),
             reviewedToday = data.optInt("reviewedToday", 0),
@@ -603,14 +1020,26 @@ class VocabularyRepository(context: Context? = null) {
             difficulty = o.optInt("difficulty", 1),
             isPublished = o.optBoolean("isPublished", true),
             sortOrder = o.optInt("sortOrder", 0),
-            progress = parseProgress(o.optJSONObject("progress"))
+            progress = parseProgress(o.optJSONObject("progress"), wordId = o.optString("id"))
         )
     }
 
-    private fun parseProgress(p: JSONObject?): VocabWordProgress {
-        if (p == null) return VocabWordProgress()
+    private fun parseProgress(p: JSONObject?, wordId: String = ""): VocabWordProgress {
+        val localKnown = isLocallyMarkedKnown(wordId)
+        if (p == null) {
+            return VocabWordProgress(
+                status = if (localKnown) "mastered" else "new",
+                isKnown = localKnown
+            )
+        }
+        val rawStatus = p.optString("status", "new")
+        val remoteKnown = p.optBoolean("isKnown", false) ||
+            p.optBoolean("knowsWord", false) ||
+            rawStatus.equals("mastered", ignoreCase = true) ||
+            rawStatus.equals("known", ignoreCase = true)
+        val known = remoteKnown || localKnown
         return VocabWordProgress(
-            status = p.optString("status", "new"),
+            status = if (known && rawStatus.equals("new", ignoreCase = true)) "mastered" else rawStatus,
             isFavorite = p.optBoolean("isFavorite", false),
             correctCount = p.optInt("correctCount", 0),
             wrongCount = p.optInt("wrongCount", 0),
@@ -620,7 +1049,8 @@ class VocabularyRepository(context: Context? = null) {
             repetition = p.optInt("repetition", 0),
             lastQuality = if (p.has("lastQuality") && !p.isNull("lastQuality")) p.optInt("lastQuality") else null,
             nextReviewAt = p.optStringOrNull("nextReviewAt"),
-            learnedAt = p.optStringOrNull("learnedAt")
+            learnedAt = p.optStringOrNull("learnedAt"),
+            isKnown = known
         )
     }
 
@@ -638,14 +1068,16 @@ class VocabularyRepository(context: Context? = null) {
     }
 
     private fun parseSettings(s: JSONObject): VocabSettings {
-        return VocabSettings(
-            dailyGoal = s.optInt("dailyGoal", 5),
-            preferredLevel = s.optString("preferredLevel", "A1"),
-            preferredCategoryIds = s.optJSONArray("preferredCategoryIds").toStringList(),
-            autoPronounce = s.optBoolean("autoPronounce", true),
-            reminderEnabled = s.optBoolean("reminderEnabled", false),
-            reminderTime = s.optString("reminderTime", "20:00"),
-            timezone = s.optString("timezone", "Asia/Dhaka")
+        return normalizeVocabSettings(
+            VocabSettings(
+                dailyGoal = s.optInt("dailyGoal", MIN_DAILY_GOAL),
+                preferredLevel = s.optString("preferredLevel", "A1"),
+                preferredCategoryIds = s.optJSONArray("preferredCategoryIds").toStringList(),
+                autoPronounce = s.optBoolean("autoPronounce", true),
+                reminderEnabled = s.optBoolean("reminderEnabled", false),
+                reminderTime = s.optString("reminderTime", "20:00"),
+                timezone = s.optString("timezone", "Asia/Dhaka")
+            )
         )
     }
 
@@ -661,9 +1093,52 @@ class VocabularyRepository(context: Context? = null) {
 
     private fun urlEnc(s: String): String = URLEncoder.encode(s, "UTF-8")
 
-    private companion object {
-        const val PREFS_NAME = "english_ai_vocab_cache"
-        const val KEY_DASHBOARD_CACHE = "last_dashboard_json"
-        val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
+    internal companion object {
+        private const val TAG = "VocabularyRepository"
+        private const val PREFS_NAME = "english_ai_vocab_cache"
+        private const val KEY_DASHBOARD_CACHE = "last_dashboard_json"
+        private const val KEY_KNOWN_WORD_IDS = "known_word_ids"
+        private const val KEY_SETTINGS_PREFIX = "vocab_settings_"
+        private const val KEY_LAST_DATE_PREFIX = "vocab_last_date_"
+        private const val KEY_DAILY_LEARNED_PREFIX = "vocab_daily_learned_"
+        private const val KEY_DAILY_EXTRA_PREFIX = "vocab_daily_extra_"
+        private const val KEY_DAILY_FLOOR_PREFIX = "vocab_daily_floor_"
+        const val MIN_DAILY_GOAL = 5
+        const val MAX_DAILY_GOAL = 500
+        private val VALID_LEVELS = setOf("A1", "A2", "B1", "B2", "C1", "C2")
+        private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
+        @Volatile
+        private var firestorePrefsUnavailable = false
+
+        fun computeEffectiveDoneCount(
+            remoteDone: Int,
+            localAllCount: Int,
+            overflowCount: Int,
+            effectiveGoal: Int
+        ): Int {
+            val safeGoal = effectiveGoal.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL)
+            val raw = maxOf(remoteDone, localAllCount, remoteDone + overflowCount)
+            return raw.coerceIn(0, safeGoal)
+        }
+
+        fun normalizeVocabSettings(settings: VocabSettings): VocabSettings {
+            val level = settings.preferredLevel.trim().uppercase()
+            val safeLevel = if (level == "ALL" || level in VALID_LEVELS) level else "A1"
+            val time = settings.reminderTime.trim()
+            val safeTime = if (Regex("^(?:[01]\\d|2[0-3]):[0-5]\\d$").matches(time)) time else "20:00"
+            return VocabSettings(
+                dailyGoal = settings.dailyGoal.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL),
+                preferredLevel = safeLevel,
+                preferredCategoryIds = settings.preferredCategoryIds
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .take(100),
+                autoPronounce = settings.autoPronounce,
+                reminderEnabled = settings.reminderEnabled,
+                reminderTime = safeTime,
+                timezone = settings.timezone.trim().ifBlank { "Asia/Dhaka" }.take(80)
+            )
+        }
     }
 }

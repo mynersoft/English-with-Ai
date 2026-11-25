@@ -29,7 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Devices
@@ -241,19 +240,6 @@ fun DashboardScreen(
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenChat = onOpenChat,
                                 onOpenProgress = onOpenProgress
-                            )
-                        }
-
-                        // Student Profile & Progress Card
-                        item {
-                            StudentProgressShortcutCard(
-                                displayName = displayName,
-                                email = profile?.email ?: fallbackEmail,
-                                streakDays = streakDays,
-                                currentDay = currentDay,
-                                dailyGoalMin = dailyGoalMin,
-                                verified = isEmailVerified || (profile?.emailVerified == true),
-                                onClick = onOpenProgress
                             )
                         }
 
@@ -912,79 +898,6 @@ private fun HomeFeatureGridCard(
                     modifier = Modifier.size(14.dp)
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun StudentProgressShortcutCard(
-    displayName: String,
-    email: String,
-    streakDays: Int,
-    currentDay: Int,
-    dailyGoalMin: Int,
-    verified: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color(0xFFD1FAE5)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .minimumInteractiveComponentSize()
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
-            .testTag("quick_nav_progress_button")
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFFE6F4EC)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-                    contentDescription = null,
-                    tint = HomeEmerald,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = "Student Profile & Progress",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = HomeTextDark
-                )
-                Text(
-                    text = "$displayName · $streakDays-day streak · Day $currentDay/60 · ${dailyGoalMin}m/day",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = HomeTextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (email.isNotBlank()) {
-                    Text(
-                        text = if (verified) "$email · Verified" else email,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = HomeEmerald,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = HomeTextMuted
-            )
         }
     }
 }

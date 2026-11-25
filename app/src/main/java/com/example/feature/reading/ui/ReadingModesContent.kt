@@ -43,6 +43,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +55,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.openAppPermissionSettings
+import com.example.core.ui.shouldOpenAppSettings
 import com.example.domain.model.ReadingAttemptRecord
 import com.example.domain.model.ReadingPassageDetail
 import com.example.domain.model.ReadingQuestion
@@ -79,13 +86,19 @@ fun ReadAloudModeContent(
     val activeIdx = audioState.activeSentenceIndex.coerceIn(0, (passage.sentences.size - 1).coerceAtLeast(0))
     val activeSentence = passage.sentences.getOrNull(activeIdx)
 
+    var showMicPermissionDialog by remember { mutableStateOf(false) }
+    var micDeniedOnce by remember { mutableStateOf(false) }
+
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
+            micDeniedOnce = false
             onStartMic()
         } else {
+            micDeniedOnce = true
             onMicPermissionDenied()
+            showMicPermissionDialog = true
         }
     }
 
@@ -204,7 +217,7 @@ fun ReadAloudModeContent(
                                         Manifest.permission.RECORD_AUDIO
                                     ) == PackageManager.PERMISSION_GRANTED
                                     if (granted) onStartMic()
-                                    else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    else showMicPermissionDialog = true
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = pal.primary, contentColor = pal.onPrimary),
                                 shape = RoundedCornerShape(14.dp),
@@ -262,6 +275,23 @@ fun ReadAloudModeContent(
                 )
             }
         }
+    }
+
+    if (showMicPermissionDialog) {
+        PermissionPromptDialog(
+            title = "Microphone Permission Required",
+            message = "Allow microphone permission to speak sentences aloud in Read Aloud mode.",
+            icon = Icons.Filled.Mic,
+            onAllow = {
+                showMicPermissionDialog = false
+                if (shouldOpenAppSettings(context, Manifest.permission.RECORD_AUDIO, micDeniedOnce)) {
+                    openAppPermissionSettings(context)
+                } else {
+                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            onCancel = { showMicPermissionDialog = false }
+        )
     }
 }
 

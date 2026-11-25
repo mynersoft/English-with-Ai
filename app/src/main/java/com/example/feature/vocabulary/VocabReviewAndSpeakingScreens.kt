@@ -67,6 +67,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.core.audio.VocabAudioPlayer
 import com.example.core.common.UiState
+import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.openAppPermissionSettings
+import com.example.core.ui.shouldOpenAppSettings
 import com.example.domain.model.ReviewTabData
 import com.example.feature.speaking.SpeechHelper
 
@@ -301,14 +304,17 @@ fun VocabSpeakingPracticeScreen(
         )
     }
 
+    var showMicPermissionDialog by remember { mutableStateOf(false) }
+
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
+            permissionDenied = false
             beginRecording()
         } else {
             permissionDenied = true
-            localNotice = "Microphone permission was denied. You can still type your spoken response below."
+            showMicPermissionDialog = true
         }
     }
 
@@ -428,7 +434,7 @@ fun VocabSpeakingPracticeScreen(
                                                     if (granted) {
                                                         beginRecording()
                                                     } else {
-                                                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                                        showMicPermissionDialog = true
                                                     }
                                                 }
                                             },
@@ -534,6 +540,23 @@ fun VocabSpeakingPracticeScreen(
                 }
             }
         }
+    }
+
+    if (showMicPermissionDialog) {
+        PermissionPromptDialog(
+            title = "Microphone Permission Required",
+            message = "Allow microphone permission to record your speaking practice.",
+            icon = Icons.Filled.Mic,
+            onAllow = {
+                showMicPermissionDialog = false
+                if (shouldOpenAppSettings(context, Manifest.permission.RECORD_AUDIO, permissionDenied)) {
+                    openAppPermissionSettings(context)
+                } else {
+                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            onCancel = { showMicPermissionDialog = false }
+        )
     }
 }
 

@@ -4,8 +4,8 @@ const vocabularyDailyActivitySchema = new mongoose.Schema(
   {
     userId: { type: String, required: true }, // Firebase UID
     date: { type: String, required: true }, // Local YYYY-MM-DD in user's timezone
-    dailyGoal: { type: Number, default: 5, min: 1, max: 5 },
-    newWords: { type: Number, default: 0, min: 0, max: 5 },
+    dailyGoal: { type: Number, default: 5, min: 5, max: 500 },
+    newWords: { type: Number, default: 0, min: 0 },
     newWordIds: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Vocabulary" }],
       default: [],

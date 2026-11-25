@@ -106,6 +106,7 @@ fun VocabularyDashboardScreen(
     onOpenAdmin: () -> Unit = {}
 ) {
     val pal = vocabPalette()
+    val dailyGoalCount = (dashboardState as? UiState.Success)?.data?.dailyGoal ?: 5
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = pal.background,
@@ -113,7 +114,7 @@ fun VocabularyDashboardScreen(
         topBar = {
             VocabTopBar(
                 title = "Vocabulary Mastery",
-                subtitle = "5 Words Daily · Smart Review",
+                subtitle = "$dailyGoalCount Words Daily · Smart Review",
                 onBack = onBack,
                 actions = {
                     IconButton(
@@ -463,7 +464,7 @@ fun VocabularyDashboardScreen(
                             item {
                                 VocabEmptyState(
                                     title = "Start your first word session",
-                                    subtitle = "Complete today's 5 words or take a quick quiz to see your activity here.",
+                                    subtitle = "Complete today's ${data.dailyGoal} words or take a quick quiz to see your activity here.",
                                     icon = Icons.Filled.AutoAwesome
                                 )
                             }
@@ -890,6 +891,20 @@ fun WordBrowserScreen(
                                                             color = pal.primary,
                                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                         )
+                                                    }
+                                                    if (word.progress.isKnown || word.progress.status.equals("mastered", ignoreCase = true)) {
+                                                        Surface(
+                                                            shape = RoundedCornerShape(8.dp),
+                                                            color = pal.primary
+                                                        ) {
+                                                            Text(
+                                                                text = "Known",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = pal.onPrimary,
+                                                                fontWeight = FontWeight.Bold,
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 Text(

@@ -1,6 +1,7 @@
 package com.example.feature.dashboard
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.core.common.UiState
 import com.example.data.repository.StudentDashboardRepository
@@ -11,8 +12,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class StudentProfileDashboardViewModel(
-    private val repository: StudentDashboardRepository = StudentDashboardRepository()
-) : ViewModel() {
+    application: Application
+) : AndroidViewModel(application) {
+
+    private val repository: StudentDashboardRepository = StudentDashboardRepository(application)
 
     private val _state = MutableStateFlow<UiState<StudentDashboardData>>(UiState.Loading)
     val state: StateFlow<UiState<StudentDashboardData>> = _state.asStateFlow()

@@ -322,6 +322,9 @@ class UserRepository(
             }
             batch.delete(userRef)
             batch.commit().await()
+            runCatching {
+                userRef.collection("preferences").document("vocabulary").delete().await()
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e

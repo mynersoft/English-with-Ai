@@ -206,6 +206,17 @@ fun WordDetailDeckScreen(
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                                 )
                                             }
+                                            if (currentWord.progress.isKnown || currentWord.progress.status.equals("mastered", ignoreCase = true)) {
+                                                Surface(shape = RoundedCornerShape(8.dp), color = pal.primary) {
+                                                    Text(
+                                                        text = "Known ✓",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = pal.onPrimary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                         if (currentWord.categoryName.isNotBlank()) {
                                             Text(
@@ -403,6 +414,8 @@ fun WordDetailDeckScreen(
 
                         // Action Buttons: Don't Know / I Know + Prev / Next
                         item {
+                            val isSavedKnown = currentWord.progress.isKnown ||
+                                currentWord.progress.status.equals("mastered", ignoreCase = true)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -427,7 +440,11 @@ fun WordDetailDeckScreen(
                                     onClick = { onKnowWord(currentWord.id, true) },
                                     enabled = !feedback.busy,
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = pal.primary, contentColor = pal.onPrimary),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSavedKnown) pal.primaryContainer else pal.primary,
+                                        contentColor = if (isSavedKnown) pal.primary else pal.onPrimary
+                                    ),
+                                    border = if (isSavedKnown) BorderStroke(1.dp, pal.primary) else null,
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(52.dp)
@@ -436,7 +453,10 @@ fun WordDetailDeckScreen(
                                 ) {
                                     Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("I Know", fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        text = if (isSavedKnown) "Saved as Known" else "I Know",
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }
@@ -669,6 +689,8 @@ fun FlashcardsScreen(
                             }
                         }
 
+                        val isFlashcardKnown = word.progress.isKnown ||
+                            word.progress.status.equals("mastered", ignoreCase = true)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -696,13 +718,20 @@ fun FlashcardsScreen(
                                 },
                                 enabled = !feedback.busy,
                                 shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = pal.primary, contentColor = pal.onPrimary),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isFlashcardKnown) pal.primaryContainer else pal.primary,
+                                    contentColor = if (isFlashcardKnown) pal.primary else pal.onPrimary
+                                ),
+                                border = if (isFlashcardKnown) BorderStroke(1.dp, pal.primary) else null,
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(52.dp)
                                     .minimumInteractiveComponentSize()
                             ) {
-                                Text("I Know", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = if (isFlashcardKnown) "Saved as Known" else "I Know",
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
 

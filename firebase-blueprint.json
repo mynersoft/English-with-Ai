@@ -126,6 +126,68 @@
         "lastActiveAt",
         "createdAt"
       ]
+    },
+    "VocabularyPreferences": {
+      "title": "VocabularyPreferences",
+      "description": "Per-user vocabulary daily new words goal and learning settings",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID owning these vocabulary preferences"
+        },
+        "dailyGoal": {
+          "type": "integer",
+          "description": "Daily new words goal (5-500)"
+        },
+        "preferredLevel": {
+          "type": "string",
+          "enum": ["ALL", "A1", "A2", "B1", "B2", "C1", "C2"],
+          "description": "Preferred CEFR vocabulary level"
+        },
+        "preferredCategoryIds": {
+          "type": "array",
+          "description": "Selected vocabulary category IDs (max 100)"
+        },
+        "autoPronounce": {
+          "type": "boolean",
+          "description": "Whether words are pronounced automatically"
+        },
+        "reminderEnabled": {
+          "type": "boolean",
+          "description": "Whether daily vocabulary reminders are enabled"
+        },
+        "reminderTime": {
+          "type": "string",
+          "description": "Daily reminder time in HH:mm format"
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA timezone identifier"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when preferences were created (FieldValue.serverTimestamp())"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when preferences were last updated (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": [
+        "userId",
+        "dailyGoal",
+        "preferredLevel",
+        "preferredCategoryIds",
+        "autoPronounce",
+        "reminderEnabled",
+        "reminderTime",
+        "timezone",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -140,6 +202,12 @@
         "$ref": "#/entities/UserSession"
       },
       "description": "Per-user device session log supporting multi-device visibility and revocation"
+    },
+    "/users/{userId}/preferences/{prefId}": {
+      "schema": {
+        "$ref": "#/entities/VocabularyPreferences"
+      },
+      "description": "Per-user persisted vocabulary daily goal and learning preferences"
     }
   }
 }

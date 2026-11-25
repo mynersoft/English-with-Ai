@@ -3,8 +3,8 @@ import { AppError } from "@/lib/errors";
 import { generateText } from "@/lib/aiProvider";
 import {
   CEFR_LEVELS,
+  DEFAULT_DAILY_NEW_WORDS,
   DEFAULT_TIMEZONE,
-  MAX_DAILY_NEW_WORDS,
   calculateSrsSchedule,
   calculateStreak,
   getLocalDateString,
@@ -33,7 +33,7 @@ export async function getUserVocabSettings(userDoc) {
     .lean();
   const v = doc?.vocabulary || {};
   return {
-    dailyGoal: normalizeDailyGoal(v.dailyGoal ?? MAX_DAILY_NEW_WORDS),
+    dailyGoal: normalizeDailyGoal(v.dailyGoal ?? DEFAULT_DAILY_NEW_WORDS),
     preferredLevel:
       v.preferredLevel === "ALL" || CEFR_LEVELS.includes(v.preferredLevel)
         ? v.preferredLevel

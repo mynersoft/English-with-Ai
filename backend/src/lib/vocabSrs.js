@@ -3,7 +3,9 @@
  * local-timezone day formatting, streak computation, quiz scoring, and CSV parsing.
  */
 
-export const MAX_DAILY_NEW_WORDS = 5;
+export const MIN_DAILY_NEW_WORDS = 5;
+export const DEFAULT_DAILY_NEW_WORDS = 5;
+export const MAX_DAILY_NEW_WORDS = 500;
 export const DEFAULT_TIMEZONE = "Asia/Dhaka";
 export const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 export const SRS_STEP_DAYS = [0, 1, 3, 7, 14, 30];
@@ -18,8 +20,8 @@ export function slugify(text) {
 
 export function normalizeDailyGoal(goal) {
   const num = Number(goal);
-  if (!Number.isFinite(num)) return MAX_DAILY_NEW_WORDS;
-  return Math.max(1, Math.min(MAX_DAILY_NEW_WORDS, Math.round(num)));
+  if (!Number.isFinite(num)) return DEFAULT_DAILY_NEW_WORDS;
+  return Math.max(MIN_DAILY_NEW_WORDS, Math.min(MAX_DAILY_NEW_WORDS, Math.round(num)));
 }
 
 export function isValidTimezone(tz) {

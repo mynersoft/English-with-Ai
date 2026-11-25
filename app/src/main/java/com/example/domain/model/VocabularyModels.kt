@@ -29,7 +29,8 @@ data class VocabWordProgress(
     val repetition: Int = 0,
     val lastQuality: Int? = null,
     val nextReviewAt: String? = null,
-    val learnedAt: String? = null
+    val learnedAt: String? = null,
+    val isKnown: Boolean = false
 )
 
 data class VocabWord(

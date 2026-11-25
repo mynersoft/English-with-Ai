@@ -224,6 +224,7 @@ class VocabularyViewModel(
     fun moveDeck(delta: Int) {
         val size = _wordDeck.value.size
         if (size == 0) return
+        _feedback.value = VocabActionFeedback()
         _currentDeckIndex.value = (_currentDeckIndex.value + delta).coerceIn(0, size - 1)
     }
 
@@ -232,13 +233,42 @@ class VocabularyViewModel(
             _feedback.value = VocabActionFeedback(busy = true)
             repo.recordLearned(wordId, knowsWord)
                 .onSuccess { updatedDaily ->
-                    val newStatus = if (knowsWord) "learning" else "learning"
-                    _wordDeck.update { list ->
-                        list.map { w ->
-                            if (w.id == wordId) {
-                                w.copy(progress = w.progress.copy(status = newStatus, learnedAt = "now"))
-                            } else w
-                        }
+                    val newStatus = if (knowsWord) "mastered" else "learning"
+                    fun VocabWord.withUpdatedProgress(): VocabWord =
+                        if (id == wordId) {
+                            copy(
+                                progress = progress.copy(
+                                    status = newStatus,
+                                    isKnown = knowsWord,
+                                    learnedAt = "now"
+                                )
+                            )
+                        } else this
+
+                    _wordDeck.update { list -> list.map { it.withUpdatedProgress() } }
+                    _dailyState.update { state ->
+                        if (state is UiState.Success) {
+                            UiState.Success(
+                                state.data.copy(
+                                    newWordsDone = updatedDaily.newWordsDone,
+                                    dailyGoal = updatedDaily.dailyGoal,
+                                    isGoalCompleted = updatedDaily.isGoalCompleted,
+                                    words = state.data.words.map { it.withUpdatedProgress() }
+                                )
+                            )
+                        } else state
+                    }
+                    _wordsState.update { state ->
+                        if (state is UiState.Success) {
+                            UiState.Success(
+                                state.data.copy(items = state.data.items.map { it.withUpdatedProgress() })
+                            )
+                        } else state
+                    }
+                    _favoritesState.update { state ->
+                        if (state is UiState.Success) {
+                            UiState.Success(state.data.map { it.withUpdatedProgress() })
+                        } else state
                     }
                     _feedback.value = VocabActionFeedback(
                         message = if (knowsWord) {
@@ -504,7 +534,9 @@ class VocabularyViewModel(
             repo.saveSettings(settings)
                 .onSuccess { saved ->
                     _settingsState.value = UiState.Success(saved)
-                    _feedback.value = VocabActionFeedback(message = "Vocabulary settings saved.")
+                    _feedback.value = VocabActionFeedback(
+                        message = "Daily goal (${saved.dailyGoal} words/day) saved to database."
+                    )
                     loadDashboard()
                 }
                 .onFailure { err ->

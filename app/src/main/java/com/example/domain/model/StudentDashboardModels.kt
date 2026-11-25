@@ -16,6 +16,7 @@ data class StudentDashboardStats(
     val vocabularyLearned: Int = 0,
     val patternsPracticed: Int = 0,
     val speakingSessions: Int = 0,
+    val speakingMinutes: Int = 0,
     val chatMessagesSent: Int = 0,
     val quizzesCompleted: Int = 0,
     val activeChatRooms: Int = 0,

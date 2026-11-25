@@ -80,6 +80,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.openAppPermissionSettings
+import com.example.core.ui.shouldOpenAppSettings
 import com.example.domain.model.ChatMessageItem
 import com.example.domain.model.ChatRoomSummary
 import java.io.File
@@ -110,6 +113,8 @@ fun ChatThreadScreen(
     var draft by rememberSaveable(room.id) { mutableStateOf("") }
     var showRoomInfo by remember { mutableStateOf(false) }
     var showCaptureOptions by remember { mutableStateOf(false) }
+    var showCameraPermissionDialog by remember { mutableStateOf(false) }
+    var cameraPermissionDeniedOnce by remember { mutableStateOf(false) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     val listState = rememberLazyListState()
@@ -144,9 +149,11 @@ fun ChatThreadScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
+            cameraPermissionDeniedOnce = false
             launchCamera()
         } else {
-            onOcrError("Camera permission is needed to take a photo of your handwriting.")
+            cameraPermissionDeniedOnce = true
+            showCameraPermissionDialog = true
         }
     }
 
@@ -382,7 +389,7 @@ fun ChatThreadScreen(
                             if (hasPerm) {
                                 launchCamera()
                             } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                showCameraPermissionDialog = true
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = ChatPrimaryGreen),
@@ -420,6 +427,23 @@ fun ChatThreadScreen(
             confirmButton = {
                 TextButton(onClick = { showCaptureOptions = false }) { Text("Cancel") }
             }
+        )
+    }
+
+    if (showCameraPermissionDialog) {
+        PermissionPromptDialog(
+            title = "Camera Permission Required",
+            message = "Allow camera permission to take a photo of your handwriting.",
+            icon = Icons.Filled.PhotoCamera,
+            onAllow = {
+                showCameraPermissionDialog = false
+                if (shouldOpenAppSettings(context, Manifest.permission.CAMERA, cameraPermissionDeniedOnce)) {
+                    openAppPermissionSettings(context)
+                } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+            },
+            onCancel = { showCameraPermissionDialog = false }
         )
     }
 

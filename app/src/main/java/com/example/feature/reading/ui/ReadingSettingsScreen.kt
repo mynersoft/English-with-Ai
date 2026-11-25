@@ -50,8 +50,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +62,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.openAppPermissionSettings
+import com.example.core.ui.shouldOpenAppSettings
 import com.example.domain.model.ReadingAccent
 import com.example.domain.model.ReadingCefrLevel
 import com.example.feature.reading.ReadingSettingsViewModel
@@ -75,10 +80,19 @@ fun ReadingSettingsScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    var showNotifPermissionDialog by remember { mutableStateOf(false) }
+    var notifDeniedOnce by remember { mutableStateOf(false) }
+
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         viewModel.updateDraft { it.copy(reminderEnabled = granted) }
+        if (granted) {
+            notifDeniedOnce = false
+        } else {
+            notifDeniedOnce = true
+            showNotifPermissionDialog = true
+        }
     }
 
     LaunchedEffect(uiState.savedMessage) {
@@ -307,7 +321,7 @@ fun ReadingSettingsScreen(
                                                 Manifest.permission.POST_NOTIFICATIONS
                                             ) == PackageManager.PERMISSION_GRANTED
                                             if (!granted) {
-                                                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                showNotifPermissionDialog = true
                                             } else {
                                                 viewModel.updateDraft { it.copy(reminderEnabled = true) }
                                             }
@@ -362,6 +376,23 @@ fun ReadingSettingsScreen(
                 }
             }
         }
+    }
+
+    if (showNotifPermissionDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        PermissionPromptDialog(
+            title = "Notification Permission Required",
+            message = "Allow notifications so we can send your daily reading reminder.",
+            icon = Icons.Filled.NotificationsActive,
+            onAllow = {
+                showNotifPermissionDialog = false
+                if (shouldOpenAppSettings(context, Manifest.permission.POST_NOTIFICATIONS, notifDeniedOnce)) {
+                    openAppPermissionSettings(context)
+                } else {
+                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
+            onCancel = { showNotifPermissionDialog = false }
+        )
     }
 }
 

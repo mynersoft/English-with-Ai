@@ -53,6 +53,19 @@ service cloud.firestore {
              data.createdAt is timestamp && data.createdAt <= request.time;
     }
 
+    function isValidVocabularyPreferences(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.dailyGoal is int && data.dailyGoal >= 5 && data.dailyGoal <= 500 &&
+             data.preferredLevel in ['ALL', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'] &&
+             data.preferredCategoryIds is list && data.preferredCategoryIds.size() <= 100 &&
+             data.autoPronounce is bool &&
+             data.reminderEnabled is bool &&
+             data.reminderTime is string && data.reminderTime.size() >= 4 && data.reminderTime.size() <= 10 &&
+             data.timezone is string && data.timezone.size() >= 1 && data.timezone.size() <= 80 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
     match /users/{userId} {
       allow get: if isOwner(userId) && isValidId(userId);
       allow list: if false;
@@ -115,6 +128,45 @@ service cloud.firestore {
                          ]);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(sessionId);
+      }
+
+      match /preferences/{prefId} {
+        allow get: if isOwner(userId) && isValidId(userId) && prefId == 'vocabulary';
+        allow list: if false;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         prefId == 'vocabulary' &&
+                         incoming().keys().hasAll([
+                           'userId', 'dailyGoal', 'preferredLevel', 'preferredCategoryIds',
+                           'autoPronounce', 'reminderEnabled', 'reminderTime', 'timezone',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'dailyGoal', 'preferredLevel', 'preferredCategoryIds',
+                           'autoPronounce', 'reminderEnabled', 'reminderTime', 'timezone',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidVocabularyPreferences(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         prefId == 'vocabulary' &&
+                         incoming().keys().hasAll([
+                           'userId', 'dailyGoal', 'preferredLevel', 'preferredCategoryIds',
+                           'autoPronounce', 'reminderEnabled', 'reminderTime', 'timezone',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'dailyGoal', 'preferredLevel', 'preferredCategoryIds',
+                           'autoPronounce', 'reminderEnabled', 'reminderTime', 'timezone',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidVocabularyPreferences(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt;
+
+        allow delete: if isOwner(userId) && isValidId(userId) && prefId == 'vocabulary';
       }
     }
   }

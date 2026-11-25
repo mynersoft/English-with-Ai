@@ -53,11 +53,12 @@ test("SRS scheduling follows SM-2 intervals Day 1, 3, 7, 14, 30 and mastered thr
   assert.ok(failed.easeFactor >= 1.3);
 });
 
-test("Daily goal never exceeds 5 words and missed days never carry over", () => {
+test("Daily goal defaults to 5, accepts 5 or more up to 500, and missed days never carry over", () => {
   assert.equal(normalizeDailyGoal(undefined), 5);
   assert.equal(normalizeDailyGoal(5), 5);
-  assert.equal(normalizeDailyGoal(10), MAX_DAILY_NEW_WORDS);
-  assert.equal(normalizeDailyGoal(0), 1);
+  assert.equal(normalizeDailyGoal(30), 30);
+  assert.equal(normalizeDailyGoal(0), 5);
+  assert.equal(normalizeDailyGoal(999), MAX_DAILY_NEW_WORDS);
 
   // Asia/Dhaka is UTC+6
   const utcLateNight = new Date("2026-11-24T19:00:00Z"); // 01:00 AM next day in Dhaka
