@@ -7,8 +7,10 @@ import android.media.MediaPlayer
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,11 +29,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Layers
@@ -40,6 +44,7 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -47,6 +52,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -57,6 +64,7 @@ import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -84,6 +92,7 @@ import com.example.data.repository.PatternDetail
 import com.example.data.repository.PatternExample
 import com.example.data.repository.PatternSummary
 import com.example.feature.pattern.PatternDetailUiState
+import com.example.feature.pattern.PatternFilter
 import com.example.feature.pattern.PatternListUiState
 import com.example.feature.pattern.PatternViewModel
 import com.example.feature.speaking.SpeechHelper
@@ -123,6 +132,9 @@ fun SentenceLearningScreen(
                 bottomBar = bottomBar,
                 onBack = onBack,
                 onRefresh = { viewModel.loadPatterns() },
+                onFilterSelected = { viewModel.setFilter(it) },
+                onToggleLearned = { patternId -> viewModel.togglePatternCompleted(patternId) },
+                onDismissActionError = { viewModel.clearActionError() },
                 onPatternClick = { patternId ->
                     viewModel.selectPattern(patternId)
                     page = LearningPage.EXPLANATION
@@ -144,6 +156,8 @@ fun SentenceLearningScreen(
                 onRetry = {
                     detailState.selectedPatternId?.let { viewModel.selectPattern(it) }
                 },
+                onToggleLearned = { patternId -> viewModel.togglePatternCompleted(patternId) },
+                onDismissActionError = { viewModel.clearActionError() },
                 onPractice = { page = LearningPage.PRACTICE }
             )
         }
@@ -154,6 +168,8 @@ fun SentenceLearningScreen(
             if (loadedPattern != null && loadedPattern.examples.isNotEmpty()) {
                 SpeakingPracticeScreen(
                     pattern = loadedPattern,
+                    isTogglingCompleted = detailState.isTogglingCompleted,
+                    onToggleLearned = { viewModel.togglePatternCompleted(loadedPattern.id) },
                     onBack = { page = LearningPage.EXPLANATION }
                 )
             } else {
@@ -174,6 +190,9 @@ private fun PatternListScreen(
     bottomBar: @Composable () -> Unit = {},
     onBack: (() -> Unit)? = null,
     onRefresh: () -> Unit,
+    onFilterSelected: (PatternFilter) -> Unit,
+    onToggleLearned: (String) -> Unit,
+    onDismissActionError: () -> Unit,
     onPatternClick: (String) -> Unit
 ) {
     Scaffold(
@@ -247,24 +266,53 @@ private fun PatternListScreen(
                 )
             }
 
-            Text(
-                "Sentence Patterns",
-                modifier = Modifier.padding(
-                    start = 20.dp,
-                    top = 20.dp,
-                    bottom = 4.dp
-                ),
-                fontSize = 23.sp,
-                fontWeight = FontWeight.Bold,
-                color = DarkText
-            )
-
-            Text(
-                "বাক্য গঠনের প্যাটার্ন (${state.patterns.size})",
-                modifier = Modifier.padding(horizontal = 20.dp),
-                color = GrayText,
-                fontSize = 14.sp
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Sentence Patterns",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DarkText
+                    )
+                    Text(
+                        "বাক্য গঠনের প্যাটার্ন (${state.patterns.size})",
+                        color = GrayText,
+                        fontSize = 13.sp
+                    )
+                }
+                if (state.patterns.isNotEmpty()) {
+                    Surface(
+                        color = Color(0xFFDDF4E7),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.testTag("pattern_list_learned_summary")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Green,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                "${state.learnedCount}/${state.patterns.size} Learned",
+                                color = Green,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
 
             when {
                 state.isLoading && state.patterns.isEmpty() -> {
@@ -359,13 +407,22 @@ private fun PatternListScreen(
                 }
 
                 else -> {
+                    val totalCount = state.patterns.size
+                    val learnedCount = state.learnedCount
+                    val progressRatio = if (totalCount > 0) {
+                        learnedCount.toFloat() / totalCount.toFloat()
+                    } else {
+                        0f
+                    }
+                    val visiblePatterns = state.filteredPatterns
+
                     Column(modifier = Modifier.fillMaxSize()) {
                         if (state.isLoading) {
                             LinearProgressIndicator(
                                 color = Green,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp)
+                                    .padding(top = 6.dp)
                             )
                         }
                         if (state.errorMessage != null) {
@@ -374,7 +431,7 @@ private fun PatternListScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
@@ -393,18 +450,170 @@ private fun PatternListScreen(
                                 }
                             }
                         }
-                        LazyColumn(
-                            contentPadding = PaddingValues(
-                                horizontal = 16.dp,
-                                vertical = 16.dp
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+
+                        if (state.actionError != null) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                                    .testTag("pattern_action_error_banner")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = state.actionError,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = onDismissActionError) {
+                                        Text("Dismiss")
+                                    }
+                                }
+                            }
+                        }
+
+                        // Learning progress bar + filter chips
+                        Surface(
+                            color = Color.White,
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, Color(0xFFE1E9E2)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            items(state.patterns, key = { it.id }) { pattern ->
-                                PatternCard(
-                                    pattern = pattern,
-                                    onClick = { onPatternClick(pattern.id) }
+                            Column(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Progress: $learnedCount of $totalCount learned",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = DarkText
+                                    )
+                                    Text(
+                                        text = "${(progressRatio * 100).toInt()}%",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Green
+                                    )
+                                }
+                                LinearProgressIndicator(
+                                    progress = { progressRatio },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp),
+                                    color = Green,
+                                    trackColor = Color(0xFFE7EFE9)
                                 )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            PatternFilter.entries.forEach { filterOption ->
+                                val count = when (filterOption) {
+                                    PatternFilter.ALL -> totalCount
+                                    PatternFilter.TO_LEARN -> state.unlearnedCount
+                                    PatternFilter.LEARNED -> learnedCount
+                                }
+                                val selected = state.filter == filterOption
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { onFilterSelected(filterOption) },
+                                    label = {
+                                        Text(
+                                            "${filterOption.label} ($count)",
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    },
+                                    leadingIcon = if (selected) {
+                                        {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Color(0xFFDDF4E7),
+                                        selectedLabelColor = Green,
+                                        selectedLeadingIconColor = Green
+                                    ),
+                                    modifier = Modifier.testTag("pattern_filter_${filterOption.name.lowercase()}")
+                                )
+                            }
+                        }
+
+                        if (visiblePatterns.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Green,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                    Text(
+                                        text = when (state.filter) {
+                                            PatternFilter.LEARNED -> "No patterns marked as learned yet."
+                                            PatternFilter.TO_LEARN -> "Great job! All patterns are marked as learned."
+                                            PatternFilter.ALL -> "No patterns found."
+                                        },
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = DarkText,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    OutlinedButton(
+                                        onClick = { onFilterSelected(PatternFilter.ALL) },
+                                        modifier = Modifier.minimumInteractiveComponentSize()
+                                    ) {
+                                        Text("Show All Patterns")
+                                    }
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                contentPadding = PaddingValues(
+                                    horizontal = 16.dp,
+                                    vertical = 12.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(visiblePatterns, key = { it.id }) { pattern ->
+                                    PatternCard(
+                                        pattern = pattern,
+                                        isToggling = pattern.id in state.togglingIds,
+                                        onToggleLearned = { onToggleLearned(pattern.id) },
+                                        onClick = { onPatternClick(pattern.id) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -417,6 +626,8 @@ private fun PatternListScreen(
 @Composable
 private fun PatternCard(
     pattern: PatternSummary,
+    isToggling: Boolean,
+    onToggleLearned: () -> Unit,
     onClick: () -> Unit
 ) {
     Card(
@@ -426,8 +637,9 @@ private fun PatternCard(
             .clickable(onClick = onClick)
             .testTag("pattern_card_${pattern.id}"),
         shape = RoundedCornerShape(20.dp),
+        border = if (pattern.isCompleted) BorderStroke(1.2.dp, Color(0xFFAADEC4)) else null,
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = if (pattern.isCompleted) Color(0xFFF1FAF5) else Color.White
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 2.dp
@@ -437,7 +649,8 @@ private fun PatternCard(
             modifier = Modifier.padding(18.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     pattern.title,
@@ -446,6 +659,33 @@ private fun PatternCard(
                     fontWeight = FontWeight.Bold,
                     color = DarkText
                 )
+
+                if (pattern.isCompleted) {
+                    Surface(
+                        color = Color(0xFFD9F3E5),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.testTag("pattern_learned_badge_${pattern.id}")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = "Learned",
+                                tint = Green,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                "Learned",
+                                color = Green,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
 
                 if (pattern.isPremium) {
                     Surface(
@@ -477,36 +717,95 @@ private fun PatternCard(
             Spacer(Modifier.height(14.dp))
 
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    Icons.Default.Layers,
-                    contentDescription = null,
-                    tint = GrayText,
-                    modifier = Modifier.size(17.dp)
-                )
-
-                Text(
-                    "  ${pattern.sentenceCount}টি Example",
-                    color = GrayText,
-                    fontSize = 12.sp
-                )
-
-                if (pattern.audioTotal > 0) {
-                    Spacer(Modifier.width(18.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Icon(
-                        Icons.AutoMirrored.Filled.VolumeUp,
+                        Icons.Default.Layers,
                         contentDescription = null,
-                        tint = Green,
+                        tint = GrayText,
                         modifier = Modifier.size(17.dp)
                     )
+
                     Text(
-                        "  Audio ${pattern.audioReady}/${pattern.audioTotal}",
+                        "  ${pattern.sentenceCount}টি Example",
                         color = GrayText,
                         fontSize = 12.sp
                     )
+
+                    if (pattern.audioTotal > 0) {
+                        Spacer(Modifier.width(14.dp))
+                        Icon(
+                            Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = null,
+                            tint = Green,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Text(
+                            "  Audio ${pattern.audioReady}/${pattern.audioTotal}",
+                            color = GrayText,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
+
+                LearnedTogglePill(
+                    isCompleted = pattern.isCompleted,
+                    isLoading = isToggling,
+                    onClick = onToggleLearned,
+                    testTag = "pattern_mark_button_${pattern.id}"
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun LearnedTogglePill(
+    isCompleted: Boolean,
+    isLoading: Boolean,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Surface(
+        onClick = { if (!isLoading) onClick() },
+        enabled = !isLoading,
+        shape = RoundedCornerShape(20.dp),
+        color = if (isCompleted) Green else Color(0xFFF3F6F3),
+        border = if (isCompleted) null else BorderStroke(1.dp, Color(0xFFC8D5CB)),
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .testTag(testTag)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(15.dp),
+                    strokeWidth = 2.dp,
+                    color = if (isCompleted) Color.White else Green
+                )
+            } else {
+                Icon(
+                    imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Outlined.CheckCircle,
+                    contentDescription = if (isCompleted) "Marked as learned, tap to unmark" else "Mark pattern as learned",
+                    tint = if (isCompleted) Color.White else Green,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Text(
+                text = if (isCompleted) "Learned" else "Mark Learned",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isCompleted) Color.White else DarkText
+            )
         }
     }
 }
@@ -521,6 +820,8 @@ private fun PatternExplanationScreen(
     state: PatternDetailUiState,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    onToggleLearned: (String) -> Unit,
+    onDismissActionError: () -> Unit,
     onPractice: () -> Unit
 ) {
     val context = LocalContext.current
@@ -544,6 +845,18 @@ private fun PatternExplanationScreen(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
+                    }
+                },
+                actions = {
+                    if (pattern != null) {
+                        Box(modifier = Modifier.padding(end = 8.dp)) {
+                            LearnedTogglePill(
+                                isCompleted = pattern.isCompleted,
+                                isLoading = state.isTogglingCompleted,
+                                onClick = { onToggleLearned(pattern.id) },
+                                testTag = "pattern_detail_mark_button"
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -649,6 +962,30 @@ private fun PatternExplanationScreen(
                     contentPadding = PaddingValues(18.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    if (state.actionError != null) {
+                        item {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = state.actionError,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = onDismissActionError) {
+                                        Text("Dismiss")
+                                    }
+                                }
+                            }
+                        }
+                    }
                     item {
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -860,6 +1197,8 @@ private fun ExampleSentenceCard(
 @Composable
 private fun SpeakingPracticeScreen(
     pattern: PatternDetail,
+    isTogglingCompleted: Boolean,
+    onToggleLearned: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -931,6 +1270,12 @@ private fun SpeakingPracticeScreen(
                     }
                 },
                 actions = {
+                    LearnedTogglePill(
+                        isCompleted = pattern.isCompleted,
+                        isLoading = isTogglingCompleted,
+                        onClick = onToggleLearned,
+                        testTag = "practice_mark_learned_button"
+                    )
                     IconButton(
                         onClick = {
                             audioPlayer.stopAll()

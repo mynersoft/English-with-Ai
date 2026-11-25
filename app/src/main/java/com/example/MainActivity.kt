@@ -76,6 +76,7 @@ import com.example.feature.dashboard.StudentProfileDashboardScreen
 import com.example.feature.dashboard.StudentProfileDashboardViewModel
 import com.example.feature.speaking.SpeakingRoute
 import com.example.feature.chat.ChatRoute
+import com.example.feature.reading.ui.ReadingRoute
 import com.example.feature.vocabulary.VocabularyRoute
 import com.example.ui.theme.EnglishAITheme
 import com.google.firebase.Firebase
@@ -97,6 +98,7 @@ private object AppRoutes {
     const val SENTENCE_LEARNING = "sentence-learning"
     const val VOCABULARY = "vocabulary"
     const val STUDENT_CHAT = "student-chat"
+    const val READING = "reading"
     const val ADMIN = "admin"
 }
 
@@ -386,6 +388,10 @@ private fun AuthenticatedNavGraph(
                         onOpenSentenceLearning = { activeTab = AppMainTab.PATTERNS },
                         onOpenVocabulary = { activeTab = AppMainTab.VOCABULARY },
                         onOpenStudentChat = { activeTab = AppMainTab.CHAT },
+                        onOpenReading = {
+                            dashboardViewModel.clearBanner()
+                            navController.navigate(AppRoutes.READING)
+                        },
                         onOpenAdmin = {
                             dashboardViewModel.clearBanner()
                             navController.navigate(AppRoutes.ADMIN)
@@ -437,12 +443,16 @@ private fun AuthenticatedNavGraph(
                         onRefresh = { studentDashboardViewModel.loadDashboard(silent = false) },
                         onBackToHome = { activeTab = AppMainTab.HOME },
                         onNavigateRoute = { route ->
-                            activeTab = when (route) {
-                                "vocabulary" -> AppMainTab.VOCABULARY
-                                "patterns" -> AppMainTab.PATTERNS
-                                "speaking" -> AppMainTab.SPEAKING
-                                "chat" -> AppMainTab.CHAT
-                                else -> AppMainTab.HOME
+                            if (route == "reading") {
+                                navController.navigate(AppRoutes.READING)
+                            } else {
+                                activeTab = when (route) {
+                                    "vocabulary" -> AppMainTab.VOCABULARY
+                                    "patterns" -> AppMainTab.PATTERNS
+                                    "speaking" -> AppMainTab.SPEAKING
+                                    "chat" -> AppMainTab.CHAT
+                                    else -> AppMainTab.HOME
+                                }
                             }
                         },
                         onOpenProfile = {
@@ -488,6 +498,13 @@ private fun AuthenticatedNavGraph(
 
         composable(AppRoutes.STUDENT_CHAT) {
             ChatRoute(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(AppRoutes.READING) {
+            ReadingRoute(
+                isAdmin = actionState.isAdmin,
                 onBack = { navController.popBackStack() }
             )
         }

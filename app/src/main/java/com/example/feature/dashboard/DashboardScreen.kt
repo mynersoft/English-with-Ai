@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Forum
@@ -87,6 +88,7 @@ fun DashboardScreen(
     onOpenSentenceLearning: () -> Unit = {},
     onOpenVocabulary: () -> Unit = {},
     onOpenStudentChat: () -> Unit = {},
+    onOpenReading: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     onRetryBackendSync: () -> Unit = {},
     onSignOut: () -> Unit
@@ -198,6 +200,7 @@ fun DashboardScreen(
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
                                 onOpenStudentChat = onOpenStudentChat,
+                                onOpenReading = onOpenReading,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -298,6 +301,7 @@ fun DashboardScreen(
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
                                 onOpenStudentChat = onOpenStudentChat,
+                                onOpenReading = onOpenReading,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -341,6 +345,16 @@ fun DashboardScreen(
                                 subtitle = "Talk in English with AI and see corrections for your mistakes",
                                 testTag = "nav_speaking_card",
                                 onClick = onOpenSpeaking
+                            )
+                        }
+
+                        item {
+                            AccountNavCard(
+                                icon = Icons.Filled.AutoStories,
+                                title = "Reading Practice",
+                                subtitle = "Listen & read passages, Read Aloud text matching, comprehension quizzes & saved words",
+                                testTag = "nav_reading_card",
+                                onClick = onOpenReading
                             )
                         }
 
@@ -428,6 +442,7 @@ private fun AllScreensButtonGrid(
     onOpenSentenceLearning: () -> Unit,
     onOpenVocabulary: () -> Unit,
     onOpenStudentChat: () -> Unit,
+    onOpenReading: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
@@ -508,12 +523,12 @@ private fun AllScreensButtonGrid(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             ScreenQuickButton(
-                icon = Icons.Filled.Security,
-                label = "Security",
-                testTag = "quick_nav_security_button",
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onOpenSecurity,
+                icon = Icons.Filled.AutoStories,
+                label = "Reading",
+                testTag = "quick_nav_reading_button",
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = onOpenReading,
                 modifier = Modifier.weight(1f)
             )
             if (isAdmin) {
@@ -527,6 +542,31 @@ private fun AllScreensButtonGrid(
                     modifier = Modifier.weight(1f)
                 )
             } else {
+                ScreenQuickButton(
+                    icon = Icons.Filled.Security,
+                    label = "Security",
+                    testTag = "quick_nav_security_button",
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = onOpenSecurity,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        if (isAdmin) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ScreenQuickButton(
+                    icon = Icons.Filled.Security,
+                    label = "Security",
+                    testTag = "quick_nav_security_button",
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = onOpenSecurity,
+                    modifier = Modifier.weight(1f)
+                )
                 Spacer(modifier = Modifier.weight(1f))
             }
         }

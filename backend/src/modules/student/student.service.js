@@ -9,6 +9,7 @@ import Vocabulary from "@/models/Vocabulary";
 import VocabularyQuizAttempt from "@/models/VocabularyQuizAttempt";
 import VocabularySpeakingSession from "@/models/VocabularySpeakingSession";
 import Pattern from "@/models/Pattern";
+import UserPatternProgress from "@/models/UserPatternProgress";
 import ChatMessage from "@/models/ChatMessage";
 import ChatRoom from "@/models/ChatRoom";
 
@@ -74,6 +75,7 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
     totalQuizAttempts,
     vocabSpeakingSessions,
     totalPatternsCount,
+    completedPatterns,
     chatMessagesTotal,
     recentChatMessages,
     activeChatRoomsCount,
@@ -92,6 +94,9 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       .select("createdAt grammarScore fluencyScore")
       .lean(),
     Pattern.countDocuments(),
+    UserPatternProgress.find({ userId, isCompleted: true })
+      .select("patternId completedAt updatedAt")
+      .lean(),
     ChatMessage.countDocuments({ senderId: userDoc._id }),
     ChatMessage.find({ senderId: userDoc._id, createdAt: { $gte: sixtyDaysAgoDate } })
       .select("createdAt")
@@ -104,8 +109,14 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
   // Index daily activities by YYYY-MM-DD
   const activityByDate = new Map(dailyActivities.map((a) => [a.date, a]));
 
-  // Aggregate unique patterns practiced & total speaking/practice across recent history
+  // Aggregate unique patterns practiced/learned & total speaking/practice across recent history
   const uniquePatternIds = new Set();
+  const completedPatternDates = new Set();
+  for (const cp of completedPatterns) {
+    if (cp.patternId) uniquePatternIds.add(String(cp.patternId));
+    const ts = cp.completedAt || cp.updatedAt;
+    if (ts) completedPatternDates.add(toLocalDateKey(ts, timezone));
+  }
   let patternSessionsCount = 0;
   let speakingTurnsTotal = 0;
   for (const a of dailyActivities) {
@@ -115,7 +126,11 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       for (const pid of a.practicedPatternIds) uniquePatternIds.add(String(pid));
     }
   }
-  const patternsPracticedCount = Math.max(uniquePatternIds.size, patternSessionsCount);
+  const patternsPracticedCount = Math.max(
+    completedPatterns.length,
+    uniquePatternIds.size,
+    patternSessionsCount
+  );
   const totalSpeakingSessions = vocabSpeakingSessions.length + speakingTurnsTotal;
 
   // Map speaking sessions & chat messages into local YYYY-MM-DD sets
@@ -141,6 +156,7 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
   }
   for (const d of vocabSpeakingDates) activeDates.add(d);
   for (const d of chatDates) activeDates.add(d);
+  for (const d of completedPatternDates) activeDates.add(d);
 
   const { currentStreak, longestStreak } = computeStreaksFromActiveDates(activeDates, todayStr);
   const { weekRangeLabel, days } = buildWeekWindow(todayStr);
@@ -152,7 +168,7 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       dayNumber: d.dayNumber,
       dayShort: d.dayShort,
       isToday: d.isToday,
-      patternsActive: Boolean(a && (a.patternsPracticed || 0) > 0),
+      patternsActive: Boolean((a && (a.patternsPracticed || 0) > 0) || completedPatternDates.has(d.date)),
       speakingActive: Boolean((a && ((a.aiSpeakingTurns || 0) > 0 || (a.speakingMinutes || 0) > 0)) || vocabSpeakingDates.has(d.date)),
       vocabularyActive: Boolean(a && ((a.newWords || 0) > 0 || (a.reviewedWords || 0) > 0)),
       practiceActive: Boolean((a && (a.quizCount || 0) > 0) || chatDates.has(d.date)),

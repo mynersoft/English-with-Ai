@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.ExpandLess
@@ -289,6 +290,59 @@ fun StudentProfileDashboardScreen(
                                 },
                                 onOpenModule = onNavigateRoute
                             )
+                        }
+
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color(0xFFE6F4EC),
+                                border = BorderStroke(1.dp, BrandEmerald.copy(alpha = 0.25f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable { onNavigateRoute("reading") }
+                                    .testTag("student_dashboard_reading_card")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(BrandEmerald),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.AutoStories,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Reading Practice",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = TextDark
+                                        )
+                                        Text(
+                                            text = "Listen & read passages, Read Aloud & quizzes",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextMuted
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = BrandEmerald
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -883,6 +937,7 @@ private fun CourseReportSection(
                 "vocabulary" -> Triple(Icons.Filled.Style, BrandEmerald, Color(0xFFE6F4EC))
                 "patterns" -> Triple(Icons.Filled.GraphicEq, PatternsPurple, Color(0xFFF3E8FF))
                 "speaking" -> Triple(Icons.Filled.RecordVoiceOver, SpeakingIndigo, Color(0xFFEEF2FF))
+                "reading" -> Triple(Icons.Filled.AutoStories, BrandEmerald, Color(0xFFE6F4EC))
                 else -> Triple(Icons.Filled.Forum, Color(0xFF0F766E), Color(0xFFCCFBF1))
             }
 

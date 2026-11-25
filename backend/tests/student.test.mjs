@@ -45,10 +45,11 @@ test("buildMonthCalendar extracts active days for current month", () => {
   assert.deepEqual(cal.activeDaysOfMonth, [5, 25]);
 });
 
-test("Student dashboard & activity routes enforce withAuth", () => {
+test("Student dashboard, activity & pattern progress routes enforce withAuth", () => {
   const routes = [
     "../src/app/api/v1/student/dashboard/route.js",
     "../src/app/api/v1/student/activity/route.js",
+    "../src/app/api/v1/patterns/[id]/progress/route.js",
   ];
   for (const rel of routes) {
     const src = fs.readFileSync(path.join(__dirname, rel), "utf8");
