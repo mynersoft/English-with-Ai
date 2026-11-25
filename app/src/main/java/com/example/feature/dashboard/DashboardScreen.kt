@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.MenuBook
@@ -84,6 +85,7 @@ fun DashboardScreen(
     onOpenSpeaking: () -> Unit = {},
     onOpenSentenceLearning: () -> Unit = {},
     onOpenVocabulary: () -> Unit = {},
+    onOpenStudentChat: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     onRetryBackendSync: () -> Unit = {},
     onSignOut: () -> Unit
@@ -193,6 +195,7 @@ fun DashboardScreen(
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
+                                onOpenStudentChat = onOpenStudentChat,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -292,6 +295,7 @@ fun DashboardScreen(
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
+                                onOpenStudentChat = onOpenStudentChat,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -315,6 +319,16 @@ fun DashboardScreen(
                                 subtitle = "Daily 5-word learning, flashcards, Bangla quizzes, review & speaking",
                                 testTag = "nav_vocabulary_card",
                                 onClick = onOpenVocabulary
+                            )
+                        }
+
+                        item {
+                            AccountNavCard(
+                                icon = Icons.Filled.Forum,
+                                title = "Student English Chat",
+                                subtitle = "Chat with fellow students in study rooms or 1-on-1 with live AI grammar fixes",
+                                testTag = "nav_student_chat_card",
+                                onClick = onOpenStudentChat
                             )
                         }
 
@@ -411,21 +425,36 @@ private fun AllScreensButtonGrid(
     onOpenSpeaking: () -> Unit,
     onOpenSentenceLearning: () -> Unit,
     onOpenVocabulary: () -> Unit,
+    onOpenStudentChat: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAdmin: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ScreenQuickButton(
-            icon = Icons.Filled.Translate,
-            label = "Vocabulary Mastery (Daily 5 Words)",
-            testTag = "quick_nav_vocabulary_button",
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            onClick = onOpenVocabulary,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ScreenQuickButton(
+                icon = Icons.Filled.Translate,
+                label = "Vocabulary",
+                testTag = "quick_nav_vocabulary_button",
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                onClick = onOpenVocabulary,
+                modifier = Modifier.weight(1f)
+            )
+            ScreenQuickButton(
+                icon = Icons.Filled.Forum,
+                label = "Student Chat",
+                testTag = "quick_nav_student_chat_button",
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary,
+                onClick = onOpenStudentChat,
+                modifier = Modifier.weight(1f)
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)

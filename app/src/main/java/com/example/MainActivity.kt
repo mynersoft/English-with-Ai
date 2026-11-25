@@ -68,6 +68,7 @@ import com.example.feature.dashboard.ProfileScreen
 import com.example.feature.dashboard.SecuritySettingsScreen
 import com.example.feature.dashboard.SessionsScreen
 import com.example.feature.speaking.SpeakingRoute
+import com.example.feature.chat.ChatRoute
 import com.example.feature.vocabulary.VocabularyRoute
 import com.example.ui.theme.EnglishAITheme
 import com.google.firebase.Firebase
@@ -88,6 +89,7 @@ private object AppRoutes {
     const val SPEAKING = "speaking"
     const val SENTENCE_LEARNING = "sentence-learning"
     const val VOCABULARY = "vocabulary"
+    const val STUDENT_CHAT = "student-chat"
     const val ADMIN = "admin"
 }
 
@@ -354,6 +356,10 @@ private fun AuthenticatedNavGraph(
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.VOCABULARY)
                 },
+                onOpenStudentChat = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.STUDENT_CHAT)
+                },
                 onOpenAdmin = {
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.ADMIN)
@@ -380,6 +386,12 @@ private fun AuthenticatedNavGraph(
 
         composable(AppRoutes.VOCABULARY) {
             VocabularyRoute(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(AppRoutes.STUDENT_CHAT) {
+            ChatRoute(
                 onBack = { navController.popBackStack() }
             )
         }
