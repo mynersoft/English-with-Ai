@@ -2,15 +2,10 @@ package com.example.data.repository
 
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -25,8 +20,7 @@ data class PatternSummary(
     val audioTotal: Int,
     val audioReady: Int,
     val titleAudioUrl: String?,
-    val meaningAudioUrl: String?,
-    val isCompleted: Boolean = false
+    val meaningAudioUrl: String?
 )
 
 data class PatternExample(
@@ -46,8 +40,7 @@ data class PatternDetail(
     val order: Int,
     val titleAudioUrl: String?,
     val meaningAudioUrl: String?,
-    val examples: List<PatternExample>,
-    val isCompleted: Boolean = false
+    val examples: List<PatternExample>
 )
 
 class PatternRepository {
@@ -68,8 +61,7 @@ class PatternRepository {
                     audioTotal = o.optInt("audioTotal", 0),
                     audioReady = o.optInt("audioReady", 0),
                     titleAudioUrl = o.optStringOrNull("titleAudioUrl"),
-                    meaningAudioUrl = o.optStringOrNull("meaningAudioUrl"),
-                    isCompleted = o.optBoolean("isCompleted", false)
+                    meaningAudioUrl = o.optStringOrNull("meaningAudioUrl")
                 )
             }
             Result.success(list)
@@ -104,8 +96,7 @@ class PatternRepository {
                 order = o.optInt("order", 0),
                 titleAudioUrl = o.optJSONObject("titleAudio")?.optStringOrNull("url"),
                 meaningAudioUrl = o.optJSONObject("meaningAudio")?.optStringOrNull("url"),
-                examples = examples,
-                isCompleted = o.optBoolean("isCompleted", false)
+                examples = examples
             )
             Result.success(detail)
         } catch (e: CancellationException) {
@@ -115,73 +106,18 @@ class PatternRepository {
         }
     }
 
-    suspend fun setPatternCompleted(
-        patternId: String,
-        completed: Boolean
-    ): Result<Boolean> = withContext(Dispatchers.IO) {
-        try {
-            val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
-            if (baseUrl.isBlank()) {
-                throw IOException("Backend URL is not configured.")
-            }
-            val user = Firebase.auth.currentUser
-                ?: throw IOException("Please sign in to save learned patterns.")
-            val token = user.getIdToken(false).await().token
-                ?: throw IOException("Could not verify authentication token.")
-
-            val payload = JSONObject().put("completed", completed).toString()
-            val req = Request.Builder()
-                .url("$baseUrl/api/v1/patterns/$patternId/progress")
-                .post(payload.toRequestBody(JSON_TYPE))
-                .header("Authorization", "Bearer $token")
-                .header("Accept", "application/json")
-                .build()
-
-            NetworkClient.standard.newCall(req).execute().use { res ->
-                val body = res.body?.string().orEmpty()
-                val json = runCatching { JSONObject(body) }.getOrNull()
-                if (!res.isSuccessful || json?.optBoolean("success", true) == false) {
-                    val errObj = json?.optJSONObject("error")
-                    val msg = errObj?.optString("message")?.takeIf { it.isNotBlank() }
-                        ?: json?.optString("error")?.takeIf { it.isNotBlank() }
-                        ?: when {
-                            res.code == 404 && body.trimStart().startsWith("<") ->
-                                "Pattern progress API not deployed yet (404)."
-                            body.trimStart().startsWith("<") -> "Server error (${res.code})"
-                            else -> body.take(160)
-                        }
-                    throw IOException(msg.ifBlank { "Could not save pattern progress (${res.code})." })
-                }
-                val savedCompleted = json?.optBoolean("isCompleted", completed) ?: completed
-                Result.success(savedCompleted)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    private suspend fun optionalAuthToken(): String? {
-        val user = runCatching { Firebase.auth.currentUser }.getOrNull() ?: return null
-        return runCatching { user.getIdToken(false).await().token }.getOrNull()
-    }
-
-    private suspend fun executeGet(path: String): String {
+    private fun executeGet(path: String): String {
         val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
         if (baseUrl.isBlank()) {
             throw IOException("Backend URL is not configured.")
         }
-        val token = optionalAuthToken()
-        val reqBuilder = Request.Builder()
+        val req = Request.Builder()
             .url("$baseUrl$path")
             .get()
             .header("Accept", "application/json")
-        if (!token.isNullOrBlank()) {
-            reqBuilder.header("Authorization", "Bearer $token")
-        }
+            .build()
 
-        return NetworkClient.standard.newCall(reqBuilder.build()).execute().use { res ->
+        return NetworkClient.standard.newCall(req).execute().use { res ->
             val body = res.body?.string().orEmpty()
             if (!res.isSuccessful) {
                 val msg = runCatching {
@@ -199,9 +135,5 @@ class PatternRepository {
     private fun JSONObject.optStringOrNull(key: String): String? {
         if (isNull(key)) return null
         return optString(key).takeIf { it.isNotBlank() }
-    }
-
-    private companion object {
-        val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }

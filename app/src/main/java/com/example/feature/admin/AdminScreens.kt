@@ -25,7 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
@@ -71,9 +70,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.feature.reading.ReadingAdminListState
-import com.example.feature.reading.ReadingAdminViewModel
-import com.example.feature.reading.ui.ReadingAdminPanel
 import com.example.feature.vocabulary.VocabAdminPanel
 import com.example.feature.vocabulary.VocabAdminUiState
 import com.example.feature.vocabulary.VocabAdminViewModel
@@ -82,13 +78,11 @@ import com.example.feature.vocabulary.VocabAdminViewModel
 fun AdminRoute(
     onBack: () -> Unit,
     vm: AdminViewModel = viewModel(),
-    vocabAdminVm: VocabAdminViewModel = viewModel(),
-    readingAdminVm: ReadingAdminViewModel = viewModel()
+    vocabAdminVm: VocabAdminViewModel = viewModel()
 ) {
     val access by vm.access.collectAsStateWithLifecycle()
     val patternListState by vm.list.collectAsStateWithLifecycle()
     val vocabAdminState by vocabAdminVm.state.collectAsStateWithLifecycle()
-    val readingAdminState by readingAdminVm.listState.collectAsStateWithLifecycle()
 
     var showPatternEditor by rememberSaveable { mutableStateOf(false) }
     var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary
@@ -102,7 +96,6 @@ fun AdminRoute(
     LaunchedEffect(access) {
         if (access is AdminAccessState.Allowed) {
             vocabAdminVm.loadInitial()
-            readingAdminVm.loadInitial()
         }
     }
 
@@ -147,14 +140,12 @@ fun AdminRoute(
                     onSelectTab = { activeSectionTab = it },
                     patternState = patternListState,
                     vocabState = vocabAdminState,
-                    readingState = readingAdminState,
                     vocabSubTab = vocabSubTab,
                     openAddWordTrigger = openAddWordTrigger,
                     onBack = onBack,
                     onRefreshAll = {
                         vm.loadList()
                         vocabAdminVm.loadInitial()
-                        readingAdminVm.loadInitial()
                     },
                     onNewPattern = {
                         vm.openNew()
@@ -179,8 +170,7 @@ fun AdminRoute(
                         vocabSubTab = 2
                         activeSectionTab = 2
                     },
-                    vocabAdminVm = vocabAdminVm,
-                    readingAdminVm = readingAdminVm
+                    vocabAdminVm = vocabAdminVm
                 )
             }
         }
@@ -267,7 +257,6 @@ private fun AdminDashboardHub(
     onSelectTab: (Int) -> Unit,
     patternState: AdminListState,
     vocabState: VocabAdminUiState,
-    readingState: ReadingAdminListState,
     vocabSubTab: Int,
     openAddWordTrigger: Int,
     onBack: () -> Unit,
@@ -279,8 +268,7 @@ private fun AdminDashboardHub(
     onQuickAddVocabulary: () -> Unit,
     onQuickManageCategories: () -> Unit,
     onQuickCsvImport: () -> Unit,
-    vocabAdminVm: VocabAdminViewModel,
-    readingAdminVm: ReadingAdminViewModel
+    vocabAdminVm: VocabAdminViewModel
 ) {
     val snackbar = remember { SnackbarHostState() }
     var confirmDeletePattern by remember { mutableStateOf<AdminPatternSummary?>(null) }
@@ -289,13 +277,6 @@ private fun AdminDashboardHub(
         patternState.message?.let {
             snackbar.showSnackbar(it)
             onClearPatternMessage()
-        }
-    }
-    LaunchedEffect(readingState.message, readingState.error) {
-        val msg = readingState.message ?: readingState.error
-        if (!msg.isNullOrBlank()) {
-            snackbar.showSnackbar(msg)
-            readingAdminVm.clearBanner()
         }
     }
 
@@ -363,14 +344,8 @@ private fun AdminDashboardHub(
                 Tab(
                     selected = activeTab == 2,
                     onClick = { onSelectTab(2) },
-                    text = { Text("Vocab (${vocabState.total})") },
+                    text = { Text("Vocabulary (${vocabState.total})") },
                     modifier = Modifier.testTag("admin_tab_vocabulary")
-                )
-                Tab(
-                    selected = activeTab == 3,
-                    onClick = { onSelectTab(3) },
-                    text = { Text("Reading (${readingState.total})") },
-                    modifier = Modifier.testTag("admin_tab_reading")
                 )
             }
 
@@ -383,8 +358,7 @@ private fun AdminDashboardHub(
                     onOpenPatterns = { onSelectTab(1) },
                     onPostNewVocabulary = onQuickAddVocabulary,
                     onManageCategories = onQuickManageCategories,
-                    onCsvImport = onQuickCsvImport,
-                    onOpenReadingAdmin = { onSelectTab(3) }
+                    onCsvImport = onQuickCsvImport
                 )
                 1 -> AdminPatternsListTab(
                     state = patternState,
@@ -412,12 +386,6 @@ private fun AdminDashboardHub(
                         onDeleteCategory = { id -> vocabAdminVm.deleteCategory(id) },
                         onImportCsv = { csv -> vocabAdminVm.importCsv(csv) }
                     )
-                }
-                3 -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    ReadingAdminPanel(vm = readingAdminVm)
                 }
             }
         }
@@ -448,8 +416,7 @@ private fun AdminOverviewTab(
     onOpenPatterns: () -> Unit,
     onPostNewVocabulary: () -> Unit,
     onManageCategories: () -> Unit,
-    onCsvImport: () -> Unit,
-    onOpenReadingAdmin: () -> Unit = {}
+    onCsvImport: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -525,16 +492,6 @@ private fun AdminOverviewTab(
                 subtitle = "Paste CSV rows with duplicate detection & validation",
                 testTag = "admin_quick_csv_import",
                 onClick = onCsvImport
-            )
-        }
-
-        item {
-            AdminActionCard(
-                icon = Icons.Filled.AutoStories,
-                title = "Manage Reading Passages",
-                subtitle = "Create, edit, publish, preview passages, vocab, questions & categories",
-                testTag = "admin_quick_reading",
-                onClick = onOpenReadingAdmin
             )
         }
     }

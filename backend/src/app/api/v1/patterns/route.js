@@ -1,33 +1,23 @@
 import { NextResponse } from "next/server";
 import Pattern from "@/models/Pattern";
-import UserPatternProgress from "@/models/UserPatternProgress";
 import { connectDB } from "@/lib/db";
 import { isAdmin } from "@/lib/adminGuard";
-import { optionalAuthUid } from "@/middleware/auth";
 import { listSlots } from "@/lib/patternSlots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/v1/patterns  -> list screen (title, meaning, premium, count, audio, isCompleted)
-export async function GET(req) {
+// GET /api/v1/patterns  -> list screen (title, meaning, premium, count, audio)
+export async function GET() {
   try {
-    const [, userId] = await Promise.all([connectDB(), optionalAuthUid(req)]);
-
+    await connectDB();
     // Project only list-view fields so large explanations and sentence texts aren't transferred.
-    const [patterns, completedDocs] = await Promise.all([
-      Pattern.find()
-        .select(
-          "title meaning isPremium order titleAudio.url titleAudio.stale meaningAudio.url meaningAudio.stale examples._id examples.enAudio.url examples.enAudio.stale examples.bnAudio.url examples.bnAudio.stale"
-        )
-        .sort({ order: 1, createdAt: 1 })
-        .lean(),
-      userId
-        ? UserPatternProgress.find({ userId, isCompleted: true }).select("patternId").lean()
-        : Promise.resolve([]),
-    ]);
-
-    const completedIds = new Set(completedDocs.map((d) => String(d.patternId)));
+    const patterns = await Pattern.find()
+      .select(
+        "title meaning isPremium order titleAudio.url titleAudio.stale meaningAudio.url meaningAudio.stale examples._id examples.enAudio.url examples.enAudio.stale examples.bnAudio.url examples.bnAudio.stale"
+      )
+      .sort({ order: 1, createdAt: 1 })
+      .lean();
 
     return NextResponse.json(
       patterns.map((p) => {
@@ -46,7 +36,6 @@ export async function GET(req) {
           audioStale,
           titleAudioUrl: p.titleAudio?.url ?? null,
           meaningAudioUrl: p.meaningAudio?.url ?? null,
-          isCompleted: completedIds.has(String(p._id)),
         };
       }),
       { headers: { "Cache-Control": "no-store" } }

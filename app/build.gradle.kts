@@ -76,6 +76,11 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
+  ignoreList.add("FIREBASE_PRIVATE_KEY")
+  ignoreList.add("FIREBASE_CLIENT_EMAIL")
+  ignoreList.add("FIREBASE_PROJECT_ID")
+  ignoreList.add("MONGODB_URI")
+  ignoreList.add("AI_PROVIDER")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }

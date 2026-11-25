@@ -38,17 +38,6 @@ export async function verifyRequestToken(request, { checkRevoked = false } = {})
   }
 }
 
-export async function optionalAuthUid(request) {
-  const header = request?.headers?.get("authorization") || "";
-  if (!/^Bearer .+$/i.test(header)) return null;
-  try {
-    const decoded = await verifyRequestToken(request);
-    return decoded?.uid || null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Protects a route: valid token + existing/auto-synced active user (+ optional role check).
  * Runs token verification and MongoDB connection setup concurrently.

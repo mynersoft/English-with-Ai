@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import Pattern from "@/models/Pattern";
-import UserPatternProgress from "@/models/UserPatternProgress";
 import { connectDB } from "@/lib/db";
 import { isAdmin } from "@/lib/adminGuard";
-import { optionalAuthUid } from "@/middleware/auth";
 import { listSlots } from "@/lib/patternSlots";
 
 export const runtime = "nodejs";
@@ -18,13 +16,9 @@ const audioInfo = (a) => ({
 // GET /api/v1/patterns/:id -> full pattern for the sentence screen
 export async function GET(req, { params }) {
   try {
-    const [{ id }, , userId] = await Promise.all([params, connectDB(), optionalAuthUid(req)]);
-    const [p, completedDoc] = await Promise.all([
-      Pattern.findById(id).lean(),
-      userId
-        ? UserPatternProgress.exists({ userId, patternId: id, isCompleted: true })
-        : Promise.resolve(null),
-    ]);
+    const { id } = await params;
+    await connectDB();
+    const p = await Pattern.findById(id).lean();
     if (!p) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     return NextResponse.json(
@@ -35,7 +29,6 @@ export async function GET(req, { params }) {
         explanation: p.explanation ?? "",
         isPremium: p.isPremium,
         order: p.order ?? 0,
-        isCompleted: Boolean(completedDoc),
         titleAudio: audioInfo(p.titleAudio),
         meaningAudio: audioInfo(p.meaningAudio),
         examples: (p.examples || []).map((e) => ({

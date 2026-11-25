@@ -30,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -62,21 +61,13 @@ import com.example.feature.auth.EmailVerificationScreen
 import com.example.feature.auth.ForgotPasswordScreen
 import com.example.feature.auth.LoginScreen
 import com.example.feature.auth.RegisterScreen
-import androidx.activity.compose.BackHandler
-import androidx.compose.runtime.saveable.rememberSaveable
-import com.example.feature.dashboard.AppMainTab
 import com.example.feature.dashboard.DashboardScreen
 import com.example.feature.dashboard.DashboardViewModel
 import com.example.feature.dashboard.DeactivatedAccountScreen
-import com.example.feature.dashboard.MainBottomNavBar
 import com.example.feature.dashboard.ProfileScreen
 import com.example.feature.dashboard.SecuritySettingsScreen
 import com.example.feature.dashboard.SessionsScreen
-import com.example.feature.dashboard.StudentProfileDashboardScreen
-import com.example.feature.dashboard.StudentProfileDashboardViewModel
 import com.example.feature.speaking.SpeakingRoute
-import com.example.feature.chat.ChatRoute
-import com.example.feature.reading.ui.ReadingRoute
 import com.example.feature.vocabulary.VocabularyRoute
 import com.example.ui.theme.EnglishAITheme
 import com.google.firebase.Firebase
@@ -97,8 +88,6 @@ private object AppRoutes {
     const val SPEAKING = "speaking"
     const val SENTENCE_LEARNING = "sentence-learning"
     const val VOCABULARY = "vocabulary"
-    const val STUDENT_CHAT = "student-chat"
-    const val READING = "reading"
     const val ADMIN = "admin"
 }
 
@@ -330,152 +319,50 @@ private fun AuthenticatedNavGraph(
     }
 
     val navController = rememberNavController()
-    val studentDashboardViewModel: StudentProfileDashboardViewModel = viewModel(key = "student_$currentUserId")
-    val studentDashboardState by studentDashboardViewModel.state.collectAsStateWithLifecycle()
-    val studentRefreshing by studentDashboardViewModel.isRefreshing.collectAsStateWithLifecycle()
-    var activeTab by rememberSaveable { mutableStateOf(AppMainTab.PROGRESS) }
-
-    val chatBadgeCount = (studentDashboardState as? UiState.Success)?.data?.stats?.activeChatRooms ?: 0
-
     NavHost(
         navController = navController,
         startDestination = AppRoutes.DASHBOARD
     ) {
         composable(AppRoutes.DASHBOARD) {
-            LaunchedEffect(activeTab) {
-                if (activeTab == AppMainTab.PROGRESS || activeTab == AppMainTab.HOME) {
-                    studentDashboardViewModel.loadDashboard(silent = true)
-                }
-            }
-
-            if (activeTab != AppMainTab.HOME) {
-                BackHandler { activeTab = AppMainTab.HOME }
-            }
-
-            val bottomBarContent: @Composable () -> Unit = {
-                MainBottomNavBar(
-                    selectedTab = activeTab,
-                    chatBadgeCount = chatBadgeCount,
-                    onSelectTab = { nextTab ->
-                        dashboardViewModel.clearBanner()
-                        activeTab = nextTab
-                    }
-                )
-            }
-
-            when (activeTab) {
-                AppMainTab.HOME -> {
-                    DashboardScreen(
-                        profileState = profileState,
-                        sessionsState = sessionsState,
-                        fallbackEmail = dashboardViewModel.currentEmail(),
-                        isEmailVerified = dashboardViewModel.isEmailVerified(),
-                        actionState = actionState,
-                        readingReport = (studentDashboardState as? UiState.Success)?.data?.readingReport,
-                        bottomBar = bottomBarContent,
-                        onOpenProfile = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.PROFILE)
-                        },
-                        onOpenSessions = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.SESSIONS)
-                        },
-                        onOpenSecurity = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.SECURITY)
-                        },
-                        onOpenSpeaking = { activeTab = AppMainTab.SPEAKING },
-                        onOpenSentenceLearning = { activeTab = AppMainTab.PATTERNS },
-                        onOpenVocabulary = { activeTab = AppMainTab.VOCABULARY },
-                        onOpenStudentChat = { activeTab = AppMainTab.CHAT },
-                        onOpenReading = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.READING)
-                        },
-                        onOpenAdmin = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.ADMIN)
-                        },
-                        onRetryBackendSync = {
-                            dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
-                        },
-                        onSignOut = { dashboardViewModel.signOut(credentialManager) }
-                    )
-                }
-
-                AppMainTab.VOCABULARY -> {
-                    VocabularyRoute(
-                        onBack = { activeTab = AppMainTab.HOME },
-                        bottomBar = bottomBarContent
-                    )
-                }
-
-                AppMainTab.PATTERNS -> {
-                    SentenceLearningScreen(
-                        onBack = { activeTab = AppMainTab.HOME },
-                        bottomBar = bottomBarContent
-                    )
-                }
-
-                AppMainTab.SPEAKING -> {
-                    SpeakingRoute(
-                        level = loadedProfile?.safeLevel?.name ?: "Beginner",
-                        onBack = { activeTab = AppMainTab.HOME },
-                        bottomBar = bottomBarContent
-                    )
-                }
-
-                AppMainTab.CHAT -> {
-                    ChatRoute(
-                        onBack = { activeTab = AppMainTab.HOME },
-                        bottomBar = bottomBarContent
-                    )
-                }
-
-                AppMainTab.PROGRESS -> {
-                    StudentProfileDashboardScreen(
-                        state = studentDashboardState,
-                        isRefreshing = studentRefreshing,
-                        fallbackName = loadedProfile?.displayName ?: "Learner",
-                        fallbackEmail = loadedProfile?.email ?: dashboardViewModel.currentEmail(),
-                        isAdmin = actionState.isAdmin,
-                        bottomBar = bottomBarContent,
-                        onRefresh = { studentDashboardViewModel.loadDashboard(silent = false) },
-                        onBackToHome = { activeTab = AppMainTab.HOME },
-                        onNavigateRoute = { route ->
-                            if (route == "reading") {
-                                navController.navigate(AppRoutes.READING)
-                            } else {
-                                activeTab = when (route) {
-                                    "vocabulary" -> AppMainTab.VOCABULARY
-                                    "patterns" -> AppMainTab.PATTERNS
-                                    "speaking" -> AppMainTab.SPEAKING
-                                    "chat" -> AppMainTab.CHAT
-                                    else -> AppMainTab.HOME
-                                }
-                            }
-                        },
-                        onOpenProfile = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.PROFILE)
-                        },
-                        onOpenSessions = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.SESSIONS)
-                        },
-                        onOpenSecurity = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.SECURITY)
-                        },
-                        onOpenAdmin = {
-                            dashboardViewModel.clearBanner()
-                            navController.navigate(AppRoutes.ADMIN)
-                        },
-                        onSignOut = { dashboardViewModel.signOut(credentialManager) }
-                    )
-                }
-            }
+            DashboardScreen(
+                profileState = profileState,
+                sessionsState = sessionsState,
+                fallbackEmail = dashboardViewModel.currentEmail(),
+                isEmailVerified = dashboardViewModel.isEmailVerified(),
+                actionState = actionState,
+                onOpenProfile = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.PROFILE)
+                },
+                onOpenSessions = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.SESSIONS)
+                },
+                onOpenSecurity = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.SECURITY)
+                },
+                onOpenSpeaking = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.SPEAKING)
+                },
+                onOpenSentenceLearning = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.SENTENCE_LEARNING)
+                },
+                onOpenVocabulary = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.VOCABULARY)
+                },
+                onOpenAdmin = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.ADMIN)
+                },
+                onRetryBackendSync = {
+                    dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
+                },
+                onSignOut = { dashboardViewModel.signOut(credentialManager) }
+            )
         }
 
         composable(AppRoutes.SPEAKING) {
@@ -494,22 +381,6 @@ private fun AuthenticatedNavGraph(
         composable(AppRoutes.VOCABULARY) {
             VocabularyRoute(
                 onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(AppRoutes.STUDENT_CHAT) {
-            ChatRoute(
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(AppRoutes.READING) {
-            ReadingRoute(
-                isAdmin = actionState.isAdmin,
-                onBack = {
-                    navController.popBackStack()
-                    studentDashboardViewModel.loadDashboard(silent = true)
-                }
             )
         }
 

@@ -78,26 +78,18 @@ import com.example.ui.theme.SuccessGreen
 
 /** Entry point used by navigation. [level] is the learner's level: Beginner / Intermediate / Advanced. */
 @Composable
-fun SpeakingRoute(
-    level: String,
-    onBack: () -> Unit,
-    bottomBar: @Composable () -> Unit = {}
-) {
+fun SpeakingRoute(level: String, onBack: () -> Unit) {
     val vm: SpeakingViewModel = viewModel(
         factory = viewModelFactory {
             initializer { SpeakingViewModel(checkNotNull(this[APPLICATION_KEY]), level) }
         }
     )
-    SpeakingScreen(vm = vm, onBack = onBack, bottomBar = bottomBar)
+    SpeakingScreen(vm = vm, onBack = onBack)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SpeakingScreen(
-    vm: SpeakingViewModel,
-    onBack: () -> Unit,
-    bottomBar: @Composable () -> Unit = {}
-) {
+fun SpeakingScreen(vm: SpeakingViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -121,7 +113,6 @@ fun SpeakingScreen(
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = { Text("AI Speaking Partner", fontWeight = FontWeight.SemiBold) },

@@ -25,10 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.MenuBook
@@ -68,7 +66,6 @@ import androidx.compose.ui.unit.dp
 import com.example.core.common.UiState
 import com.example.core.ui.BannerTone
 import com.example.core.ui.StatusBanner
-import com.example.domain.model.ReadingReportSummary
 import com.example.domain.model.UserProfile
 import com.example.domain.model.UserSession
 import com.example.ui.theme.SuccessGreen
@@ -81,23 +78,18 @@ fun DashboardScreen(
     fallbackEmail: String,
     isEmailVerified: Boolean,
     actionState: DashboardActionState,
-    readingReport: ReadingReportSummary? = null,
-    bottomBar: @Composable () -> Unit = {},
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenSpeaking: () -> Unit = {},
     onOpenSentenceLearning: () -> Unit = {},
     onOpenVocabulary: () -> Unit = {},
-    onOpenStudentChat: () -> Unit = {},
-    onOpenReading: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     onRetryBackendSync: () -> Unit = {},
     onSignOut: () -> Unit
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = {
@@ -201,8 +193,6 @@ fun DashboardScreen(
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
-                                onOpenStudentChat = onOpenStudentChat,
-                                onOpenReading = onOpenReading,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -302,8 +292,6 @@ fun DashboardScreen(
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
-                                onOpenStudentChat = onOpenStudentChat,
-                                onOpenReading = onOpenReading,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
@@ -332,36 +320,11 @@ fun DashboardScreen(
 
                         item {
                             AccountNavCard(
-                                icon = Icons.Filled.Forum,
-                                title = "Student English Chat",
-                                subtitle = "Chat with fellow students in study rooms or 1-on-1 with live AI grammar fixes",
-                                testTag = "nav_student_chat_card",
-                                onClick = onOpenStudentChat
-                            )
-                        }
-
-                        item {
-                            AccountNavCard(
                                 icon = Icons.Filled.Mic,
                                 title = "AI Speaking Partner",
                                 subtitle = "Talk in English with AI and see corrections for your mistakes",
                                 testTag = "nav_speaking_card",
                                 onClick = onOpenSpeaking
-                            )
-                        }
-
-                        item {
-                            val readingSub = if (readingReport != null && readingReport.totalPassages > 0) {
-                                "${readingReport.completedPassages}/${readingReport.totalPassages} passages completed · ${readingReport.totalMinutes} min read · ${readingReport.quizAttemptsCount} quizzes"
-                            } else {
-                                "Listen & read passages, Read Aloud text matching, comprehension quizzes & saved words"
-                            }
-                            AccountNavCard(
-                                icon = Icons.Filled.AutoStories,
-                                title = "Reading Practice",
-                                subtitle = readingSub,
-                                testTag = "nav_reading_card",
-                                onClick = onOpenReading
                             )
                         }
 
@@ -448,37 +411,21 @@ private fun AllScreensButtonGrid(
     onOpenSpeaking: () -> Unit,
     onOpenSentenceLearning: () -> Unit,
     onOpenVocabulary: () -> Unit,
-    onOpenStudentChat: () -> Unit,
-    onOpenReading: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAdmin: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ScreenQuickButton(
-                icon = Icons.Filled.Translate,
-                label = "Vocabulary",
-                testTag = "quick_nav_vocabulary_button",
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                onClick = onOpenVocabulary,
-                modifier = Modifier.weight(1f)
-            )
-            ScreenQuickButton(
-                icon = Icons.Filled.Forum,
-                label = "Student Chat",
-                testTag = "quick_nav_student_chat_button",
-                containerColor = MaterialTheme.colorScheme.secondary,
-                contentColor = MaterialTheme.colorScheme.onSecondary,
-                onClick = onOpenStudentChat,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        ScreenQuickButton(
+            icon = Icons.Filled.Translate,
+            label = "Vocabulary Mastery (Daily 5 Words)",
+            testTag = "quick_nav_vocabulary_button",
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            onClick = onOpenVocabulary,
+            modifier = Modifier.fillMaxWidth()
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -530,12 +477,12 @@ private fun AllScreensButtonGrid(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             ScreenQuickButton(
-                icon = Icons.Filled.AutoStories,
-                label = "Reading",
-                testTag = "quick_nav_reading_button",
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                onClick = onOpenReading,
+                icon = Icons.Filled.Security,
+                label = "Security",
+                testTag = "quick_nav_security_button",
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = onOpenSecurity,
                 modifier = Modifier.weight(1f)
             )
             if (isAdmin) {
@@ -549,31 +496,6 @@ private fun AllScreensButtonGrid(
                     modifier = Modifier.weight(1f)
                 )
             } else {
-                ScreenQuickButton(
-                    icon = Icons.Filled.Security,
-                    label = "Security",
-                    testTag = "quick_nav_security_button",
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = onOpenSecurity,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        if (isAdmin) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ScreenQuickButton(
-                    icon = Icons.Filled.Security,
-                    label = "Security",
-                    testTag = "quick_nav_security_button",
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = onOpenSecurity,
-                    modifier = Modifier.weight(1f)
-                )
                 Spacer(modifier = Modifier.weight(1f))
             }
         }
