@@ -3,6 +3,7 @@ import { withAuth } from "@/middleware/auth";
 import { readJson } from "@/validators/auth.validator";
 import { validateSpeakingTurn } from "@/validators/speaking.validator";
 import { speakingTurn } from "@/modules/ai/speaking.service";
+import { recordStudentActivity } from "@/modules/student/student.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,9 +13,10 @@ export const maxDuration = 30;
 // Body: { message, level?, topic?, history?: [{ role: "user"|"assistant", content }] }
 // Returns: { reply, correction: { hasMistake, original, corrected, explanationBn } }
 export const POST = withAuth(
-  async (request) => {
+  async (request, { user }) => {
     const input = validateSpeakingTurn(await readJson(request));
     const result = await speakingTurn(input);
+    await recordStudentActivity({ userDoc: user, type: "speaking_turn" }).catch(() => {});
     return ok(result);
   },
   { limit: 20 }

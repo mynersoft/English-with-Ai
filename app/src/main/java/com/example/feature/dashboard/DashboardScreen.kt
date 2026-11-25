@@ -79,6 +79,7 @@ fun DashboardScreen(
     fallbackEmail: String,
     isEmailVerified: Boolean,
     actionState: DashboardActionState,
+    bottomBar: @Composable () -> Unit = {},
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
@@ -92,6 +93,7 @@ fun DashboardScreen(
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
+        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = {

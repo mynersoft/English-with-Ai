@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.repository.PatternDetail
 import com.example.data.repository.PatternRepository
 import com.example.data.repository.PatternSummary
+import com.example.data.repository.StudentDashboardRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,7 +26,8 @@ data class PatternDetailUiState(
 )
 
 class PatternViewModel(
-    private val repository: PatternRepository = PatternRepository()
+    private val repository: PatternRepository = PatternRepository(),
+    private val studentRepo: StudentDashboardRepository = StudentDashboardRepository()
 ) : ViewModel() {
 
     private val _listState = MutableStateFlow(PatternListUiState())
@@ -81,6 +83,7 @@ class PatternViewModel(
                             errorMessage = null
                         )
                     }
+                    launch { studentRepo.recordPatternPractice(patternId) }
                 }
                 .onFailure { err ->
                     _detailState.update {

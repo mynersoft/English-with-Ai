@@ -90,6 +90,7 @@ fun VocabularyDashboardScreen(
     dashboardState: UiState<VocabDashboardData>,
     isAdmin: Boolean,
     feedback: VocabActionFeedback,
+    bottomBar: @Composable () -> Unit = {},
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onContinueLearning: () -> Unit,
@@ -109,6 +110,7 @@ fun VocabularyDashboardScreen(
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = pal.background,
+        bottomBar = bottomBar,
         topBar = {
             VocabTopBar(
                 title = "Vocabulary Mastery",

@@ -75,6 +75,7 @@ import com.example.domain.model.ChatStudentSummary
 @Composable
 fun ChatRoute(
     onBack: () -> Unit,
+    bottomBar: @Composable () -> Unit = {},
     vm: ChatViewModel = viewModel()
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -109,6 +110,7 @@ fun ChatRoute(
     } else {
         ChatLobbyScreen(
             state = lobbyState,
+            bottomBar = bottomBar,
             onBack = onBack,
             onRefresh = { vm.loadLobby() },
             onOpenRoom = { vm.openRoom(it) },
@@ -133,6 +135,7 @@ fun ChatRoute(
 @Composable
 private fun ChatLobbyScreen(
     state: ChatLobbyUiState,
+    bottomBar: @Composable () -> Unit = {},
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onOpenRoom: (ChatRoomSummary) -> Unit,
@@ -150,6 +153,7 @@ private fun ChatLobbyScreen(
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = bgLight,
+        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = {
