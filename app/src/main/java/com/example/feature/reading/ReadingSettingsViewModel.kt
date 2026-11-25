@@ -19,6 +19,7 @@ data class ReadingSettingsUiState(
     val saving: Boolean = false,
     val settings: ReadingSettings = ReadingSettings(),
     val availableVoices: List<TtsVoiceOption> = emptyList(),
+    val accentStatusNote: String? = null,
     val error: String? = null,
     val savedMessage: String? = null
 )
@@ -40,6 +41,11 @@ class ReadingSettingsViewModel(
         viewModelScope.launch {
             ttsProvider.availableVoices.collect { voices ->
                 _uiState.update { it.copy(availableVoices = voices) }
+            }
+        }
+        viewModelScope.launch {
+            ttsProvider.accentStatusNote.collect { note ->
+                _uiState.update { it.copy(accentStatusNote = note) }
             }
         }
         loadSettings()

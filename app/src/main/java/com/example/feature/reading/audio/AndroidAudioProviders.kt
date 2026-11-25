@@ -31,6 +31,9 @@ class AndroidTtsProvider(context: Context) : TtsProvider {
     private val _availableVoices = MutableStateFlow<List<TtsVoiceOption>>(emptyList())
     override val availableVoices: StateFlow<List<TtsVoiceOption>> = _availableVoices.asStateFlow()
 
+    private val _accentStatusNote = MutableStateFlow<String?>(null)
+    override val accentStatusNote: StateFlow<String?> = _accentStatusNote.asStateFlow()
+
     private var tts: TextToSpeech? = null
     private var currentAccent: String = "en-US"
     private var requestedVoiceId: String = ""
@@ -119,15 +122,40 @@ class AndroidTtsProvider(context: Context) : TtsProvider {
     private fun loadVoices() {
         val engine = tts ?: return
         val voiceSet: Set<Voice> = runCatching { engine.voices }.getOrNull() ?: emptySet()
+        val accentCountryPriority = when (currentAccent) {
+            "en-BD" -> listOf("BD", "IN", "GB", "US")
+            "en-GB" -> listOf("GB", "AU", "US", "BD", "IN")
+            else -> listOf("US", "GB", "AU", "BD", "IN")
+        }
         val options = voiceSet
             .filter { it.locale?.language?.equals("en", ignoreCase = true) == true }
-            .sortedWith(compareBy<Voice> { it.locale.toLanguageTag() }.thenBy { it.name })
+            .sortedWith(
+                compareBy<Voice>(
+                    { v ->
+                        val c = v.locale?.country?.uppercase().orEmpty()
+                        val idx = accentCountryPriority.indexOf(c)
+                        if (idx >= 0) idx else accentCountryPriority.size
+                    },
+                    { it.isNetworkConnectionRequired },
+                    { it.locale?.toLanguageTag().orEmpty() },
+                    { it.name }
+                )
+            )
             .map { v ->
-                val country = v.locale?.country?.ifBlank { "" }.orEmpty()
+                val country = v.locale?.country?.uppercase()?.ifBlank { "" }.orEmpty()
+                val regionLabel = when (country) {
+                    "BD" -> "Bangladeshi (BD)"
+                    "IN" -> "South Asian (IN)"
+                    "GB" -> "British (UK)"
+                    "US" -> "US"
+                    "AU" -> "Australian (AU)"
+                    else -> country.ifBlank { "EN" }
+                }
+                val shortName = v.name.substringAfterLast('-').ifBlank { v.name }.take(22)
                 val label = buildString {
-                    append(if (country.equals("GB", true)) "UK" else if (country.equals("US", true)) "US" else country.ifBlank { "EN" })
+                    append(regionLabel)
                     append(" · ")
-                    append(v.name.substringAfterLast('-').ifBlank { v.name }.take(22))
+                    append(shortName)
                     if (v.isNetworkConnectionRequired) append(" (Net)")
                 }
                 TtsVoiceOption(
@@ -140,26 +168,105 @@ class AndroidTtsProvider(context: Context) : TtsProvider {
         _availableVoices.value = options
     }
 
+    private fun bestVoiceForCountry(voices: Set<Voice>, countryCode: String): Voice? =
+        voices
+            .filter {
+                it.locale?.language?.equals("en", ignoreCase = true) == true &&
+                    it.locale?.country?.equals(countryCode, ignoreCase = true) == true
+            }
+            .sortedWith(compareBy<Voice>({ it.isNetworkConnectionRequired }, { it.name }))
+            .firstOrNull()
+
+    private fun isLocaleAvailable(engine: TextToSpeech, locale: Locale): Boolean {
+        val availability = runCatching { engine.isLanguageAvailable(locale) }.getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
+        return availability >= TextToSpeech.LANG_AVAILABLE
+    }
+
     private fun applyConfig() {
         val engine = tts ?: return
         if (!isInitialized) return
 
-        val locale = if (currentAccent == "en-GB") Locale.UK else Locale.US
-        engine.language = locale
-        engine.setSpeechRate(currentSpeed.coerceIn(0.5f, 2.0f))
+        val voices: Set<Voice> = runCatching { engine.voices }.getOrNull() ?: emptySet()
 
-        if (requestedVoiceId.isNotBlank()) {
-            val match = runCatching {
-                engine.voices?.firstOrNull { it.name == requestedVoiceId }
-            }.getOrNull()
-            if (match != null) {
-                engine.voice = match
+        val explicitMatch = if (requestedVoiceId.isNotBlank()) {
+            voices.firstOrNull { it.name == requestedVoiceId }
+        } else null
+
+        if (explicitMatch != null) {
+            explicitMatch.locale?.let { engine.language = it }
+            engine.voice = explicitMatch
+            engine.setSpeechRate(currentSpeed.coerceIn(0.5f, 2.0f))
+            _accentStatusNote.value = if (currentAccent == "en-BD" &&
+                !explicitMatch.locale?.country.equals("BD", ignoreCase = true)
+            ) {
+                "Selected ${explicitMatch.locale?.toLanguageTag() ?: "English"} voice."
+            } else {
+                null
+            }
+            return
+        }
+
+        when (currentAccent) {
+            "en-BD" -> {
+                val bdLocale = Locale.forLanguageTag("en-BD")
+                val inLocale = Locale.forLanguageTag("en-IN")
+                val bdVoice = bestVoiceForCountry(voices, "BD")
+                val inVoice = bestVoiceForCountry(voices, "IN")
+                val gbVoice = bestVoiceForCountry(voices, "GB")
+                when {
+                    bdVoice != null || isLocaleAvailable(engine, bdLocale) -> {
+                        engine.language = bdLocale
+                        bdVoice?.let { engine.voice = it }
+                        _accentStatusNote.value = "Using Bangladeshi English (en-BD) voice."
+                    }
+                    inVoice != null || isLocaleAvailable(engine, inLocale) -> {
+                        engine.language = inLocale
+                        inVoice?.let { engine.voice = it }
+                        _accentStatusNote.value =
+                            "Native Bangladeshi (en-BD) TTS isn't installed on this device — using South Asian English (en-IN) fallback."
+                    }
+                    gbVoice != null || isLocaleAvailable(engine, Locale.UK) -> {
+                        engine.language = Locale.UK
+                        gbVoice?.let { engine.voice = it }
+                        _accentStatusNote.value =
+                            "Bangladeshi (en-BD) TTS isn't installed on this device — using British English (en-GB) fallback."
+                    }
+                    else -> {
+                        engine.language = Locale.US
+                        bestVoiceForCountry(voices, "US")?.let { engine.voice = it }
+                        _accentStatusNote.value =
+                            "Bangladeshi (en-BD) TTS isn't installed on this device — using default English voice."
+                    }
+                }
+            }
+
+            "en-GB" -> {
+                val gbVoice = bestVoiceForCountry(voices, "GB")
+                if (gbVoice != null || isLocaleAvailable(engine, Locale.UK)) {
+                    engine.language = Locale.UK
+                    gbVoice?.let { engine.voice = it }
+                    _accentStatusNote.value = "Using British English (en-GB) accent."
+                } else {
+                    engine.language = Locale.US
+                    bestVoiceForCountry(voices, "US")?.let { engine.voice = it }
+                    _accentStatusNote.value =
+                        "British (en-GB) voice pack isn't installed on this device — using system English voice."
+                }
+            }
+
+            else -> {
+                engine.language = Locale.US
+                bestVoiceForCountry(voices, "US")?.let { engine.voice = it }
+                _accentStatusNote.value = null
             }
         }
+
+        engine.setSpeechRate(currentSpeed.coerceIn(0.5f, 2.0f))
     }
 
     override fun setAccent(accent: String) {
         currentAccent = accent
+        loadVoices()
         applyConfig()
     }
 
@@ -283,7 +390,7 @@ class AndroidSttProvider(context: Context) : SttProvider {
                         "Microphone permission is required for Read Aloud mode."
                     SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
                         "Network error during speech recognition."
-                    else -> "Speech recognition failed (code $error). Try Manual Reading Mode."
+                    else -> "Speech recognition failed (code $error). Please try again."
                 }
                 onError(msg)
             }

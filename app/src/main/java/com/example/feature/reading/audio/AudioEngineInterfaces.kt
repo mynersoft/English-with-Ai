@@ -37,6 +37,7 @@ data class AudioProviderConfig(
 interface TtsProvider {
     val status: StateFlow<AudioStatus>
     val availableVoices: StateFlow<List<TtsVoiceOption>>
+    val accentStatusNote: StateFlow<String?>
     fun initialize(accent: String, voiceId: String, speed: Float)
     fun setAccent(accent: String)
     fun setVoice(voiceId: String)

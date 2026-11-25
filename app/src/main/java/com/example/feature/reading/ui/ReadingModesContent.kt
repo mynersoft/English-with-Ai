@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,14 +69,10 @@ fun ReadAloudModeContent(
     readAloudState: ReadAloudUiState,
     onStartMic: () -> Unit,
     onStopMic: () -> Unit,
+    onMicPermissionDenied: () -> Unit,
     onPlayActiveSentence: () -> Unit,
     onPreviousSentence: () -> Unit,
-    onNextSentence: () -> Unit,
-    onEnableManualMode: () -> Unit,
-    onDisableManualMode: () -> Unit,
-    onManualTextChange: (String) -> Unit,
-    onEvaluateManualText: () -> Unit,
-    onToggleManualSentenceRead: (Int, String) -> Unit
+    onNextSentence: () -> Unit
 ) {
     val pal = readingPalette()
     val context = LocalContext.current
@@ -90,7 +85,7 @@ fun ReadAloudModeContent(
         if (granted) {
             onStartMic()
         } else {
-            onEnableManualMode()
+            onMicPermissionDenied()
         }
     }
 
@@ -150,162 +145,109 @@ fun ReadAloudModeContent(
             }
         }
 
-        // Speech-to-Text Voice Read Aloud OR Manual Reading Mode fallback
-        if (!readAloudState.manualModeActive && audioState.sttSupported) {
-            item {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = pal.card,
-                    border = BorderStroke(1.dp, pal.border),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = "Read Aloud · Text Matching",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = pal.textPrimary
-                        )
-                        Text(
-                            text = "Speak the sentence clearly. Transcripts are compared locally against the original text — raw audio is never stored.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = pal.textSecondary
-                        )
+        // Speech-to-Text Voice Read Aloud
+        item {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = pal.card,
+                border = BorderStroke(1.dp, pal.border),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Read Aloud · Text Matching",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = pal.textPrimary
+                    )
+                    Text(
+                        text = "Speak the sentence clearly. Transcripts are compared locally against the original text — raw audio is never stored.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = pal.textSecondary
+                    )
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (audioState.isListening) {
-                                Button(
-                                    onClick = onStopMic,
-                                    colors = ButtonDefaults.buttonColors(containerColor = pal.missing, contentColor = pal.onPrimary),
-                                    shape = RoundedCornerShape(14.dp),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
-                                        .testTag("read_aloud_stop_mic")
-                                ) {
-                                    Icon(Icons.Filled.Stop, null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Stop Mic")
-                                }
-                            } else {
-                                Button(
-                                    onClick = {
-                                        val granted = ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.RECORD_AUDIO
-                                        ) == PackageManager.PERMISSION_GRANTED
-                                        if (granted) onStartMic()
-                                        else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = pal.primary, contentColor = pal.onPrimary),
-                                    shape = RoundedCornerShape(14.dp),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
-                                        .testTag("read_aloud_start_mic")
-                                ) {
-                                    Icon(Icons.Filled.Mic, null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Speak Sentence")
-                                }
-                            }
-
-                            OutlinedButton(
-                                onClick = onEnableManualMode,
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier.height(48.dp)
-                            ) {
-                                Text("Manual Mode")
-                            }
-                        }
-
-                        if (readAloudState.partialTranscript.isNotBlank()) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = pal.background,
-                                border = BorderStroke(1.dp, pal.border),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text("Recognized Transcript", style = MaterialTheme.typography.labelSmall, color = pal.textSecondary)
-                                    Text(readAloudState.partialTranscript, style = MaterialTheme.typography.bodyMedium, color = pal.textPrimary)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            // Manual Reading Mode Fallback
-            item {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = pal.amberContainer.copy(alpha = 0.45f),
-                    border = BorderStroke(1.dp, pal.amber.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth().testTag("manual_reading_mode_card")
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    if (!audioState.sttSupported) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = pal.amberContainer.copy(alpha = 0.55f),
+                            border = BorderStroke(1.dp, pal.amber.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "Manual Reading Mode",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = pal.amber
+                                text = "Speech recognition is unavailable on this device. Tap \"Hear Model\" above to listen and practice.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = pal.textPrimary,
+                                modifier = Modifier.padding(12.dp)
                             )
-                            if (audioState.sttSupported) {
-                                TextButton(onClick = onDisableManualMode) { Text("Use Mic") }
+                        }
+                    } else {
+                        if (audioState.isListening) {
+                            Button(
+                                onClick = onStopMic,
+                                colors = ButtonDefaults.buttonColors(containerColor = pal.missing, contentColor = pal.onPrimary),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("read_aloud_stop_mic")
+                            ) {
+                                Icon(Icons.Filled.Stop, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Stop Listening", maxLines = 1)
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    val granted = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.RECORD_AUDIO
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (granted) onStartMic()
+                                    else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = pal.primary, contentColor = pal.onPrimary),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("read_aloud_start_mic")
+                            ) {
+                                Icon(Icons.Filled.Mic, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Speak Sentence", maxLines = 1)
                             }
                         }
-                        Text(
-                            text = readAloudState.manualFallbackReason
-                                ?: "Read each sentence aloud at your own pace and check it off below, or type what you read for Text Matching.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = pal.textPrimary
-                        )
+                    }
 
-                        OutlinedTextField(
-                            value = readAloudState.manualTypedTranscript,
-                            onValueChange = onManualTextChange,
-                            label = { Text("Type sentence to check Text Matching (optional)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Button(
-                            onClick = onEvaluateManualText,
-                            enabled = readAloudState.manualTypedTranscript.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(containerColor = pal.primary),
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                    if (!readAloudState.micStatusMessage.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = pal.amberContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Check Text Matching")
+                            Text(
+                                text = readAloudState.micStatusMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = pal.textPrimary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
                         }
                     }
-                }
-            }
 
-            itemsIndexed(passage.sentences, key = { _, s -> "manual_${s.sentenceId}" }) { idx, sentence ->
-                val checked = readAloudState.manualCompletedSentenceIds.contains(sentence.sentenceId)
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (checked) pal.matchedBg else pal.card,
-                    border = BorderStroke(1.dp, if (checked) pal.matched else pal.border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onToggleManualSentenceRead(idx, sentence.sentenceId) }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Checkbox(checked = checked, onCheckedChange = { onToggleManualSentenceRead(idx, sentence.sentenceId) })
-                        Text(sentence.en, style = MaterialTheme.typography.bodyMedium, color = pal.textPrimary, modifier = Modifier.weight(1f))
+                    if (readAloudState.partialTranscript.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = pal.background,
+                            border = BorderStroke(1.dp, pal.border),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Recognized Transcript", style = MaterialTheme.typography.labelSmall, color = pal.textSecondary)
+                                Text(readAloudState.partialTranscript, style = MaterialTheme.typography.bodyMedium, color = pal.textPrimary)
+                            }
+                        }
                     }
                 }
             }

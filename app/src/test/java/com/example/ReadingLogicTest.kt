@@ -92,6 +92,16 @@ class ReadingLogicTest {
     }
 
     @Test
+    fun `reading accent enum maps bangladeshi british and us codes cleanly`() {
+        assertEquals(com.example.domain.model.ReadingAccent.BANGLADESHI, com.example.domain.model.ReadingAccent.fromCode("en-BD"))
+        assertEquals(com.example.domain.model.ReadingAccent.BANGLADESHI, com.example.domain.model.ReadingAccent.fromCode("bangladeshi"))
+        assertEquals(com.example.domain.model.ReadingAccent.BRITISH, com.example.domain.model.ReadingAccent.fromCode("en-GB"))
+        assertEquals(com.example.domain.model.ReadingAccent.BRITISH, com.example.domain.model.ReadingAccent.fromCode("british"))
+        assertEquals(com.example.domain.model.ReadingAccent.US, com.example.domain.model.ReadingAccent.fromCode("en-US"))
+        assertEquals(com.example.domain.model.ReadingAccent.US, com.example.domain.model.ReadingAccent.fromCode(null))
+    }
+
+    @Test
     fun `android reading viewmodels expose single-arg Application constructor for ViewModelProvider`() {
         val settingsCtor = com.example.feature.reading.ReadingSettingsViewModel::class.java
             .getConstructor(android.app.Application::class.java)

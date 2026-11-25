@@ -231,3 +231,18 @@ enum class ReadingPracticeMode(val label: String) {
     READ_ALOUD("Read Aloud"),
     READ_AND_UNDERSTAND("Read & Understand")
 }
+
+enum class ReadingAccent(val code: String, val shortLabel: String, val label: String) {
+    BANGLADESHI("en-BD", "BD", "Bangladeshi (en-BD)"),
+    BRITISH("en-GB", "UK", "British (en-GB)"),
+    US("en-US", "US", "US (en-US)");
+
+    companion object {
+        fun fromCode(code: String?): ReadingAccent = when (code?.trim()?.lowercase()) {
+            "en-bd", "en_bd", "bd", "bangladeshi" -> BANGLADESHI
+            "en-gb", "en_gb", "gb", "uk", "british" -> BRITISH
+            else -> US
+        }
+    }
+}
+

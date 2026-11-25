@@ -21,6 +21,7 @@ data class AudioManagerState(
     val accent: String = "en-US",
     val selectedVoiceId: String = "",
     val availableVoices: List<TtsVoiceOption> = emptyList(),
+    val accentStatusNote: String? = null,
     val sttSupported: Boolean = false,
     val isListening: Boolean = false,
     val errorMessage: String? = null
@@ -65,6 +66,11 @@ class AudioManager(registry: ProviderRegistry) {
         scope.launch {
             tts.availableVoices.collect { voices ->
                 _state.update { it.copy(availableVoices = voices) }
+            }
+        }
+        scope.launch {
+            tts.accentStatusNote.collect { note ->
+                _state.update { it.copy(accentStatusNote = note) }
             }
         }
         scope.launch {
@@ -245,13 +251,19 @@ class AudioManager(registry: ProviderRegistry) {
     }
 
     fun setAccent(accent: String) {
-        _state.update { it.copy(accent = accent) }
+        _state.update { it.copy(accent = accent, selectedVoiceId = "") }
+        tts.setVoice("")
         tts.setAccent(accent)
     }
 
     fun selectVoice(voiceId: String) {
         _state.update { it.copy(selectedVoiceId = voiceId) }
         tts.setVoice(voiceId)
+    }
+
+    fun previewVoice(voiceId: String) {
+        selectVoice(voiceId)
+        speakWord("Hello! This voice will read your English passage.")
     }
 
     fun speakWord(word: String) {

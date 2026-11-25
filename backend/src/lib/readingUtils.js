@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 
 export const READING_CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 export const READING_SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5];
-export const READING_ACCENTS = ["en-US", "en-GB"];
+export const READING_ACCENTS = ["en-BD", "en-GB", "en-US"];
 
 const ABBREV_MARKER = "\u0000DOT\u0000";
 const ABBREV_REGEX = /\b(a\.m|p\.m|e\.g|i\.e|U\.S|U\.K|Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc)\./gi;
@@ -33,7 +33,13 @@ export function normalizeSpeed(raw) {
 
 export function normalizeAccent(raw) {
   const s = String(raw || "").trim();
-  if (s === "en-GB" || s.toLowerCase() === "en_gb") return "en-GB";
+  const lower = s.toLowerCase();
+  if (lower === "en-bd" || lower === "en_bd" || lower === "bd" || lower === "bangladeshi") {
+    return "en-BD";
+  }
+  if (lower === "en-gb" || lower === "en_gb" || lower === "gb" || lower === "uk" || lower === "british") {
+    return "en-GB";
+  }
   return "en-US";
 }
 

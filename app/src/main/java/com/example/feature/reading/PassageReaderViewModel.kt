@@ -40,10 +40,7 @@ data class ReadAloudUiState(
     val partialTranscript: String = "",
     val finalTranscript: String = "",
     val comparison: TextMatchComparisonResult? = null,
-    val manualModeActive: Boolean = false,
-    val manualFallbackReason: String? = null,
-    val manualTypedTranscript: String = "",
-    val manualCompletedSentenceIds: Set<String> = emptySet(),
+    val micStatusMessage: String? = null,
     val isSavingAttempt: Boolean = false,
     val savedAttemptMessage: String? = null
 )
@@ -146,9 +143,8 @@ class PassageReaderViewModel(
                             lastSentenceIndex = initialIdx,
                             totalSessionSeconds = prog?.totalSeconds ?: 0,
                             readAloud = it.readAloud.copy(
-                                manualModeActive = !sttSupported,
-                                manualFallbackReason = if (!sttSupported) {
-                                    "Speech recognition is not supported on this device. Manual Reading Mode is enabled."
+                                micStatusMessage = if (!sttSupported) {
+                                    "Speech recognition is not supported on this device."
                                 } else null
                             )
                         )
@@ -231,8 +227,29 @@ class PassageReaderViewModel(
     }
 
     fun setSpeed(speed: Float) = audioManager.setSpeed(speed)
-    fun setAccent(accent: String) = audioManager.setAccent(accent)
-    fun selectVoice(voiceId: String) = audioManager.selectVoice(voiceId)
+
+    fun setAccent(accent: String) {
+        audioManager.setAccent(accent)
+        viewModelScope.launch {
+            repository.updateVoicePreferences(accent = accent, voiceName = "")
+        }
+    }
+
+    fun selectVoice(voiceId: String) {
+        audioManager.selectVoice(voiceId)
+        val accent = audioState.value.accent
+        viewModelScope.launch {
+            repository.updateVoicePreferences(accent = accent, voiceName = voiceId)
+        }
+    }
+
+    fun previewVoice(voiceId: String) {
+        audioManager.previewVoice(voiceId)
+        val accent = audioState.value.accent
+        viewModelScope.launch {
+            repository.updateVoicePreferences(accent = accent, voiceName = voiceId)
+        }
+    }
 
     private fun markSentenceRead(index: Int, sentenceId: String) {
         _uiState.update { state ->
@@ -422,7 +439,7 @@ class PassageReaderViewModel(
         }
     }
 
-    // ---------- READ ALOUD (TEXT MATCHING + MANUAL MODE FALLBACK) ----------
+    // ---------- READ ALOUD (VOICE TEXT MATCHING) ----------
 
     fun startReadAloudMic() {
         val activeIdx = audioState.value.activeSentenceIndex
@@ -433,6 +450,7 @@ class PassageReaderViewModel(
                     partialTranscript = "",
                     finalTranscript = "",
                     comparison = null,
+                    micStatusMessage = null,
                     savedAttemptMessage = null
                 )
             )
@@ -453,22 +471,18 @@ class PassageReaderViewModel(
                         readAloud = it.readAloud.copy(
                             partialTranscript = finalText,
                             finalTranscript = finalText,
-                            comparison = result
+                            comparison = result,
+                            micStatusMessage = null
                         )
                     )
                 }
                 persistReadAloudAttempt(result)
             },
             onError = { err ->
-                val switchManual = !audioManager.state.value.sttSupported ||
-                    err.contains("not supported", ignoreCase = true) ||
-                    err.contains("not available", ignoreCase = true) ||
-                    err.contains("permission", ignoreCase = true)
                 _uiState.update {
                     it.copy(
                         readAloud = it.readAloud.copy(
-                            manualModeActive = it.readAloud.manualModeActive || switchManual,
-                            manualFallbackReason = err
+                            micStatusMessage = err
                         )
                     )
                 }
@@ -480,57 +494,14 @@ class PassageReaderViewModel(
         audioManager.stopReadAloudListening()
     }
 
-    fun enableManualReadingMode(reason: String? = null) {
-        audioManager.cancelReadAloudListening()
+    fun onMicPermissionDenied() {
         _uiState.update {
             it.copy(
                 readAloud = it.readAloud.copy(
-                    manualModeActive = true,
-                    manualFallbackReason = reason
-                        ?: "Manual Reading Mode active. Tap sentences as you read them aloud or type what you read."
+                    micStatusMessage = "Microphone permission is required to speak sentences aloud."
                 )
             )
         }
-    }
-
-    fun disableManualReadingModeIfSupported() {
-        if (!audioManager.state.value.sttSupported) return
-        _uiState.update {
-            it.copy(readAloud = it.readAloud.copy(manualModeActive = false, manualFallbackReason = null))
-        }
-    }
-
-    fun updateManualTypedTranscript(text: String) {
-        _uiState.update {
-            it.copy(readAloud = it.readAloud.copy(manualTypedTranscript = text))
-        }
-    }
-
-    fun evaluateManualTypedMatch() {
-        val activeIdx = audioState.value.activeSentenceIndex
-        val sentence = _uiState.value.passage?.sentences?.getOrNull(activeIdx) ?: return
-        val typed = _uiState.value.readAloud.manualTypedTranscript.trim()
-        if (typed.isBlank()) return
-        val result = audioManager.assessTextMatch(sentence.en, typed)
-        markSentenceRead(activeIdx, sentence.sentenceId)
-        _uiState.update {
-            it.copy(
-                readAloud = it.readAloud.copy(
-                    finalTranscript = typed,
-                    comparison = result
-                )
-            )
-        }
-        persistReadAloudAttempt(result)
-    }
-
-    fun toggleManualSentenceRead(index: Int, sentenceId: String) {
-        _uiState.update { state ->
-            val current = state.readAloud.manualCompletedSentenceIds
-            val next = if (current.contains(sentenceId)) current - sentenceId else current + sentenceId
-            state.copy(readAloud = state.readAloud.copy(manualCompletedSentenceIds = next))
-        }
-        markSentenceRead(index, sentenceId)
     }
 
     private fun persistReadAloudAttempt(comp: TextMatchComparisonResult) {

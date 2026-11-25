@@ -79,7 +79,10 @@ test("evaluateComprehensionAnswers grades MCQ, True/False, and Short Answer accu
 test("Reading normalization and optional MP3 URL validation behave safely", () => {
   assert.equal(normalizeSpeed(0.8), 0.75);
   assert.equal(normalizeSpeed(1.4), 1.5);
+  assert.equal(normalizeAccent("en-BD"), "en-BD");
+  assert.equal(normalizeAccent("bangladeshi"), "en-BD");
   assert.equal(normalizeAccent("en-GB"), "en-GB");
+  assert.equal(normalizeAccent("british"), "en-GB");
   assert.equal(normalizeAccent("fr-FR"), "en-US");
   assert.equal(normalizeReadingGoalMinutes(2), 5);
   assert.equal(normalizeReadingGoalMinutes(200), 120);

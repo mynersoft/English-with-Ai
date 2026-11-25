@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +54,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -166,8 +167,11 @@ fun PassageReaderScreen(
                 else -> {
                     val passage = uiState.passage!!
                     val totalSentences = passage.sentences.size
+                    val completedSentences = passage.sentences
+                        .count { uiState.readSentenceIds.contains(it.sentenceId) }
+                        .coerceIn(0, totalSentences)
                     val readPct = if (totalSentences > 0) {
-                        (uiState.readSentenceIds.size.toFloat() / totalSentences.toFloat()).coerceIn(0f, 1f)
+                        (completedSentences.toFloat() / totalSentences.toFloat()).coerceIn(0f, 1f)
                     } else 0f
 
                     Column(
@@ -184,7 +188,7 @@ fun PassageReaderScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Reading Progress · ${uiState.readSentenceIds.size}/$totalSentences sentences",
+                                    text = "Reading Progress · $completedSentences/$totalSentences sentences",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = pal.textSecondary
                                 )
@@ -220,23 +224,53 @@ fun PassageReaderScreen(
                             onPrevious = viewModel::previousSentence,
                             onNext = viewModel::nextSentence,
                             onSelectSpeed = viewModel::setSpeed,
-                            onSelectVoice = viewModel::selectVoice
+                            onSelectAccent = viewModel::setAccent,
+                            onSelectVoice = viewModel::selectVoice,
+                            onPreviewVoice = viewModel::previewVoice
                         )
 
-                        // Mode Switcher
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        // Mode Switcher (segmented pill tabs so full labels never clip)
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = pal.card,
+                            border = BorderStroke(1.dp, pal.border),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            ReadingPracticeMode.entries.forEach { mode ->
-                                FilterChip(
-                                    selected = uiState.mode == mode,
-                                    onClick = { viewModel.selectMode(mode) },
-                                    label = { Text(mode.label, maxLines = 1) },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("reading_mode_${mode.name.lowercase()}")
-                                )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                ReadingPracticeMode.entries.forEach { mode ->
+                                    val selected = uiState.mode == mode
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (selected) pal.primary else pal.card,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .minimumInteractiveComponentSize()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { viewModel.selectMode(mode) }
+                                            .testTag("reading_mode_${mode.name.lowercase()}")
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
+                                        ) {
+                                            Text(
+                                                text = mode.label,
+                                                fontSize = 12.sp,
+                                                lineHeight = 14.sp,
+                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (selected) pal.onPrimary else pal.textSecondary,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -263,14 +297,10 @@ fun PassageReaderScreen(
                                         readAloudState = uiState.readAloud,
                                         onStartMic = viewModel::startReadAloudMic,
                                         onStopMic = viewModel::stopReadAloudMic,
+                                        onMicPermissionDenied = viewModel::onMicPermissionDenied,
                                         onPlayActiveSentence = { viewModel.playSentence(audioState.activeSentenceIndex) },
                                         onPreviousSentence = viewModel::previousSentence,
-                                        onNextSentence = viewModel::nextSentence,
-                                        onEnableManualMode = { viewModel.enableManualReadingMode() },
-                                        onDisableManualMode = viewModel::disableManualReadingModeIfSupported,
-                                        onManualTextChange = viewModel::updateManualTypedTranscript,
-                                        onEvaluateManualText = viewModel::evaluateManualTypedMatch,
-                                        onToggleManualSentenceRead = viewModel::toggleManualSentenceRead
+                                        onNextSentence = viewModel::nextSentence
                                     )
                                 }
 

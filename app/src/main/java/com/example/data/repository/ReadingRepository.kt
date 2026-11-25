@@ -219,6 +219,14 @@ class ReadingRepository {
         parseSettings(data.optJSONObject("settings"))
     }
 
+    suspend fun updateVoicePreferences(accent: String, voiceName: String): Result<ReadingSettings> = safeCall {
+        val payload = JSONObject()
+            .put("accent", accent)
+            .put("voiceName", voiceName)
+        val data = requestJson("PUT", "/api/v1/reading/settings", payload)
+        parseSettings(data.optJSONObject("settings"))
+    }
+
     // ---------- ADMIN API ----------
 
     suspend fun adminFetchCategories(): Result<List<ReadingCategory>> = safeCall {

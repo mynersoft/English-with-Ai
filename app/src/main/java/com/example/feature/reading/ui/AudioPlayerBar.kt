@@ -17,7 +17,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Pause
@@ -51,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.domain.model.ReadingAccent
 import com.example.feature.reading.audio.AudioManagerState
 import com.example.feature.reading.audio.AudioStatus
 import com.example.feature.reading.audio.TtsVoiceOption
@@ -70,12 +74,15 @@ fun AudioPlayerBar(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSelectSpeed: (Float) -> Unit,
+    onSelectAccent: (String) -> Unit,
     onSelectVoice: (String) -> Unit,
+    onPreviewVoice: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val pal = readingPalette()
     var showVoicePicker by remember { mutableStateOf(false) }
     val speeds = listOf(0.75f, 1.0f, 1.25f, 1.5f)
+    val activeAccent = ReadingAccent.fromCode(audioState.accent)
 
     Surface(
         shape = RoundedCornerShape(18.dp),
@@ -110,7 +117,7 @@ fun AudioPlayerBar(
                 ) {
                     Icon(Icons.Filled.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Voice", style = MaterialTheme.typography.labelMedium)
+                    Text("Voice · ${activeAccent.shortLabel}", style = MaterialTheme.typography.labelMedium, maxLines = 1)
                 }
             }
 
@@ -265,26 +272,34 @@ fun AudioPlayerBar(
             voices = audioState.availableVoices,
             selectedVoiceId = audioState.selectedVoiceId,
             accent = audioState.accent,
+            accentStatusNote = audioState.accentStatusNote,
+            onSelectAccent = onSelectAccent,
             onSelectVoice = {
                 onSelectVoice(it)
                 showVoicePicker = false
             },
+            onPreviewVoice = onPreviewVoice,
             onDismiss = { showVoicePicker = false }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun VoiceSelectorSheet(
     voices: List<TtsVoiceOption>,
     selectedVoiceId: String,
     accent: String,
+    accentStatusNote: String?,
+    onSelectAccent: (String) -> Unit,
     onSelectVoice: (String) -> Unit,
+    onPreviewVoice: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val pal = readingPalette()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val currentAccent = ReadingAccent.fromCode(accent)
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -298,52 +313,134 @@ private fun VoiceSelectorSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Select Reader Voice ($accent)",
+                text = "English Accent & Reader Voice",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = pal.textPrimary
             )
-            if (voices.isEmpty()) {
-                Text(
-                    text = "Using default system voice for $accent.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = pal.textSecondary
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 320.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+
+            Text(
+                text = "Choose Accent",
+                style = MaterialTheme.typography.labelMedium,
+                color = pal.textSecondary
+            )
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                ReadingAccent.entries.forEach { opt ->
+                    FilterChip(
+                        selected = currentAccent == opt,
+                        onClick = { onSelectAccent(opt.code) },
+                        label = { Text(opt.label) },
+                        modifier = Modifier.testTag("player_accent_${opt.code}")
+                    )
+                }
+            }
+
+            if (!accentStatusNote.isNullOrBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = pal.primaryContainer.copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(voices, key = { it.id }) { voice ->
-                        val isSelected = voice.id == selectedVoiceId
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) pal.primaryContainer else pal.background,
-                            border = BorderStroke(1.dp, if (isSelected) pal.primary else pal.border),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelectVoice(voice.id) }
-                                .minimumInteractiveComponentSize()
+                    Text(
+                        text = accentStatusNote,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = pal.textPrimary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = pal.border)
+
+            Text(
+                text = "Device Voices (${voices.size})",
+                style = MaterialTheme.typography.labelMedium,
+                color = pal.textSecondary
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                item(key = "auto_default_voice") {
+                    val isAuto = selectedVoiceId.isBlank()
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isAuto) pal.primaryContainer else pal.background,
+                        border = BorderStroke(1.dp, if (isAuto) pal.primary else pal.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectVoice("") }
+                            .minimumInteractiveComponentSize()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = voice.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = pal.textPrimary
-                                    )
-                                    Text(
-                                        text = "${voice.localeTag}${if (voice.isNetworkRequired) " · Online" else " · Offline"}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = pal.textSecondary
-                                    )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Auto Best Voice (${currentAccent.label})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = pal.textPrimary
+                                )
+                                Text(
+                                    text = "Automatically picks the best installed voice for your accent",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = pal.textSecondary
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { onPreviewVoice("") }) {
+                                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Preview voice")
+                                }
+                                if (isAuto) {
+                                    Icon(Icons.Filled.Check, contentDescription = "Selected", tint = pal.primary)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                items(voices, key = { it.id }) { voice ->
+                    val isSelected = voice.id == selectedVoiceId
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected) pal.primaryContainer else pal.background,
+                        border = BorderStroke(1.dp, if (isSelected) pal.primary else pal.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectVoice(voice.id) }
+                            .minimumInteractiveComponentSize()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = voice.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = pal.textPrimary
+                                )
+                                Text(
+                                    text = "${voice.localeTag}${if (voice.isNetworkRequired) " · Online" else " · Offline"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = pal.textSecondary
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { onPreviewVoice(voice.id) }) {
+                                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Preview voice")
                                 }
                                 if (isSelected) {
                                     Icon(Icons.Filled.Check, contentDescription = "Selected", tint = pal.primary)
@@ -353,7 +450,7 @@ private fun VoiceSelectorSheet(
                     }
                 }
             }
-            HorizontalDivider(color = pal.border)
         }
     }
 }
+

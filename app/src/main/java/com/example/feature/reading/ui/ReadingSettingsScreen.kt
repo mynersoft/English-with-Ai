@@ -11,6 +11,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,9 +60,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.domain.model.ReadingAccent
 import com.example.domain.model.ReadingCefrLevel
 import com.example.feature.reading.ReadingSettingsViewModel
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReadingSettingsScreen(
     viewModel: ReadingSettingsViewModel,
@@ -149,13 +153,31 @@ fun ReadingSettingsScreen(
                     // Accent & Voice
                     item {
                         SettingsSectionCard(title = "Accent & Voice") {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("en-US" to "US English (en-US)", "en-GB" to "UK English (en-GB)").forEach { (code, label) ->
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ReadingAccent.entries.forEach { opt ->
                                     FilterChip(
-                                        selected = s.accent == code,
-                                        onClick = { viewModel.updateDraft { it.copy(accent = code, voiceName = "") } },
-                                        label = { Text(label) },
-                                        modifier = Modifier.testTag("settings_accent_$code")
+                                        selected = s.accent == opt.code,
+                                        onClick = { viewModel.updateDraft { it.copy(accent = opt.code, voiceName = "") } },
+                                        label = { Text(opt.label) },
+                                        modifier = Modifier.testTag("settings_accent_${opt.code}")
+                                    )
+                                }
+                            }
+
+                            if (!uiState.accentStatusNote.isNullOrBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = pal.primaryContainer.copy(alpha = 0.55f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = uiState.accentStatusNote.orEmpty(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = pal.textPrimary,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                                     )
                                 }
                             }

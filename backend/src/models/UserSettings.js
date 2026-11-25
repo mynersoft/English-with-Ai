@@ -34,7 +34,7 @@ const userSettingsSchema = new mongoose.Schema(
       },
       accent: {
         type: String,
-        enum: ["en-US", "en-GB"],
+        enum: ["en-BD", "en-GB", "en-US"],
         default: "en-US",
       },
       voiceName: { type: String, default: "" },
