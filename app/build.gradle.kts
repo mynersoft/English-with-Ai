@@ -22,8 +22,9 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     val backendBaseUrl = run {
-      val envFile = rootProject.file(".env")
-      val exampleFile = rootProject.file(".env.example")
+      // Vercel এ deploy করা backend এর URL (শেষে / থাকবে না)
+      val vercelDefaultUrl = "https://engwithai.vercel.app"
+
       fun readKey(file: java.io.File): String? {
         if (!file.exists()) return null
         return file.readLines()
@@ -32,10 +33,15 @@ android {
           ?.trim()
           ?.trim('"', '\'')
       }
-      val fromEnv = readKey(envFile)
+
+      val fromEnv = readKey(rootProject.file(".env"))
       val fromSys = System.getenv("BACKEND_BASE_URL")?.trim()
-      val fromExample = readKey(exampleFile)
-      listOfNotNull(fromEnv, fromSys, fromExample).firstOrNull { it.isNotBlank() }.orEmpty()
+      val fromExample = readKey(rootProject.file(".env.example"))
+
+      listOfNotNull(fromEnv, fromSys, fromExample, vercelDefaultUrl)
+        .map { it.trim().trimEnd('/') }
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
     }
     val escapedBackendUrl = backendBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
     buildConfigField("String", "BACKEND_BASE_URL", "\"$escapedBackendUrl\"")
