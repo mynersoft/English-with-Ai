@@ -94,6 +94,7 @@ private enum class LearningPage {
 @Composable
 fun SentenceLearningScreen(
     onBack: (() -> Unit)? = null,
+    bottomBar: @Composable () -> Unit = {},
     onFullscreenModeChanged: (Boolean) -> Unit = {},
     viewModel: PatternViewModel = viewModel()
 ) {
@@ -114,6 +115,7 @@ fun SentenceLearningScreen(
             PatternListScreen(
                 state = listState,
                 onBack = onBack,
+                bottomBar = bottomBar,
                 onRefresh = { viewModel.loadPatterns() },
                 onSelectCategory = { viewModel.selectCategory(it) },
                 onPatternClick = { patternId ->
@@ -165,6 +167,7 @@ fun SentenceLearningScreen(
 private fun PatternListScreen(
     state: PatternListUiState,
     onBack: (() -> Unit)? = null,
+    bottomBar: @Composable () -> Unit = {},
     onRefresh: () -> Unit,
     onSelectCategory: (String) -> Unit,
     onPatternClick: (String) -> Unit
@@ -187,6 +190,7 @@ private fun PatternListScreen(
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = AppBackground,
+        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = {

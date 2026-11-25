@@ -1,7 +1,9 @@
 package com.example.feature.dashboard
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,64 +15,76 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Style
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.core.common.UiState
 import com.example.core.ui.BannerTone
 import com.example.core.ui.StatusBanner
 import com.example.domain.model.UserProfile
 import com.example.domain.model.UserSession
-import com.example.ui.theme.SuccessGreen
+import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val HomeEmerald = Color(0xFF0E6B3B)
+private val HomeEmeraldBright = Color(0xFF15803D)
+private val HomeSurfaceBg = Color(0xFFF8FAF9)
+private val HomeTextDark = Color(0xFF111827)
+private val HomeTextMuted = Color(0xFF6B7280)
+private val HomeFlameOrange = Color(0xFFF97316)
+
 @Composable
 fun DashboardScreen(
     profileState: UiState<UserProfile?>,
@@ -78,70 +92,40 @@ fun DashboardScreen(
     fallbackEmail: String,
     isEmailVerified: Boolean,
     actionState: DashboardActionState,
+    bottomBar: @Composable () -> Unit = {},
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenSpeaking: () -> Unit = {},
     onOpenSentenceLearning: () -> Unit = {},
     onOpenVocabulary: () -> Unit = {},
+    onOpenReading: () -> Unit = {},
+    onOpenChat: () -> Unit = {},
+    onOpenProgress: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     onRetryBackendSync: () -> Unit = {},
     onSignOut: () -> Unit
 ) {
+    val profile = (profileState as? UiState.Success)?.data
+    val streakDays = (profile?.streakDays ?: 1L).toInt().coerceAtLeast(1)
+    val displayName = profile?.displayName?.takeIf { it.isNotBlank() } ?: "Learner"
+    val firstName = displayName.trim().substringBefore(" ").ifBlank { displayName }
+    val level = profile?.safeLevel?.displayName ?: "Beginner"
+    val currentDay = (profile?.currentDay ?: 1L).toInt().coerceIn(1, 60)
+    val dailyGoalMin = (profile?.dailyGoalMinutes ?: 20L).toInt()
+    val activeSessionsCount = (sessionsState as? UiState.Success)?.data
+        ?.count { it.activeSession } ?: 1
+
     Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = HomeSurfaceBg,
+        bottomBar = bottomBar,
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            MaterialTheme.colorScheme.primary,
-                                            MaterialTheme.colorScheme.secondary
-                                        )
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.School,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Text(
-                            text = "English AI",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = onSignOut,
-                        enabled = !actionState.isBusy,
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("dashboard_sign_out_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Logout,
-                            contentDescription = "Sign Out"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+            HomeTopHeader(
+                streakDays = streakDays,
+                displayName = displayName,
+                onStreakClick = onOpenProgress,
+                onAvatarClick = onOpenProgress
             )
         }
     ) { innerPadding ->
@@ -157,16 +141,17 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(color = HomeEmerald)
                     }
                 }
+
                 is UiState.Error -> {
                     LazyColumn(
                         modifier = Modifier
                             .widthIn(max = 600.dp)
                             .fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         item {
                             StatusBanner(message = profileState.message, tone = BannerTone.ERROR)
@@ -181,50 +166,47 @@ fun DashboardScreen(
                             }
                         }
                         item {
-                            Text(
-                                text = "Quick Screen Navigation",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground
+                            AllHomeFeaturesSection(
+                                level = level,
+                                currentDay = currentDay,
+                                onOpenSentenceLearning = onOpenSentenceLearning,
+                                onOpenVocabulary = onOpenVocabulary,
+                                onOpenReading = onOpenReading,
+                                onOpenSpeaking = onOpenSpeaking,
+                                onOpenChat = onOpenChat,
+                                onOpenProgress = onOpenProgress
                             )
                         }
                         item {
-                            AllScreensButtonGrid(
+                            AccountControlsSection(
+                                activeSessionsCount = activeSessionsCount,
                                 isAdmin = actionState.isAdmin,
-                                onOpenSpeaking = onOpenSpeaking,
-                                onOpenSentenceLearning = onOpenSentenceLearning,
-                                onOpenVocabulary = onOpenVocabulary,
+                                isBusy = actionState.isBusy,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
-                                onOpenAdmin = onOpenAdmin
-                            )
-                        }
-                        item {
-                            SignOutButtonCard(
-                                isBusy = actionState.isBusy,
-                                testTag = "dashboard_error_sign_out_button",
+                                onOpenAdmin = onOpenAdmin,
                                 onSignOut = onSignOut
                             )
                         }
                     }
                 }
-                is UiState.Success -> {
-                    val profile = profileState.data
-                    val activeSessionsCount = (sessionsState as? UiState.Success)?.data
-                        ?.count { it.activeSession } ?: 1
 
+                is UiState.Success -> {
                     LazyColumn(
                         modifier = Modifier
                             .widthIn(max = 600.dp)
                             .fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        item {
-                            StatusBanner(
-                                message = actionState.bannerMessage,
-                                tone = actionState.bannerTone
-                            )
+                        if (!actionState.bannerMessage.isNullOrBlank()) {
+                            item {
+                                StatusBanner(
+                                    message = actionState.bannerMessage,
+                                    tone = actionState.bannerTone
+                                )
+                            }
                         }
 
                         if (!actionState.backendSyncError.isNullOrBlank()) {
@@ -237,167 +219,59 @@ fun DashboardScreen(
                             }
                         }
 
+                        // Greeting Headline matching reference image 3
                         item {
-                            WelcomeHeroCard(
-                                displayName = profile?.displayName ?: "Learner",
-                                email = profile?.email ?: fallbackEmail,
-                                verified = isEmailVerified || (profile?.emailVerified == true),
-                                provider = profile?.authProvider ?: "password",
-                                currentDay = (profile?.currentDay ?: 1L).toInt(),
-                                level = profile?.safeLevel?.displayName ?: "Beginner"
+                            HomeGreetingSection(
+                                firstName = firstName,
+                                currentDay = currentDay,
+                                level = level,
+                                dailyGoalMin = dailyGoalMin,
+                                onOpenProgress = onOpenProgress
                             )
                         }
 
+                        // All Learning Features displayed prominently on Home Page
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                MetricCard(
-                                    icon = Icons.Filled.LocalFireDepartment,
-                                    label = "Streak",
-                                    value = "${profile?.streakDays ?: 1L} day",
-                                    accent = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                MetricCard(
-                                    icon = Icons.Filled.CalendarMonth,
-                                    label = "Daily Goal",
-                                    value = "${profile?.dailyGoalMinutes ?: 20L} min",
-                                    accent = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                MetricCard(
-                                    icon = Icons.Filled.Translate,
-                                    label = "Bangla Help",
-                                    value = if (profile?.banglaExplanations != false) "On" else "Off",
-                                    accent = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-
-                        item {
-                            Text(
-                                text = "Quick Screen Navigation",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-
-                        item {
-                            AllScreensButtonGrid(
-                                isAdmin = actionState.isAdmin,
-                                onOpenSpeaking = onOpenSpeaking,
+                            AllHomeFeaturesSection(
+                                level = level,
+                                currentDay = currentDay,
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
+                                onOpenReading = onOpenReading,
+                                onOpenSpeaking = onOpenSpeaking,
+                                onOpenChat = onOpenChat,
+                                onOpenProgress = onOpenProgress
+                            )
+                        }
+
+                        // Student Profile & Progress Card
+                        item {
+                            StudentProgressShortcutCard(
+                                displayName = displayName,
+                                email = profile?.email ?: fallbackEmail,
+                                streakDays = streakDays,
+                                currentDay = currentDay,
+                                dailyGoalMin = dailyGoalMin,
+                                verified = isEmailVerified || (profile?.emailVerified == true),
+                                onClick = onOpenProgress
+                            )
+                        }
+
+                        // Account, Security & Admin Dashboard (Admin shown strictly to admins)
+                        item {
+                            AccountControlsSection(
+                                activeSessionsCount = activeSessionsCount,
+                                isAdmin = actionState.isAdmin,
+                                isBusy = actionState.isBusy,
                                 onOpenProfile = onOpenProfile,
                                 onOpenSessions = onOpenSessions,
                                 onOpenSecurity = onOpenSecurity,
-                                onOpenAdmin = onOpenAdmin
-                            )
-                        }
-
-                        item {
-                            Text(
-                                text = "Learning & Practice",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-
-                        item {
-                            AccountNavCard(
-                                icon = Icons.Filled.Translate,
-                                title = "Vocabulary Mastery",
-                                subtitle = "Daily 5-word learning, flashcards, Bangla quizzes, review & speaking",
-                                testTag = "nav_vocabulary_card",
-                                onClick = onOpenVocabulary
-                            )
-                        }
-
-                        item {
-                            AccountNavCard(
-                                icon = Icons.Filled.Mic,
-                                title = "AI Speaking Partner",
-                                subtitle = "Talk in English with AI and see corrections for your mistakes",
-                                testTag = "nav_speaking_card",
-                                onClick = onOpenSpeaking
-                            )
-                        }
-
-                        item {
-                            AccountNavCard(
-                                icon = Icons.AutoMirrored.Filled.MenuBook,
-                                title = "Sentence Patterns",
-                                subtitle = "Practice spoken English structures with Bangla meaning & speaking drills",
-                                testTag = "nav_patterns_card",
-                                onClick = onOpenSentenceLearning
-                            )
-                        }
-
-                        item {
-                            Text(
-                                text = "Account & Session Center",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-
-                        item {
-                            AccountNavCard(
-                                icon = Icons.Filled.ManageAccounts,
-                                title = "Profile & Learning Preferences",
-                                subtitle = "Edit display name, level (${profile?.safeLevel?.displayName ?: "Beginner"}), and daily target",
-                                testTag = "nav_profile_card",
-                                onClick = onOpenProfile
-                            )
-                        }
-
-                        item {
-                            AccountNavCard(
-                                icon = Icons.Filled.Devices,
-                                title = "Active Sessions & Devices",
-                                subtitle = "$activeSessionsCount active session(s) synced across your devices",
-                                testTag = "nav_sessions_card",
-                                onClick = onOpenSessions
-                            )
-                        }
-
-                        item {
-                            AccountNavCard(
-                                icon = Icons.Filled.Security,
-                                title = "Security, Password & Account",
-                                subtitle = "Change password, send recovery link, deactivate or delete account",
-                                testTag = "nav_security_card",
-                                onClick = onOpenSecurity
-                            )
-                        }
-
-                        if (actionState.isAdmin) {
-                            item {
-                                AccountNavCard(
-                                    icon = Icons.Filled.AdminPanelSettings,
-                                    title = "Admin Dashboard",
-                                    subtitle = "Post & edit patterns, vocabulary words, categories, audio & CSV import",
-                                    testTag = "nav_admin_card",
-                                    onClick = onOpenAdmin
-                                )
-                            }
-                        }
-
-                        item {
-                            SignOutButtonCard(
-                                isBusy = actionState.isBusy,
-                                testTag = "dashboard_bottom_sign_out_button",
+                                onOpenAdmin = onOpenAdmin,
                                 onSignOut = onSignOut
                             )
                         }
 
-                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                        item { Spacer(modifier = Modifier.height(10.dp)) }
                     }
                 }
             }
@@ -406,357 +280,880 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun AllScreensButtonGrid(
-    isAdmin: Boolean,
-    onOpenSpeaking: () -> Unit,
-    onOpenSentenceLearning: () -> Unit,
-    onOpenVocabulary: () -> Unit,
-    onOpenProfile: () -> Unit,
-    onOpenSessions: () -> Unit,
-    onOpenSecurity: () -> Unit,
-    onOpenAdmin: () -> Unit
+private fun HomeTopHeader(
+    streakDays: Int,
+    displayName: String,
+    onStreakClick: () -> Unit,
+    onAvatarClick: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ScreenQuickButton(
-            icon = Icons.Filled.Translate,
-            label = "Vocabulary Mastery (Daily 5 Words)",
-            testTag = "quick_nav_vocabulary_button",
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            onClick = onOpenVocabulary,
-            modifier = Modifier.fillMaxWidth()
-        )
+    Surface(
+        color = Color.White,
+        shadowElevation = 1.dp
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            ScreenQuickButton(
-                icon = Icons.Filled.Mic,
-                label = "AI Speaking",
-                testTag = "quick_nav_speaking_button",
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                onClick = onOpenSpeaking,
-                modifier = Modifier.weight(1f)
+            // Left: Streak pill matching reference image
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFFF3F4F6),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(onClick = onStreakClick)
+                    .minimumInteractiveComponentSize()
+                    .testTag("home_streak_pill")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LocalFireDepartment,
+                        contentDescription = "Streak days",
+                        tint = HomeFlameOrange,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "$streakDays",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = HomeTextDark
+                    )
+                }
+            }
+
+            // Center: Brand logo
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = HomeEmerald, fontWeight = FontWeight.ExtraBold)) {
+                        append("English")
+                    }
+                    withStyle(SpanStyle(color = HomeTextDark, fontWeight = FontWeight.ExtraBold)) {
+                        append(" AI")
+                    }
+                },
+                style = MaterialTheme.typography.titleLarge,
+                letterSpacing = (-0.3).sp
             )
-            ScreenQuickButton(
-                icon = Icons.AutoMirrored.Filled.MenuBook,
-                label = "Patterns",
-                testTag = "quick_nav_patterns_button",
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                onClick = onOpenSentenceLearning,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ScreenQuickButton(
-                icon = Icons.Filled.ManageAccounts,
-                label = "Profile",
-                testTag = "quick_nav_profile_button",
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                onClick = onOpenProfile,
-                modifier = Modifier.weight(1f)
-            )
-            ScreenQuickButton(
-                icon = Icons.Filled.Devices,
-                label = "Sessions",
-                testTag = "quick_nav_sessions_button",
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onOpenSessions,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ScreenQuickButton(
-                icon = Icons.Filled.Security,
-                label = "Security",
-                testTag = "quick_nav_security_button",
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onOpenSecurity,
-                modifier = Modifier.weight(1f)
-            )
-            if (isAdmin) {
-                ScreenQuickButton(
-                    icon = Icons.Filled.AdminPanelSettings,
-                    label = "Admin",
-                    testTag = "quick_nav_admin_button",
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = onOpenAdmin,
-                    modifier = Modifier.weight(1f)
+
+            // Right: Student avatar -> Student Profile / Progress Dashboard
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onAvatarClick)
+                    .testTag("home_student_avatar_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.img_student_avatar),
+                    contentDescription = "$displayName student dashboard",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .border(1.5.dp, Color(0xFFD1FAE5), CircleShape)
                 )
-            } else {
-                Spacer(modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(2.dp)
+                        .size(11.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF16A34A))
+                        .border(1.5.dp, Color.White, CircleShape)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ScreenQuickButton(
-    icon: ImageVector,
-    label: String,
-    testTag: String,
-    containerColor: Color,
-    contentColor: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun HomeGreetingSection(
+    firstName: String,
+    currentDay: Int,
+    level: String,
+    dailyGoalMin: Int,
+    onOpenProgress: () -> Unit
 ) {
-    FilledTonalButton(
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        ),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-        modifier = modifier
-            .height(52.dp)
-            .minimumInteractiveComponentSize()
-            .testTag(testTag)
+    val greetingPrefix = remember {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        when {
+            hour < 12 -> "Good morning"
+            hour < 17 -> "Good afternoon"
+            else -> "Good evening"
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = "$greetingPrefix, $firstName 👋",
+                style = MaterialTheme.typography.bodyMedium,
+                color = HomeTextMuted,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = HomeTextDark, fontWeight = FontWeight.Bold)) {
+                        append("What will you ")
+                    }
+                    withStyle(SpanStyle(color = HomeEmerald, fontWeight = FontWeight.ExtraBold)) {
+                        append("learn today?")
+                    }
+                },
+                style = MaterialTheme.typography.headlineSmall
+            )
+        }
+
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFFE6F4EC),
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onOpenProgress)
+        ) {
+            Text(
+                text = "$level · Day $currentDay/60\n${dailyGoalMin}m goal",
+                style = MaterialTheme.typography.labelSmall,
+                color = HomeEmerald,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
     }
 }
 
 @Composable
-private fun WelcomeHeroCard(
-    displayName: String,
-    email: String,
-    verified: Boolean,
-    provider: String,
+private fun AllHomeFeaturesSection(
+    level: String,
     currentDay: Int,
-    level: String
+    onOpenSentenceLearning: () -> Unit,
+    onOpenVocabulary: () -> Unit,
+    onOpenReading: () -> Unit,
+    onOpenSpeaking: () -> Unit,
+    onOpenChat: () -> Unit,
+    onOpenProgress: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = Color.Transparent,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // 1. Spoken English & Sentence Patterns (Purple-Indigo Hero Card matching Image 3)
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color.Transparent,
+            shadowElevation = 3.dp,
             modifier = Modifier
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .clickable(onClick = onOpenSentenceLearning)
+                .testTag("nav_patterns_card")
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF312E81), Color(0xFF5B21B6))
                         )
                     )
-                )
-                .padding(22.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    .padding(20.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Surface(
-                        color = Color.White.copy(alpha = 0.18f),
-                        shape = RoundedCornerShape(10.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "$level · Day $currentDay of 60",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            text = "Spoken English",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
                         )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            HeroPillBadge(text = level, bg = Color.White, fg = Color(0xFF4338CA))
+                            HeroPillBadge(
+                                text = "Day $currentDay · Patterns",
+                                bg = Color.White.copy(alpha = 0.2f),
+                                fg = Color.White
+                            )
+                        }
+                        Text(
+                            text = "Real-life sentence patterns with Bangla meaning & speaking drills",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.88f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Button(
+                            onClick = onOpenSentenceLearning,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF312E81)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("quick_nav_patterns_button")
+                        ) {
+                            Text("Start Learning", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
 
-                    if (verified) {
-                        Surface(
-                            color = SuccessGreen.copy(alpha = 0.9f),
-                            shape = RoundedCornerShape(10.dp)
+                    // Circular visual accent on right (matching Image 3)
+                    Box(
+                        modifier = Modifier
+                            .size(92.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.16f))
+                            .border(3.dp, Color.White.copy(alpha = 0.7f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.GraphicEq,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(44.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Vocabulary Mastery (Emerald Green Hero Card matching Image 3)
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color.Transparent,
+            shadowElevation = 3.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .clickable(onClick = onOpenVocabulary)
+                .testTag("nav_vocabulary_card")
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF064E3B), Color(0xFF15803D))
+                        )
+                    )
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Vocabulary",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            HeroPillBadge(text = level, bg = Color.White, fg = HomeEmerald)
+                            HeroPillBadge(
+                                text = "5 Words Daily",
+                                bg = Color.White.copy(alpha = 0.2f),
+                                fg = Color.White
+                            )
+                        }
+                        Text(
+                            text = "Flashcards, Bangla quizzes, sentence building & SRS review",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.88f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Button(
+                            onClick = onOpenVocabulary,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = HomeEmerald
+                            ),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("quick_nav_vocabulary_button")
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            Text("Start Learning", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Stacked mini flashcard graphic matching Image 3
+                    Box(
+                        modifier = Modifier.size(width = 92.dp, height = 104.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White.copy(alpha = 0.28f),
+                            modifier = Modifier
+                                .size(width = 76.dp, height = 92.dp)
+                                .offset(x = (-8).dp, y = 4.dp)
+                                .rotate(-7f)
+                        ) {}
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White,
+                            shadowElevation = 4.dp,
+                            modifier = Modifier
+                                .size(width = 82.dp, height = 96.dp)
+                                .offset(x = 4.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Verified,
-                                    contentDescription = "Verified account",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text(
-                                    text = "Verified",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(42.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFD1FAE5)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Style,
+                                        contentDescription = null,
+                                        tint = HomeEmerald,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "fluent",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = HomeTextDark,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = "সাবলীল",
+                                            fontSize = 8.sp,
+                                            color = HomeTextMuted,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .background(HomeEmeraldBright),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.PlayArrow,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
 
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "Welcome, $displayName",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
+        // 3. Reading Practice Card (Teal Gradient Card)
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Color.Transparent,
+            shadowElevation = 2.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(onClick = onOpenReading)
+                .testTag("nav_reading_card")
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF0F766E), Color(0xFF0D9488))
+                        )
                     )
-                    Text(
-                        text = "$email · Signed in via ${provider.replaceFirstChar { it.uppercase() }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(18.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            HeroPillBadge(text = "CEFR A1–C2", bg = Color.White, fg = Color(0xFF0F766E))
+                            HeroPillBadge(
+                                text = "Read Aloud & Quiz",
+                                bg = Color.White.copy(alpha = 0.2f),
+                                fg = Color.White
+                            )
+                        }
                         Text(
-                            text = "60-Day Curriculum Progress",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White.copy(alpha = 0.9f)
+                            text = "Reading Practice",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                         Text(
-                            text = "${((currentDay / 60f) * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
+                            text = "Listen with audio sync, tap any word for Bangla meaning & check text matching",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.88f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Button(
+                            onClick = onOpenReading,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF0F766E)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("quick_nav_reading_button")
+                        ) {
+                            Text("Start Reading", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoStories,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
                         )
                     }
-                    LinearProgressIndicator(
-                        progress = { (currentDay / 60f).coerceIn(0.02f, 1f) },
-                        color = Color.White,
-                        trackColor = Color.White.copy(alpha = 0.25f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                    )
                 }
             }
+        }
+
+        // 4 & 5. AI Speaking Partner + Student English Chat (2-Column Grid)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            HomeFeatureGridCard(
+                icon = Icons.Filled.Mic,
+                title = "AI Speaking",
+                subtitle = "Real-time voice chat & instant corrections",
+                accent = Color(0xFF2563EB),
+                accentBg = Color(0xFFDBEAFE),
+                testTag = "quick_nav_speaking_button",
+                onClick = onOpenSpeaking,
+                modifier = Modifier.weight(1f)
+            )
+            HomeFeatureGridCard(
+                icon = Icons.Filled.Forum,
+                title = "Student Chat",
+                subtitle = "Study groups, 1-on-1 & handwriting OCR",
+                accent = HomeEmerald,
+                accentBg = Color(0xFFD1FAE5),
+                testTag = "quick_nav_chat_button",
+                onClick = onOpenChat,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
 
 @Composable
-private fun MetricCard(
+private fun HeroPillBadge(
+    text: String,
+    bg: Color,
+    fg: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = bg
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = fg,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun HomeFeatureGridCard(
     icon: ImageVector,
-    label: String,
-    value: String,
+    title: String,
+    subtitle: String,
     accent: Color,
+    accentBg: Color,
+    testTag: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .testTag(testTag)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.14f)),
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(accentBg),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accent,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
             Text(
-                text = value,
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = HomeTextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = label,
+                text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = HomeTextMuted,
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Open",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = accent
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudentProgressShortcutCard(
+    displayName: String,
+    email: String,
+    streakDays: Int,
+    currentDay: Int,
+    dailyGoalMin: Int,
+    verified: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Color(0xFFD1FAE5)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .minimumInteractiveComponentSize()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .testTag("quick_nav_progress_button")
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFE6F4EC)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                    contentDescription = null,
+                    tint = HomeEmerald,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Student Profile & Progress",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = HomeTextDark
+                )
+                Text(
+                    text = "$displayName · $streakDays-day streak · Day $currentDay/60 · ${dailyGoalMin}m/day",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = HomeTextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (email.isNotBlank()) {
+                    Text(
+                        text = if (verified) "$email · Verified" else email,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HomeEmerald,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = HomeTextMuted
             )
         }
     }
 }
 
 @Composable
-private fun AccountNavCard(
+private fun AccountControlsSection(
+    activeSessionsCount: Int,
+    isAdmin: Boolean,
+    isBusy: Boolean,
+    onOpenProfile: () -> Unit,
+    onOpenSessions: () -> Unit,
+    onOpenSecurity: () -> Unit,
+    onOpenAdmin: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Account & Settings",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = HomeTextDark
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CompactAccountTile(
+                icon = Icons.Filled.ManageAccounts,
+                label = "Profile",
+                testTag = "quick_nav_profile_button",
+                onClick = onOpenProfile,
+                modifier = Modifier.weight(1f)
+            )
+            CompactAccountTile(
+                icon = Icons.Filled.Devices,
+                label = "Sessions ($activeSessionsCount)",
+                testTag = "quick_nav_sessions_button",
+                onClick = onOpenSessions,
+                modifier = Modifier.weight(1f)
+            )
+            CompactAccountTile(
+                icon = Icons.Filled.Security,
+                label = "Security",
+                testTag = "quick_nav_security_button",
+                onClick = onOpenSecurity,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (isAdmin) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFFFEF5E6),
+                border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .minimumInteractiveComponentSize()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable(onClick = onOpenAdmin)
+                    .testTag("nav_admin_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .testTag("quick_nav_admin_button"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFFDE68A)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AdminPanelSettings,
+                            contentDescription = null,
+                            tint = Color(0xFFB45309)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Admin Dashboard",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = HomeTextDark
+                        )
+                        Text(
+                            text = "Manage Patterns, Vocabulary, Categories, CSV & Reading",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = HomeTextMuted
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = Color(0xFFB45309)
+                    )
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = onSignOut,
+            enabled = !isBusy,
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.error
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .minimumInteractiveComponentSize()
+                .height(48.dp)
+                .testTag("dashboard_bottom_sign_out_button")
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Logout,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Sign Out",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactAccountTile(
     icon: ImageVector,
-    title: String,
-    subtitle: String,
+    label: String,
     testTag: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier
-            .fillMaxWidth()
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+        modifier = modifier
             .minimumInteractiveComponentSize()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .testTag(testTag)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = HomeEmerald,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeTextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -796,42 +1193,8 @@ private fun BackendSyncWarningCard(
                     .minimumInteractiveComponentSize()
                     .testTag("retry_backend_sync_button")
             ) {
-                Text(if (isSyncing) "Syncing..." else "Retry MongoDB Sync")
+                Text(if (isSyncing) "Syncing..." else "Retry Sync")
             }
         }
-    }
-}
-
-@Composable
-private fun SignOutButtonCard(
-    isBusy: Boolean,
-    testTag: String,
-    onSignOut: () -> Unit
-) {
-    OutlinedButton(
-        onClick = onSignOut,
-        enabled = !isBusy,
-        shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colorScheme.error
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .minimumInteractiveComponentSize()
-            .height(50.dp)
-            .testTag(testTag)
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.Logout,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "Sign Out",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold
-        )
     }
 }

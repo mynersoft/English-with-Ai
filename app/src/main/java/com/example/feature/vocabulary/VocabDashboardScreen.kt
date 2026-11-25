@@ -31,7 +31,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bookmark
@@ -90,6 +89,7 @@ fun VocabularyDashboardScreen(
     dashboardState: UiState<VocabDashboardData>,
     isAdmin: Boolean,
     feedback: VocabActionFeedback,
+    bottomBar: @Composable () -> Unit = {},
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onContinueLearning: () -> Unit,
@@ -103,12 +103,13 @@ fun VocabularyDashboardScreen(
     onOpenProgress: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenFavorites: () -> Unit,
-    onOpenAdmin: () -> Unit
+    onOpenAdmin: () -> Unit = {}
 ) {
     val pal = vocabPalette()
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = pal.background,
+        bottomBar = bottomBar,
         topBar = {
             VocabTopBar(
                 title = "Vocabulary Mastery",
@@ -443,45 +444,6 @@ fun VocabularyDashboardScreen(
                                                 )
                                             }
                                         }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Admin Panel (Strictly Admin Only)
-                        if (isAdmin) {
-                            item {
-                                Surface(
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = pal.goldContainer,
-                                    border = BorderStroke(1.dp, pal.gold.copy(alpha = 0.45f)),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .minimumInteractiveComponentSize()
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .clickable(onClick = onOpenAdmin)
-                                        .testTag("vocab_admin_entry_card")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Icon(Icons.Filled.AdminPanelSettings, contentDescription = null, tint = pal.gold)
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Admin · Vocabulary Manager",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = pal.textPrimary
-                                            )
-                                            Text(
-                                                text = "Add, edit, publish words, categories & CSV bulk import",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = pal.textSecondary
-                                            )
-                                        }
-                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = pal.gold)
                                     }
                                 }
                             }

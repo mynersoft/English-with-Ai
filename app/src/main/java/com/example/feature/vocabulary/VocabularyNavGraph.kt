@@ -29,9 +29,10 @@ private object VocabRoutes {
 
 @Composable
 fun VocabularyRoute(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    bottomBar: @Composable () -> Unit = {},
+    vm: VocabularyViewModel = viewModel()
 ) {
-    val vm: VocabularyViewModel = viewModel()
     val adminVm: VocabAdminViewModel = viewModel()
     val nav = rememberNavController()
 
@@ -64,6 +65,7 @@ fun VocabularyRoute(
                 dashboardState = dashboardState,
                 isAdmin = isAdmin,
                 feedback = feedback,
+                bottomBar = bottomBar,
                 onBack = onBack,
                 onRetry = { vm.loadDashboard() },
                 onContinueLearning = {

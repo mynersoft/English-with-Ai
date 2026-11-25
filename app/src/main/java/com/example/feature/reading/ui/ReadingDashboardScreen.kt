@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -118,16 +117,6 @@ fun ReadingDashboardScreen(
                             .testTag("reading_settings_button")
                     ) {
                         Icon(Icons.Filled.Settings, contentDescription = "Reading settings")
-                    }
-                    if (isAdmin) {
-                        IconButton(
-                            onClick = onOpenAdmin,
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("reading_admin_button")
-                        ) {
-                            Icon(Icons.Filled.AdminPanelSettings, contentDescription = "Reading admin")
-                        }
                     }
                 }
             )

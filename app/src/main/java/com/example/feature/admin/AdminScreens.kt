@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
@@ -42,11 +43,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -70,6 +71,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.feature.reading.ReadingAdminListState
+import com.example.feature.reading.ReadingAdminViewModel
+import com.example.feature.reading.ui.ReadingAdminPanel
 import com.example.feature.vocabulary.VocabAdminPanel
 import com.example.feature.vocabulary.VocabAdminUiState
 import com.example.feature.vocabulary.VocabAdminViewModel
@@ -78,14 +82,17 @@ import com.example.feature.vocabulary.VocabAdminViewModel
 fun AdminRoute(
     onBack: () -> Unit,
     vm: AdminViewModel = viewModel(),
-    vocabAdminVm: VocabAdminViewModel = viewModel()
+    vocabAdminVm: VocabAdminViewModel = viewModel(),
+    readingAdminVm: ReadingAdminViewModel = viewModel()
 ) {
     val access by vm.access.collectAsStateWithLifecycle()
     val patternListState by vm.list.collectAsStateWithLifecycle()
     val vocabAdminState by vocabAdminVm.state.collectAsStateWithLifecycle()
+    val readingListState by readingAdminVm.listState.collectAsStateWithLifecycle()
+    val readingEditorState by readingAdminVm.editorState.collectAsStateWithLifecycle()
 
     var showPatternEditor by rememberSaveable { mutableStateOf(false) }
-    var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary
+    var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary, 3=Reading
     var vocabSubTab by rememberSaveable { mutableIntStateOf(0) }
     var openAddWordTrigger by remember { mutableIntStateOf(0) }
 
@@ -96,15 +103,21 @@ fun AdminRoute(
     LaunchedEffect(access) {
         if (access is AdminAccessState.Allowed) {
             vocabAdminVm.loadInitial()
+            readingAdminVm.loadInitial()
         }
     }
 
     BackHandler {
-        if (showPatternEditor) {
-            showPatternEditor = false
-            vm.loadList()
-        } else {
-            onBack()
+        when {
+            showPatternEditor -> {
+                showPatternEditor = false
+                vm.loadList()
+            }
+            readingEditorState.isEditing -> {
+                readingAdminVm.closeEditor()
+                readingAdminVm.loadInitial()
+            }
+            else -> onBack()
         }
     }
 
@@ -126,52 +139,69 @@ fun AdminRoute(
             )
         }
         is AdminAccessState.Allowed -> {
-            if (showPatternEditor) {
-                AdminEditScreen(
-                    vm = vm,
-                    onClose = {
-                        showPatternEditor = false
-                        vm.loadList()
-                    }
-                )
-            } else {
-                AdminDashboardHub(
-                    activeTab = activeSectionTab,
-                    onSelectTab = { activeSectionTab = it },
-                    patternState = patternListState,
-                    vocabState = vocabAdminState,
-                    vocabSubTab = vocabSubTab,
-                    openAddWordTrigger = openAddWordTrigger,
-                    onBack = onBack,
-                    onRefreshAll = {
-                        vm.loadList()
-                        vocabAdminVm.loadInitial()
-                    },
-                    onNewPattern = {
-                        vm.openNew()
-                        showPatternEditor = true
-                    },
-                    onEditPattern = { id ->
-                        vm.openEdit(id)
-                        showPatternEditor = true
-                    },
-                    onDeletePattern = { id -> vm.deletePattern(id) },
-                    onClearPatternMessage = { vm.clearListMessage() },
-                    onQuickAddVocabulary = {
-                        vocabSubTab = 0
-                        activeSectionTab = 2
-                        openAddWordTrigger++
-                    },
-                    onQuickManageCategories = {
-                        vocabSubTab = 1
-                        activeSectionTab = 2
-                    },
-                    onQuickCsvImport = {
-                        vocabSubTab = 2
-                        activeSectionTab = 2
-                    },
-                    vocabAdminVm = vocabAdminVm
-                )
+            when {
+                showPatternEditor -> {
+                    AdminEditScreen(
+                        vm = vm,
+                        onClose = {
+                            showPatternEditor = false
+                            vm.loadList()
+                        }
+                    )
+                }
+                readingEditorState.isEditing -> {
+                    ReadingAdminPanel(vm = readingAdminVm)
+                }
+                else -> {
+                    AdminDashboardHub(
+                        activeTab = activeSectionTab,
+                        onSelectTab = { activeSectionTab = it },
+                        patternState = patternListState,
+                        vocabState = vocabAdminState,
+                        readingState = readingListState,
+                        vocabSubTab = vocabSubTab,
+                        openAddWordTrigger = openAddWordTrigger,
+                        onBack = onBack,
+                        onRefreshAll = {
+                            vm.loadList()
+                            vocabAdminVm.loadInitial()
+                            readingAdminVm.loadInitial()
+                        },
+                        onNewPattern = {
+                            vm.openNew()
+                            showPatternEditor = true
+                        },
+                        onEditPattern = { id ->
+                            vm.openEdit(id)
+                            showPatternEditor = true
+                        },
+                        onDeletePattern = { id -> vm.deletePattern(id) },
+                        onClearPatternMessage = { vm.clearListMessage() },
+                        onQuickAddVocabulary = {
+                            vocabSubTab = 0
+                            activeSectionTab = 2
+                            openAddWordTrigger++
+                        },
+                        onQuickManageCategories = {
+                            vocabSubTab = 1
+                            activeSectionTab = 2
+                        },
+                        onQuickCsvImport = {
+                            vocabSubTab = 2
+                            activeSectionTab = 2
+                        },
+                        onQuickCreateReading = {
+                            activeSectionTab = 3
+                            readingAdminVm.openNewPassage()
+                        },
+                        onQuickManageReading = {
+                            activeSectionTab = 3
+                        },
+                        onClearReadingMessage = { readingAdminVm.clearBanner() },
+                        vocabAdminVm = vocabAdminVm,
+                        readingAdminVm = readingAdminVm
+                    )
+                }
             }
         }
     }
@@ -257,6 +287,7 @@ private fun AdminDashboardHub(
     onSelectTab: (Int) -> Unit,
     patternState: AdminListState,
     vocabState: VocabAdminUiState,
+    readingState: ReadingAdminListState,
     vocabSubTab: Int,
     openAddWordTrigger: Int,
     onBack: () -> Unit,
@@ -268,7 +299,11 @@ private fun AdminDashboardHub(
     onQuickAddVocabulary: () -> Unit,
     onQuickManageCategories: () -> Unit,
     onQuickCsvImport: () -> Unit,
-    vocabAdminVm: VocabAdminViewModel
+    onQuickCreateReading: () -> Unit,
+    onQuickManageReading: () -> Unit,
+    onClearReadingMessage: () -> Unit,
+    vocabAdminVm: VocabAdminViewModel,
+    readingAdminVm: ReadingAdminViewModel
 ) {
     val snackbar = remember { SnackbarHostState() }
     var confirmDeletePattern by remember { mutableStateOf<AdminPatternSummary?>(null) }
@@ -280,11 +315,28 @@ private fun AdminDashboardHub(
         }
     }
 
+    LaunchedEffect(readingState.message, readingState.error) {
+        val msg = readingState.message ?: readingState.error
+        if (!msg.isNullOrBlank()) {
+            snackbar.showSnackbar(msg)
+            onClearReadingMessage()
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text("Admin Dashboard") },
+                title = {
+                    Column {
+                        Text("Admin Dashboard", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Manage Patterns, Vocabulary & Reading",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
@@ -325,8 +377,9 @@ private fun AdminDashboardHub(
                 .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = activeTab,
+                edgePadding = 12.dp,
                 modifier = Modifier.widthIn(max = 600.dp)
             ) {
                 Tab(
@@ -347,6 +400,12 @@ private fun AdminDashboardHub(
                     text = { Text("Vocabulary (${vocabState.total})") },
                     modifier = Modifier.testTag("admin_tab_vocabulary")
                 )
+                Tab(
+                    selected = activeTab == 3,
+                    onClick = { onSelectTab(3) },
+                    text = { Text("Reading (${readingState.total})") },
+                    modifier = Modifier.testTag("admin_tab_reading")
+                )
             }
 
             when (activeTab) {
@@ -354,11 +413,14 @@ private fun AdminDashboardHub(
                     patternCount = patternState.patterns.size,
                     vocabCount = vocabState.total,
                     categoryCount = vocabState.categories.size,
+                    readingCount = readingState.total,
                     onPostNewPattern = onNewPattern,
                     onOpenPatterns = { onSelectTab(1) },
                     onPostNewVocabulary = onQuickAddVocabulary,
                     onManageCategories = onQuickManageCategories,
-                    onCsvImport = onQuickCsvImport
+                    onCsvImport = onQuickCsvImport,
+                    onCreateReading = onQuickCreateReading,
+                    onManageReading = onQuickManageReading
                 )
                 1 -> AdminPatternsListTab(
                     state = patternState,
@@ -387,6 +449,12 @@ private fun AdminDashboardHub(
                         onImportCsv = { csv -> vocabAdminVm.importCsv(csv) }
                     )
                 }
+                3 -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    ReadingAdminPanel(vm = readingAdminVm)
+                }
             }
         }
     }
@@ -412,11 +480,14 @@ private fun AdminOverviewTab(
     patternCount: Int,
     vocabCount: Int,
     categoryCount: Int,
+    readingCount: Int,
     onPostNewPattern: () -> Unit,
     onOpenPatterns: () -> Unit,
     onPostNewVocabulary: () -> Unit,
     onManageCategories: () -> Unit,
-    onCsvImport: () -> Unit
+    onCsvImport: () -> Unit,
+    onCreateReading: () -> Unit,
+    onManageReading: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -433,12 +504,13 @@ private fun AdminOverviewTab(
                 AdminStatTile("Patterns", patternCount.toString(), Modifier.weight(1f))
                 AdminStatTile("Words", vocabCount.toString(), Modifier.weight(1f))
                 AdminStatTile("Categories", categoryCount.toString(), Modifier.weight(1f))
+                AdminStatTile("Reading", readingCount.toString(), Modifier.weight(1f))
             }
         }
 
         item {
             Text(
-                text = "Quick Content Actions (Admin Only)",
+                text = "Content Management (Admin Only)",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 4.dp)
@@ -494,6 +566,26 @@ private fun AdminOverviewTab(
                 onClick = onCsvImport
             )
         }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.AutoStories,
+                title = "Create Reading Passage",
+                subtitle = "Publish new CEFR reading passages, word meanings & quizzes",
+                testTag = "admin_quick_create_reading",
+                onClick = onCreateReading
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.AutoStories,
+                title = "Manage Reading Passages & Categories",
+                subtitle = "Edit, publish/unpublish passages or organize reading categories",
+                testTag = "admin_quick_manage_reading",
+                onClick = onManageReading
+            )
+        }
     }
 }
 
@@ -505,9 +597,9 @@ private fun AdminStatTile(label: String, value: String, modifier: Modifier) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
     }
 }
