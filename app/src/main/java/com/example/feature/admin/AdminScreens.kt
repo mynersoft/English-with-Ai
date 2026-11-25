@@ -609,7 +609,7 @@ private fun PatternCard(p: AdminPatternSummary, onEdit: () -> Unit, onDelete: ()
             Text(p.meaning, style = MaterialTheme.typography.bodyMedium)
             val outdated = if (p.audioStale > 0) " · ${p.audioStale} outdated" else ""
             Text(
-                "#${p.order} · ${p.sentenceCount} sentences · audio ${p.audioReady}/${p.audioTotal}$outdated",
+                "#${p.order} · ${p.categoryName} · ${p.sentenceCount} sentences · audio ${p.audioReady}/${p.audioTotal}$outdated",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

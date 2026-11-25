@@ -14,7 +14,7 @@ export async function GET() {
     // Project only list-view fields so large explanations and sentence texts aren't transferred.
     const patterns = await Pattern.find()
       .select(
-        "title meaning isPremium order titleAudio.url titleAudio.stale meaningAudio.url meaningAudio.stale examples._id examples.enAudio.url examples.enAudio.stale examples.bnAudio.url examples.bnAudio.stale"
+        "title meaning categoryName isPremium order titleAudio.url titleAudio.stale meaningAudio.url meaningAudio.stale examples._id examples.enAudio.url examples.enAudio.stale examples.bnAudio.url examples.bnAudio.stale"
       )
       .sort({ order: 1, createdAt: 1 })
       .lean();
@@ -28,6 +28,7 @@ export async function GET() {
           id: p._id,
           title: p.title,
           meaning: p.meaning,
+          categoryName: (typeof p.categoryName === "string" && p.categoryName.trim()) ? p.categoryName.trim() : "All",
           isPremium: p.isPremium,
           order: p.order ?? 0,
           sentenceCount: (p.examples || []).length,
@@ -58,9 +59,14 @@ export async function POST(req) {
       return NextResponse.json({ error: "title and meaning are required" }, { status: 400 });
     }
     await connectDB();
+    const categoryName =
+      typeof body.categoryName === "string" && body.categoryName.trim()
+        ? body.categoryName.trim()
+        : "All";
     const pattern = await Pattern.create({
       title: body.title,
       meaning: body.meaning,
+      categoryName,
       explanation: body.explanation,
       isPremium: !!body.isPremium,
       order: body.order ?? 0,

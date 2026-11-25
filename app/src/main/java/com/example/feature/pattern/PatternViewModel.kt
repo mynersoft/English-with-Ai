@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 data class PatternListUiState(
     val isLoading: Boolean = true,
     val patterns: List<PatternSummary> = emptyList(),
+    val selectedCategory: String = "All",
     val errorMessage: String? = null
 )
 
@@ -43,10 +44,13 @@ class PatternViewModel(
             _listState.update { it.copy(isLoading = true, errorMessage = null) }
             repository.fetchPatterns()
                 .onSuccess { items ->
-                    _listState.update {
-                        it.copy(
+                    _listState.update { current ->
+                        val keepSelected = current.selectedCategory.equals("All", ignoreCase = true) ||
+                            items.any { it.categoryName.trim().equals(current.selectedCategory, ignoreCase = true) }
+                        current.copy(
                             isLoading = false,
                             patterns = items,
+                            selectedCategory = if (keepSelected) current.selectedCategory else "All",
                             errorMessage = null
                         )
                     }
@@ -59,6 +63,12 @@ class PatternViewModel(
                         )
                     }
                 }
+        }
+    }
+
+    fun selectCategory(category: String) {
+        _listState.update {
+            it.copy(selectedCategory = category.trim().ifBlank { "All" })
         }
     }
 

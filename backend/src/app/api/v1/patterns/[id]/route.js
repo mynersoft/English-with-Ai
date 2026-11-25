@@ -26,6 +26,7 @@ export async function GET(req, { params }) {
         id: p._id,
         title: p.title,
         meaning: p.meaning,
+        categoryName: (typeof p.categoryName === "string" && p.categoryName.trim()) ? p.categoryName.trim() : "All",
         explanation: p.explanation ?? "",
         isPremium: p.isPremium,
         order: p.order ?? 0,
@@ -73,6 +74,12 @@ export async function PUT(req, { params }) {
     if (body.meaning !== undefined && body.meaning !== p.meaning) {
       p.meaning = body.meaning;
       if (p.meaningAudio?.url) p.meaningAudio.stale = true;
+    }
+    if (body.categoryName !== undefined) {
+      p.categoryName =
+        typeof body.categoryName === "string" && body.categoryName.trim()
+          ? body.categoryName.trim()
+          : "All";
     }
     if (body.explanation !== undefined) p.explanation = body.explanation;
     if (body.isPremium !== undefined) p.isPremium = !!body.isPremium;

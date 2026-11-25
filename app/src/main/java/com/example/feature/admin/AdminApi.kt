@@ -29,6 +29,7 @@ data class AdminPatternSummary(
     val id: String,
     val title: String,
     val meaning: String,
+    val categoryName: String = "All",
     val isPremium: Boolean,
     val order: Int,
     val sentenceCount: Int,
@@ -50,6 +51,7 @@ data class PatternForm(
     val id: String? = null,
     val title: String = "",
     val meaning: String = "",
+    val categoryName: String = "All",
     val explanation: String = "",
     val isPremium: Boolean = false,
     val order: String = "0",
@@ -141,6 +143,7 @@ object AdminApi {
                 id = o.getString("id"),
                 title = o.optString("title"),
                 meaning = o.optString("meaning"),
+                categoryName = o.optString("categoryName").trim().ifBlank { "All" },
                 isPremium = o.optBoolean("isPremium"),
                 order = o.optInt("order"),
                 sentenceCount = o.optInt("sentenceCount"),
@@ -158,6 +161,7 @@ object AdminApi {
             id = o.optString("id").ifBlank { o.getString("_id") },
             title = o.optString("title"),
             meaning = o.optString("meaning"),
+            categoryName = o.optString("categoryName").trim().ifBlank { "All" },
             explanation = if (o.isNull("explanation")) "" else o.optString("explanation"),
             isPremium = o.optBoolean("isPremium"),
             order = o.optInt("order").toString(),
@@ -191,6 +195,7 @@ object AdminApi {
         val body = JSONObject().apply {
             put("title", form.title.trim())
             put("meaning", form.meaning.trim())
+            put("categoryName", form.categoryName.trim().ifBlank { "All" })
             put("explanation", form.explanation)
             put("isPremium", form.isPremium)
             put("order", form.order.toIntOrNull() ?: 0)

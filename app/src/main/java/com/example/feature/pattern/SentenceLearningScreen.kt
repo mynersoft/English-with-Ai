@@ -1,12 +1,8 @@
 package com.englishai.feature.speaking
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +21,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,19 +34,17 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -77,7 +72,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.repository.PatternDetail
@@ -121,6 +115,7 @@ fun SentenceLearningScreen(
                 state = listState,
                 onBack = onBack,
                 onRefresh = { viewModel.loadPatterns() },
+                onSelectCategory = { viewModel.selectCategory(it) },
                 onPatternClick = { patternId ->
                     viewModel.selectPattern(patternId)
                     page = LearningPage.EXPLANATION
@@ -171,8 +166,24 @@ private fun PatternListScreen(
     state: PatternListUiState,
     onBack: (() -> Unit)? = null,
     onRefresh: () -> Unit,
+    onSelectCategory: (String) -> Unit,
     onPatternClick: (String) -> Unit
 ) {
+    val categories = remember(state.patterns) {
+        listOf("All") + state.patterns
+            .map { it.categoryName.trim() }
+            .filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
+            .distinct()
+    }
+    val filteredPatterns = remember(state.patterns, state.selectedCategory) {
+        if (state.selectedCategory.equals("All", ignoreCase = true)) {
+            state.patterns
+        } else {
+            state.patterns.filter {
+                it.categoryName.trim().equals(state.selectedCategory, ignoreCase = true)
+            }
+        }
+    }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = AppBackground,
@@ -256,7 +267,7 @@ private fun PatternListScreen(
             )
 
             Text(
-                "বাক্য গঠনের প্যাটার্ন (${state.patterns.size})",
+                "বাক্য গঠনের প্যাটার্ন (${filteredPatterns.size})",
                 modifier = Modifier.padding(horizontal = 20.dp),
                 color = GrayText,
                 fontSize = 14.sp
@@ -389,14 +400,41 @@ private fun PatternListScreen(
                                 }
                             }
                         }
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(categories, key = { it }) { category ->
+                                val isSelected = category.equals(state.selectedCategory, ignoreCase = true)
+                                val count = if (category.equals("All", ignoreCase = true)) {
+                                    state.patterns.size
+                                } else {
+                                    state.patterns.count {
+                                        it.categoryName.trim().equals(category, ignoreCase = true)
+                                    }
+                                }
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { onSelectCategory(category) },
+                                    label = { Text("$category ($count)") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Green.copy(alpha = 0.14f),
+                                        selectedLabelColor = Green
+                                    ),
+                                    modifier = Modifier.testTag("pattern_category_chip_$category")
+                                )
+                            }
+                        }
                         LazyColumn(
                             contentPadding = PaddingValues(
-                                horizontal = 16.dp,
-                                vertical = 16.dp
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 6.dp,
+                                bottom = 16.dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(state.patterns, key = { it.id }) { pattern ->
+                            items(filteredPatterns, key = { it.id }) { pattern ->
                                 PatternCard(
                                     pattern = pattern,
                                     onClick = { onPatternClick(pattern.id) }
@@ -443,10 +481,30 @@ private fun PatternCard(
                     color = DarkText
                 )
 
+                if (!pattern.categoryName.equals("All", ignoreCase = true)) {
+                    Surface(
+                        color = Green.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.padding(start = 6.dp)
+                    ) {
+                        Text(
+                            pattern.categoryName,
+                            modifier = Modifier.padding(
+                                horizontal = 10.dp,
+                                vertical = 5.dp
+                            ),
+                            color = Green,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
                 if (pattern.isPremium) {
                     Surface(
                         color = Color(0xFFFFF2DE),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.padding(start = 6.dp)
                     ) {
                         Text(
                             "Premium",
@@ -863,43 +921,10 @@ private fun SpeakingPracticeScreen(
 
     var currentIndex by remember { mutableIntStateOf(0) }
     var showAnswer by remember { mutableStateOf(false) }
-    var isListening by remember { mutableStateOf(false) }
-    var spokenText by remember { mutableStateOf<String?>(null) }
-    var micStatus by remember { mutableStateOf<String?>(null) }
 
     val examples = pattern.examples
     val safeIndex = currentIndex.coerceIn(0, (examples.size - 1).coerceAtLeast(0))
     val currentExample = examples[safeIndex]
-
-    fun startSpeechCapture() {
-        audioPlayer.stopAll()
-        isListening = true
-        micStatus = "শুনছি... ইংরেজিতে বলুন"
-        spokenText = null
-        audioPlayer.speech.startListening(
-            onPartial = { partial -> spokenText = partial },
-            onFinal = { finalText ->
-                isListening = false
-                spokenText = finalText
-                showAnswer = true
-                micStatus = "আপনি বলেছেন:"
-            },
-            onErrorMessage = { err ->
-                isListening = false
-                micStatus = err
-            }
-        )
-    }
-
-    val micPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            startSpeechCapture()
-        } else {
-            micStatus = "মাইক্রোফোন পারমিশন প্রয়োজন।"
-        }
-    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -931,9 +956,6 @@ private fun SpeakingPracticeScreen(
                         onClick = {
                             audioPlayer.stopAll()
                             showAnswer = false
-                            isListening = false
-                            spokenText = null
-                            micStatus = null
                         },
                         modifier = Modifier.minimumInteractiveComponentSize()
                     ) {
@@ -1026,28 +1048,13 @@ private fun SpeakingPracticeScreen(
                                 textAlign = TextAlign.Center
                             )
                         }
-
-                        if (!spokenText.isNullOrBlank()) {
-                            Surface(
-                                color = Color.White,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = "“$spokenText”",
-                                    color = DarkText,
-                                    fontSize = 15.sp,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
                     }
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(22.dp),
+                            horizontalArrangement = Arrangement.spacedBy(28.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedIconButton(
@@ -1062,37 +1069,6 @@ private fun SpeakingPracticeScreen(
                                     Icons.AutoMirrored.Filled.VolumeUp,
                                     contentDescription = "Listen",
                                     tint = Green
-                                )
-                            }
-
-                            FilledIconButton(
-                                onClick = {
-                                    if (isListening) {
-                                        audioPlayer.speech.stopListening()
-                                        isListening = false
-                                    } else {
-                                        val granted = ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.RECORD_AUDIO
-                                        ) == PackageManager.PERMISSION_GRANTED
-                                        if (granted) {
-                                            startSpeechCapture()
-                                        } else {
-                                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                        }
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .testTag("practice_mic_button"),
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = if (isListening) Color(0xFFD32F2F) else Green
-                                )
-                            ) {
-                                Icon(
-                                    if (isListening) Icons.Default.Stop else Icons.Default.Mic,
-                                    contentDescription = if (isListening) "Stop listening" else "Speak",
-                                    modifier = Modifier.size(32.dp)
                                 )
                             }
 
@@ -1113,7 +1089,7 @@ private fun SpeakingPracticeScreen(
                         Spacer(Modifier.height(12.dp))
 
                         Text(
-                            text = micStatus ?: "শুনুন  •  বলুন  •  উত্তর দেখুন",
+                            text = "শুনুন  •  উত্তর দেখুন",
                             color = GrayText,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
@@ -1129,9 +1105,6 @@ private fun SpeakingPracticeScreen(
                     audioPlayer.stopAll()
                     currentIndex = if (safeIndex < examples.lastIndex) safeIndex + 1 else 0
                     showAnswer = false
-                    isListening = false
-                    spokenText = null
-                    micStatus = null
                 },
                 modifier = Modifier
                     .fillMaxWidth()

@@ -177,6 +177,17 @@ fun AdminEditScreen(vm: AdminViewModel, onClose: () -> Unit) {
 
             item {
                 OutlinedTextField(
+                    value = form.categoryName,
+                    onValueChange = vm::setCategoryName,
+                    label = { Text("Category Name") },
+                    placeholder = { Text("All") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item {
+                OutlinedTextField(
                     value = form.explanation,
                     onValueChange = vm::setExplanation,
                     label = { Text("Explanation (Bangla)") },

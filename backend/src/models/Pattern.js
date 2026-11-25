@@ -21,6 +21,7 @@ const PatternSchema = new mongoose.Schema(
   {
     title: { type: String, required: true }, // I'd like to + Verb
     meaning: { type: String, required: true }, // আমি ... করতে চাই
+    categoryName: { type: String, trim: true, default: "All" },
     explanation: String,
     isPremium: { type: Boolean, default: false },
     order: { type: Number, default: 0 },

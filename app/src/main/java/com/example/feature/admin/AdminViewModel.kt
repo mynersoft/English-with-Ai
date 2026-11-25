@@ -115,6 +115,7 @@ class AdminViewModel : ViewModel() {
 
     fun setTitle(v: String) = editForm { it.copy(title = v) }
     fun setMeaning(v: String) = editForm { it.copy(meaning = v) }
+    fun setCategoryName(v: String) = editForm { it.copy(categoryName = v) }
     fun setExplanation(v: String) = editForm { it.copy(explanation = v) }
     fun setPremium(v: Boolean) = editForm { it.copy(isPremium = v) }
     fun setOrder(v: String) = editForm { it.copy(order = v.filter(Char::isDigit)) }
