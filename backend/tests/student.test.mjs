@@ -13,7 +13,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test("buildWeekWindow builds 7-day Sun-Sat week with today marker and English range", () => {
-  // 2026-11-25 is Wednesday
+  // 2026-11-25 is Wednhjesday
   const res = buildWeekWindow("2026-11-25");
   assert.equal(res.weekRangeLabel, "Nov 22 - Nov 28");
   assert.equal(res.days.length, 7);
