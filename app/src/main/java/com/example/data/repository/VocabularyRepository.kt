@@ -139,7 +139,18 @@ class VocabularyRepository(context: Context? = null) {
         val dateKey = resolveTodayDateKey(data.optString("date"), timezone)
         val newWordsDone = mergeTodayDoneCount(dateKey, data.optInt("newWordsDone", 0), effectiveGoal)
         val assignedWords = parseWordArray(data.optJSONArray("words"))
-        val combinedWords = supplementDailyWordsIfNeeded(assignedWords, effectiveGoal)
+        val unlearnedAssigned = assignedWords.filter { word ->
+            word.id.isNotBlank() &&
+                !isWordKnownOrLearned(word) &&
+                !isMarkedDailyLocally(word.id, dateKey)
+        }
+        val targetUnlearnedCount = (effectiveGoal - newWordsDone).coerceAtLeast(MIN_DAILY_GOAL)
+        val combinedWords = supplementDailyWordsIfNeeded(
+            initialUnlearned = unlearnedAssigned,
+            targetCount = targetUnlearnedCount,
+            dateKey = dateKey,
+            initialExcludedIds = assignedWords.map { it.id }.toSet()
+        )
         DailyWordsData(
             date = dateKey,
             timezone = timezone,
@@ -768,29 +779,47 @@ class VocabularyRepository(context: Context? = null) {
     }
 
     private suspend fun supplementDailyWordsIfNeeded(
-        assignedWords: List<VocabWord>,
-        targetCount: Int
+        initialUnlearned: List<VocabWord>,
+        targetCount: Int,
+        dateKey: String,
+        initialExcludedIds: Set<String> = emptySet()
     ): List<VocabWord> {
-        if (assignedWords.size >= targetCount) return assignedWords.take(targetCount)
+        if (initialUnlearned.size >= targetCount) return initialUnlearned.take(targetCount)
         val settings = getCachedSettingsLocally() ?: readSettingsFromFirestore()
         val level = settings?.preferredLevel?.takeIf { it.isNotBlank() && it != "ALL" }
-        val seenIds = assignedWords.mapTo(mutableSetOf()) { it.id }
-        val combined = assignedWords.toMutableList()
+        val seenIds = (initialExcludedIds + initialUnlearned.map { it.id })
+            .filter { it.isNotBlank() }
+            .toMutableSet()
+        val combined = initialUnlearned.toMutableList()
 
         suspend fun fetchMore(levelFilter: String?) {
             if (combined.size >= targetCount) return
-            val limit = targetCount.coerceIn(MIN_DAILY_GOAL, 100)
-            val q = buildString {
-                append("?page=1&limit=").append(limit)
-                if (!levelFilter.isNullOrBlank()) append("&level=").append(urlEnc(levelFilter))
-            }
-            val pageData = runCatching { requestJson("GET", "/api/vocabulary/words$q") }.getOrNull() ?: return
-            val candidates = parseWordArray(pageData.optJSONArray("items"))
-            for (word in candidates) {
-                if (combined.size >= targetCount) break
-                if (word.id.isNotBlank() && seenIds.add(word.id) && !word.progress.isKnown && word.progress.learnedAt == null) {
-                    combined.add(word)
+            var page = 1
+            val maxPagesToScan = 6
+            val pageSize = targetCount.coerceIn(25, 50)
+            while (combined.size < targetCount && page <= maxPagesToScan) {
+                val q = buildString {
+                    append("?page=").append(page)
+                    append("&limit=").append(pageSize)
+                    if (!levelFilter.isNullOrBlank()) append("&level=").append(urlEnc(levelFilter))
                 }
+                val pageData = runCatching { requestJson("GET", "/api/vocabulary/words$q") }.getOrNull() ?: break
+                val candidates = parseWordArray(pageData.optJSONArray("items"))
+                if (candidates.isEmpty()) break
+                for (word in candidates) {
+                    if (combined.size >= targetCount) break
+                    if (
+                        word.id.isNotBlank() &&
+                        seenIds.add(word.id) &&
+                        !isWordKnownOrLearned(word) &&
+                        !isMarkedDailyLocally(word.id, dateKey)
+                    ) {
+                        combined.add(word)
+                    }
+                }
+                val totalPages = pageData.optInt("totalPages", 1).coerceAtLeast(1)
+                if (page >= totalPages) break
+                page += 1
             }
         }
 
@@ -942,6 +971,17 @@ class VocabularyRepository(context: Context? = null) {
     private fun isLocallyMarkedKnown(wordId: String): Boolean {
         if (prefs == null || wordId.isBlank()) return false
         return prefs.getStringSet(KEY_KNOWN_WORD_IDS, emptySet()).orEmpty().contains(wordId)
+    }
+
+    private fun isMarkedDailyLocally(wordId: String, dateKey: String): Boolean {
+        if (prefs == null || wordId.isBlank()) return false
+        val uid = currentUidOrDefault()
+        return prefs.getStringSet("${KEY_DAILY_LEARNED_PREFIX}${uid}_$dateKey", emptySet())
+            .orEmpty()
+            .contains(wordId) ||
+            prefs.getStringSet("${KEY_DAILY_EXTRA_PREFIX}${uid}_$dateKey", emptySet())
+                .orEmpty()
+                .contains(wordId)
     }
 
     private fun parseDashboard(data: JSONObject, fromCache: Boolean): VocabDashboardData {
@@ -1109,6 +1149,16 @@ class VocabularyRepository(context: Context? = null) {
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
         @Volatile
         private var firestorePrefsUnavailable = false
+
+        fun isWordKnownOrLearned(word: VocabWord): Boolean {
+            val p = word.progress
+            return p.isKnown ||
+                !p.learnedAt.isNullOrBlank() ||
+                p.reviewCount > 0 ||
+                p.correctCount > 0 ||
+                p.wrongCount > 0 ||
+                !p.status.equals("new", ignoreCase = true)
+        }
 
         fun computeEffectiveDoneCount(
             remoteDone: Int,

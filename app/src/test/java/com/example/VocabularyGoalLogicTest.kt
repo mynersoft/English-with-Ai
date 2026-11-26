@@ -2,7 +2,11 @@ package com.example
 
 import com.example.data.repository.VocabularyRepository
 import com.example.domain.model.VocabSettings
+import com.example.domain.model.VocabWord
+import com.example.domain.model.VocabWordProgress
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VocabularyGoalLogicTest {
@@ -65,5 +69,30 @@ class VocabularyGoalLogicTest {
                 effectiveGoal = 30
             )
         )
+    }
+
+    @Test
+    fun `isWordKnownOrLearned excludes known and previously learned words`() {
+        val brandNew = VocabWord(
+            id = "w1",
+            word = "apple",
+            meaning = "আপেল",
+            progress = VocabWordProgress(status = "new", isKnown = false)
+        )
+        val knownWord = VocabWord(
+            id = "w2",
+            word = "school",
+            meaning = "বিদ্যালয়",
+            progress = VocabWordProgress(status = "mastered", isKnown = true, learnedAt = "2026-11-25")
+        )
+        val learningWord = VocabWord(
+            id = "w3",
+            word = "afraid",
+            meaning = "ভীত",
+            progress = VocabWordProgress(status = "learning", reviewCount = 1, wrongCount = 1)
+        )
+        assertFalse(VocabularyRepository.isWordKnownOrLearned(brandNew))
+        assertTrue(VocabularyRepository.isWordKnownOrLearned(knownWord))
+        assertTrue(VocabularyRepository.isWordKnownOrLearned(learningWord))
     }
 }
