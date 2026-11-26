@@ -1,10 +1,15 @@
 package com.example.feature.pattern
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.core.ui.CelebrationEvent
+import com.example.core.ui.CelebrationRules
+import com.example.core.ui.DailyGoalCelebrationTracker
 import com.example.data.repository.PatternDetail
 import com.example.data.repository.PatternRepository
 import com.example.data.repository.PatternSummary
+import com.example.data.repository.StudentDashboardRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,8 +40,29 @@ class PatternViewModel(
     private val _detailState = MutableStateFlow(PatternDetailUiState())
     val detailState: StateFlow<PatternDetailUiState> = _detailState.asStateFlow()
 
+    private val _celebrationEvent = MutableStateFlow<CelebrationEvent?>(null)
+    val celebrationEvent: StateFlow<CelebrationEvent?> = _celebrationEvent.asStateFlow()
+
     init {
         loadPatterns()
+    }
+
+    fun dismissCelebration() {
+        _celebrationEvent.value = null
+    }
+
+    fun onPatternPracticeCompleted(context: Context, pattern: PatternDetail) {
+        viewModelScope.launch {
+            StudentDashboardRepository(context.applicationContext).recordPatternPractice(pattern.id)
+        }
+        val alreadyCelebratedDailyGoal = DailyGoalCelebrationTracker.hasCelebratedPatternGoalToday(context)
+        if (!alreadyCelebratedDailyGoal) {
+            DailyGoalCelebrationTracker.markPatternGoalCelebratedToday(context)
+        }
+        _celebrationEvent.value = CelebrationRules.resolvePatternCompletionCelebration(
+            patternTitle = pattern.title,
+            alreadyCelebratedDailyGoalToday = alreadyCelebratedDailyGoal
+        )
     }
 
     fun loadPatterns() {

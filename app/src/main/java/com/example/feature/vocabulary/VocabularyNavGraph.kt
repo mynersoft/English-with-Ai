@@ -1,8 +1,11 @@
 package com.example.feature.vocabulary
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -11,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.core.common.UiState
+import com.example.core.ui.CelebrationOverlay
 import com.example.ui.theme.EnglishAITheme
 
 private object VocabRoutes {
@@ -54,16 +58,18 @@ fun VocabularyRoute(
     val favoritesState by vm.favoritesState.collectAsStateWithLifecycle()
     val isAdmin by vm.isAdmin.collectAsStateWithLifecycle()
     val feedback by vm.feedback.collectAsStateWithLifecycle()
+    val celebration by vm.celebrationEvent.collectAsStateWithLifecycle()
     val adminState by adminVm.state.collectAsStateWithLifecycle()
 
     val autoPronounce = (settingsState as? UiState.Success)?.data?.autoPronounce ?: true
 
     EnglishAITheme(darkTheme = false) {
         CompositionLocalProvider(LocalVocabDarkTheme provides false) {
-            NavHost(
-                navController = nav,
-                startDestination = VocabRoutes.DASHBOARD
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                NavHost(
+                    navController = nav,
+                    startDestination = VocabRoutes.DASHBOARD
+                ) {
         composable(VocabRoutes.DASHBOARD) {
             VocabularyDashboardScreen(
                 dashboardState = dashboardState,
@@ -283,7 +289,12 @@ fun VocabularyRoute(
                 onImportCsv = { csv -> adminVm.importCsv(csv) }
             )
         }
-    }
+                }
+                CelebrationOverlay(
+                    event = celebration,
+                    onDismiss = { vm.dismissCelebration() }
+                )
+            }
         }
     }
 }

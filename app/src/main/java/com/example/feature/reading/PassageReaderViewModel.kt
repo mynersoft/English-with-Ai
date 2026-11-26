@@ -3,6 +3,10 @@ package com.example.feature.reading
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.core.ui.CelebrationEvent
+import com.example.core.ui.CelebrationRules
+import com.example.core.ui.CelebrationStyle
+import com.example.core.ui.DailyGoalCelebrationTracker
 import com.example.data.repository.ReadingRepository
 import com.example.domain.model.ReadingAttemptRecord
 import com.example.domain.model.ReadingPassageBundle
@@ -86,17 +90,35 @@ class PassageReaderViewModel(
     private val _uiState = MutableStateFlow(PassageReaderUiState())
     val uiState: StateFlow<PassageReaderUiState> = _uiState.asStateFlow()
 
+    private val _celebrationEvent = MutableStateFlow<CelebrationEvent?>(null)
+    val celebrationEvent: StateFlow<CelebrationEvent?> = _celebrationEvent.asStateFlow()
+
     private var activePassageId: String = ""
     private var periodicSaveJob: Job? = null
     private var unsavedSeconds = 0
     private var dirtySentenceState = false
     private var clientSequence = 0
     private var lastSavedReadCount = 0
+    private var baselineTodayMinutes = 0
+    private var dailyGoalMinutes = 15
+    private var hasDailyGoalContext = false
+    private var sessionElapsedSeconds = 0
+
+    fun setDailyGoalContext(todayMinutes: Int, goalMinutes: Int) {
+        baselineTodayMinutes = todayMinutes.coerceAtLeast(0)
+        dailyGoalMinutes = goalMinutes.coerceAtLeast(1)
+        hasDailyGoalContext = true
+    }
+
+    fun dismissCelebration() {
+        _celebrationEvent.value = null
+    }
 
     fun loadPassage(passageId: String) {
         if (passageId.isBlank()) return
         activePassageId = passageId
         unsavedSeconds = 0
+        sessionElapsedSeconds = 0
         dirtySentenceState = false
 
         viewModelScope.launch {
@@ -105,7 +127,16 @@ class PassageReaderViewModel(
             val settingsResult = repository.fetchSettings()
             val bundleResult = repository.fetchPassageDetail(passageId)
 
+            if (!hasDailyGoalContext) {
+                repository.fetchDashboard().onSuccess { dash ->
+                    baselineTodayMinutes = dash.stats.todayMinutes.coerceAtLeast(0)
+                    dailyGoalMinutes = dash.stats.dailyGoalMinutes.coerceAtLeast(1)
+                    hasDailyGoalContext = true
+                }
+            }
+
             settingsResult.onSuccess { settings ->
+                dailyGoalMinutes = settings.dailyGoalMinutes.coerceAtLeast(1)
                 audioManager.applySettings(
                     accent = settings.accent,
                     voiceId = settings.voiceName,
@@ -170,14 +201,33 @@ class PassageReaderViewModel(
             while (isActive) {
                 delay(1000L)
                 unsavedSeconds++
+                sessionElapsedSeconds++
                 tick++
                 _uiState.update { it.copy(totalSessionSeconds = it.totalSessionSeconds + 1) }
+                checkReadingDailyGoalMilestone()
                 if (tick >= 15) {
                     tick = 0
                     flushProgress(markCompleted = false)
                 }
             }
         }
+    }
+
+    private fun checkReadingDailyGoalMilestone(): Boolean {
+        if (!hasDailyGoalContext || dailyGoalMinutes <= 0) return false
+        val currentTodayMinutes = baselineTodayMinutes + (sessionElapsedSeconds / 60)
+        val app = getApplication<Application>()
+        val celebrated = DailyGoalCelebrationTracker.celebratedReadingGoalToday(app)
+        if (CelebrationRules.shouldCelebrateReadingDailyGoal(currentTodayMinutes, dailyGoalMinutes, celebrated)) {
+            DailyGoalCelebrationTracker.markReadingGoalCelebratedToday(app, dailyGoalMinutes)
+            _celebrationEvent.value = CelebrationEvent(
+                title = "Daily Reading Goal Completed!",
+                subtitle = "You reached your ${dailyGoalMinutes} min reading goal today!",
+                style = CelebrationStyle.GOAL_BURST
+            )
+            return true
+        }
+        return false
     }
 
     fun selectMode(mode: ReadingPracticeMode) {
@@ -283,6 +333,7 @@ class PassageReaderViewModel(
         val readChanged = dirtySentenceState || _uiState.value.readSentenceIds.size != lastSavedReadCount
         if (delta <= 0 && !readChanged && !markCompleted) return
 
+        val wasAlreadyCompleted = _uiState.value.progress?.status == "completed"
         val snapshotIdx = _uiState.value.lastSentenceIndex.coerceIn(0, (passage.sentences.size - 1).coerceAtLeast(0))
         val snapshotSentenceId = passage.sentences.getOrNull(snapshotIdx)?.sentenceId.orEmpty()
         val snapshotReadIds = _uiState.value.readSentenceIds.toList()
@@ -310,6 +361,14 @@ class PassageReaderViewModel(
                             progress = saved,
                             isSavingProgress = false,
                             progressMessage = if (markCompleted) "Passage marked completed!" else null
+                        )
+                    }
+                    val goalCelebratedNow = checkReadingDailyGoalMilestone()
+                    if (!goalCelebratedNow && markCompleted && !wasAlreadyCompleted && saved.status == "completed") {
+                        _celebrationEvent.value = CelebrationEvent(
+                            title = "Passage Completed!",
+                            subtitle = passage.summary.title,
+                            style = CelebrationStyle.CONFETTI
                         )
                     }
                 },

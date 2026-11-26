@@ -6,6 +6,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.example.core.common.UiState
 import com.example.core.network.toUserFriendlyBackendMessage
+import com.example.core.ui.CelebrationEvent
+import com.example.core.ui.CelebrationRules
+import com.example.core.ui.CelebrationStyle
+import com.example.core.ui.DailyGoalCelebrationTracker
 import com.example.data.repository.BackendApiException
 import com.example.data.repository.VocabularyRepository
 import com.example.domain.model.DailyWordsData
@@ -121,6 +125,9 @@ class VocabularyViewModel(
     private val _feedback = MutableStateFlow(VocabActionFeedback())
     val feedback: StateFlow<VocabActionFeedback> = _feedback.asStateFlow()
 
+    private val _celebrationEvent = MutableStateFlow<CelebrationEvent?>(null)
+    val celebrationEvent: StateFlow<CelebrationEvent?> = _celebrationEvent.asStateFlow()
+
     init {
         loadDashboard()
         checkAdminAccess()
@@ -129,6 +136,10 @@ class VocabularyViewModel(
 
     fun clearFeedback() {
         _feedback.value = VocabActionFeedback()
+    }
+
+    fun dismissCelebration() {
+        _celebrationEvent.value = null
     }
 
     fun checkAdminAccess() {
@@ -233,6 +244,17 @@ class VocabularyViewModel(
     }
 
     fun markWordLearned(wordId: String, knowsWord: Boolean, advanceOnSuccess: Boolean = true) {
+        val existingWord = _wordDeck.value.firstOrNull { it.id == wordId }
+            ?: (_dailyState.value as? UiState.Success)?.data?.words?.firstOrNull { it.id == wordId }
+            ?: (_wordsState.value as? UiState.Success)?.data?.items?.firstOrNull { it.id == wordId }
+            ?: (_favoritesState.value as? UiState.Success)?.data?.firstOrNull { it.id == wordId }
+        val wasAlreadyMastered = existingWord?.progress?.isKnown == true ||
+            existingWord?.progress?.status.equals("mastered", ignoreCase = true)
+        val wasGoalCompletedBefore = (_dailyState.value as? UiState.Success)?.data?.isGoalCompleted == true ||
+            (_dashboardState.value as? UiState.Success)?.data?.let {
+                it.dailyGoal > 0 && it.newWordsDone >= it.dailyGoal
+            } == true
+
         viewModelScope.launch {
             _feedback.value = VocabActionFeedback(busy = true)
             repo.recordLearned(wordId, knowsWord)
@@ -281,6 +303,37 @@ class VocabularyViewModel(
                             "Added to review queue (${updatedDaily.newWordsDone}/${updatedDaily.dailyGoal} today)"
                         }
                     )
+
+                    val app = getApplication<Application>()
+                    val dateKey = updatedDaily.date.ifBlank { DailyGoalCelebrationTracker.todayKey() }
+                    val celebratedGoal = DailyGoalCelebrationTracker.celebratedVocabGoalForDate(app, dateKey)
+                    val justCompletedGoal = CelebrationRules.shouldCelebrateVocabDailyGoal(
+                        newWordsDone = updatedDaily.newWordsDone,
+                        dailyGoal = updatedDaily.dailyGoal,
+                        isGoalCompleted = updatedDaily.isGoalCompleted,
+                        wasGoalCompletedBefore = wasGoalCompletedBefore,
+                        alreadyCelebratedGoalForDate = celebratedGoal
+                    )
+                    val justMasteredWord = CelebrationRules.shouldCelebrateWordMastered(
+                        knowsWord = knowsWord,
+                        wasAlreadyMastered = wasAlreadyMastered
+                    )
+                    if (justCompletedGoal) {
+                        DailyGoalCelebrationTracker.markVocabGoalCelebrated(app, dateKey, updatedDaily.dailyGoal)
+                        _celebrationEvent.value = CelebrationEvent(
+                            title = "Daily Goal Completed!",
+                            subtitle = "You learned ${updatedDaily.newWordsDone}/${updatedDaily.dailyGoal} words today!",
+                            style = CelebrationStyle.GOAL_BURST
+                        )
+                    } else if (justMasteredWord) {
+                        val wordLabel = existingWord?.word?.takeIf { it.isNotBlank() } ?: "New word"
+                        _celebrationEvent.value = CelebrationEvent(
+                            title = "Word Mastered!",
+                            subtitle = "\"$wordLabel\" marked as mastered",
+                            style = CelebrationStyle.CONFETTI
+                        )
+                    }
+
                     if (advanceOnSuccess && _currentDeckIndex.value < _wordDeck.value.lastIndex) {
                         _currentDeckIndex.value += 1
                     }
@@ -335,11 +388,21 @@ class VocabularyViewModel(
     }
 
     fun submitWordReview(wordId: String, quality: Int) {
+        val existingWord = (_reviewState.value as? UiState.Success)?.data?.items?.firstOrNull { it.id == wordId }
+        val wasMastered = existingWord?.progress?.status.equals("mastered", ignoreCase = true)
         viewModelScope.launch {
             _feedback.value = VocabActionFeedback(busy = true)
             repo.submitReview(wordId, quality)
                 .onSuccess {
                     _feedback.value = VocabActionFeedback(message = "Review saved! Next in ${it.intervalDays} day(s).")
+                    if (!wasMastered && it.status.equals("mastered", ignoreCase = true)) {
+                        val wordLabel = existingWord?.word?.takeIf { w -> w.isNotBlank() } ?: "Word"
+                        _celebrationEvent.value = CelebrationEvent(
+                            title = "Word Mastered!",
+                            subtitle = "\"$wordLabel\" reached mastered status!",
+                            style = CelebrationStyle.GOAL_BURST
+                        )
+                    }
                     loadReviewTab(_selectedReviewTab.value)
                     loadDashboard()
                 }

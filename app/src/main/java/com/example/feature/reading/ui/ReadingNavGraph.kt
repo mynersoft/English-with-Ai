@@ -2,12 +2,16 @@ package com.example.feature.reading.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.core.common.UiState
 import com.example.feature.reading.PassageReaderViewModel
 import com.example.feature.reading.ReadingAdminViewModel
 import com.example.feature.reading.ReadingDashboardViewModel
@@ -55,6 +59,11 @@ fun ReadingRoute(
         ) { entry ->
             val passageId = entry.arguments?.getString("passageId").orEmpty()
             val readerVm: PassageReaderViewModel = viewModel(key = "reader_$passageId")
+            val dashState by dashboardVm.dashboardState.collectAsStateWithLifecycle()
+            val stats = (dashState as? UiState.Success)?.data?.stats
+            LaunchedEffect(passageId, stats?.todayMinutes, stats?.dailyGoalMinutes) {
+                stats?.let { readerVm.setDailyGoalContext(it.todayMinutes, it.dailyGoalMinutes) }
+            }
             PassageReaderScreen(
                 passageId = passageId,
                 viewModel = readerVm,

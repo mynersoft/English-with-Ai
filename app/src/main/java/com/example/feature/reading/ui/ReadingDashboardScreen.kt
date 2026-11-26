@@ -52,18 +52,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.common.UiState
+import com.example.core.ui.CelebrationOverlay
 import com.example.domain.model.ReadingAttemptRecord
 import com.example.domain.model.ReadingCategory
 import com.example.domain.model.ReadingCefrLevel
@@ -86,11 +89,19 @@ fun ReadingDashboardScreen(
     val dashboardState by viewModel.dashboardState.collectAsStateWithLifecycle()
     val filterState by viewModel.filterState.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val celebration by viewModel.celebrationEvent.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val pal = readingPalette()
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        containerColor = pal.background,
+    val loadedStats = (dashboardState as? UiState.Success)?.data?.stats
+    LaunchedEffect(loadedStats?.todayMinutes, loadedStats?.dailyGoalMinutes) {
+        loadedStats?.let { viewModel.checkDailyGoalReached(context, it) }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
+            containerColor = pal.background,
         topBar = {
             ReadingTopBar(
                 title = "Reading Practice",
@@ -176,6 +187,12 @@ fun ReadingDashboardScreen(
                 }
             }
         }
+    }
+
+        CelebrationOverlay(
+            event = celebration,
+            onDismiss = { viewModel.dismissCelebration() }
+        )
     }
 }
 

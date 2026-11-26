@@ -1,10 +1,16 @@
 package com.example.feature.reading
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.core.common.UiState
+import com.example.core.ui.CelebrationEvent
+import com.example.core.ui.CelebrationRules
+import com.example.core.ui.CelebrationStyle
+import com.example.core.ui.DailyGoalCelebrationTracker
 import com.example.data.repository.ReadingRepository
 import com.example.domain.model.ReadingDashboardData
+import com.example.domain.model.ReadingDashboardStats
 import com.example.domain.model.ReadingPassageSummary
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -48,11 +54,30 @@ class ReadingDashboardViewModel(
     private val _filterState = MutableStateFlow(ReadingDashboardFilterState())
     val filterState: StateFlow<ReadingDashboardFilterState> = _filterState.asStateFlow()
 
+    private val _celebrationEvent = MutableStateFlow<CelebrationEvent?>(null)
+    val celebrationEvent: StateFlow<CelebrationEvent?> = _celebrationEvent.asStateFlow()
+
     private var searchDebounceJob: Job? = null
     private var initialLevelApplied = false
 
     init {
         loadAll(silent = false)
+    }
+
+    fun dismissCelebration() {
+        _celebrationEvent.value = null
+    }
+
+    fun checkDailyGoalReached(context: Context, stats: ReadingDashboardStats) {
+        val celebrated = DailyGoalCelebrationTracker.celebratedReadingGoalToday(context)
+        if (CelebrationRules.shouldCelebrateReadingDailyGoal(stats.todayMinutes, stats.dailyGoalMinutes, celebrated)) {
+            DailyGoalCelebrationTracker.markReadingGoalCelebratedToday(context, stats.dailyGoalMinutes)
+            _celebrationEvent.value = CelebrationEvent(
+                title = "Daily Reading Goal Completed!",
+                subtitle = "${stats.todayMinutes} / ${stats.dailyGoalMinutes} min read today!",
+                style = CelebrationStyle.GOAL_BURST
+            )
+        }
     }
 
     fun loadAll(silent: Boolean = false) {

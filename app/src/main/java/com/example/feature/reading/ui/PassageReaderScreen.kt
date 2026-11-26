@@ -62,6 +62,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.ui.CelebrationOverlay
 import com.example.domain.model.ReadingPassageDetail
 import com.example.domain.model.ReadingPracticeMode
 import com.example.domain.model.ReadingSentence
@@ -76,6 +77,7 @@ fun PassageReaderScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val audioState by viewModel.audioState.collectAsStateWithLifecycle()
+    val celebration by viewModel.celebrationEvent.collectAsStateWithLifecycle()
     val pal = readingPalette()
     val snackbarHostState = remember { SnackbarHostState() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -106,9 +108,10 @@ fun PassageReaderScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        containerColor = pal.background,
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
+            containerColor = pal.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             ReadingTopBar(
@@ -323,12 +326,18 @@ fun PassageReaderScreen(
         }
     }
 
-    WordPopupSheet(
-        state = uiState.wordPopup,
-        onListenWord = viewModel::listenPopupWord,
-        onSaveToVocabulary = viewModel::savePopupWordToVocabulary,
-        onDismiss = viewModel::dismissWordPopup
-    )
+        WordPopupSheet(
+            state = uiState.wordPopup,
+            onListenWord = viewModel::listenPopupWord,
+            onSaveToVocabulary = viewModel::savePopupWordToVocabulary,
+            onDismiss = viewModel::dismissWordPopup
+        )
+
+        CelebrationOverlay(
+            event = celebration,
+            onDismiss = { viewModel.dismissCelebration() }
+        )
+    }
 }
 
 @Composable

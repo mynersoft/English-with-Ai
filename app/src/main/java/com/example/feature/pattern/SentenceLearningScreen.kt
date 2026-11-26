@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.core.ui.CelebrationOverlay
 import com.example.data.repository.PatternDetail
 import com.example.data.repository.PatternExample
 import com.example.data.repository.PatternSummary
@@ -100,6 +101,8 @@ fun SentenceLearningScreen(
 ) {
     val listState by viewModel.listState.collectAsStateWithLifecycle()
     val detailState by viewModel.detailState.collectAsStateWithLifecycle()
+    val celebration by viewModel.celebrationEvent.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var page by remember { mutableStateOf(LearningPage.LIST) }
 
     LaunchedEffect(page) {
@@ -110,51 +113,61 @@ fun SentenceLearningScreen(
         onDispose { onFullscreenModeChanged(false) }
     }
 
-    when (page) {
-        LearningPage.LIST -> {
-            PatternListScreen(
-                state = listState,
-                onBack = onBack,
-                bottomBar = bottomBar,
-                onRefresh = { viewModel.loadPatterns() },
-                onSelectCategory = { viewModel.selectCategory(it) },
-                onPatternClick = { patternId ->
-                    viewModel.selectPattern(patternId)
-                    page = LearningPage.EXPLANATION
-                }
-            )
-        }
-
-        LearningPage.EXPLANATION -> {
-            BackHandler {
-                viewModel.clearSelectedPattern()
-                page = LearningPage.LIST
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (page) {
+            LearningPage.LIST -> {
+                PatternListScreen(
+                    state = listState,
+                    onBack = onBack,
+                    bottomBar = bottomBar,
+                    onRefresh = { viewModel.loadPatterns() },
+                    onSelectCategory = { viewModel.selectCategory(it) },
+                    onPatternClick = { patternId ->
+                        viewModel.selectPattern(patternId)
+                        page = LearningPage.EXPLANATION
+                    }
+                )
             }
-            PatternExplanationScreen(
-                state = detailState,
-                onBack = {
+
+            LearningPage.EXPLANATION -> {
+                BackHandler {
                     viewModel.clearSelectedPattern()
                     page = LearningPage.LIST
-                },
-                onRetry = {
-                    detailState.selectedPatternId?.let { viewModel.selectPattern(it) }
-                },
-                onPractice = { page = LearningPage.PRACTICE }
-            )
-        }
-
-        LearningPage.PRACTICE -> {
-            BackHandler { page = LearningPage.EXPLANATION }
-            val loadedPattern = detailState.pattern
-            if (loadedPattern != null && loadedPattern.examples.isNotEmpty()) {
-                SpeakingPracticeScreen(
-                    pattern = loadedPattern,
-                    onBack = { page = LearningPage.EXPLANATION }
+                }
+                PatternExplanationScreen(
+                    state = detailState,
+                    onBack = {
+                        viewModel.clearSelectedPattern()
+                        page = LearningPage.LIST
+                    },
+                    onRetry = {
+                        detailState.selectedPatternId?.let { viewModel.selectPattern(it) }
+                    },
+                    onPractice = { page = LearningPage.PRACTICE }
                 )
-            } else {
-                page = LearningPage.EXPLANATION
+            }
+
+            LearningPage.PRACTICE -> {
+                BackHandler { page = LearningPage.EXPLANATION }
+                val loadedPattern = detailState.pattern
+                if (loadedPattern != null && loadedPattern.examples.isNotEmpty()) {
+                    SpeakingPracticeScreen(
+                        pattern = loadedPattern,
+                        onBack = { page = LearningPage.EXPLANATION },
+                        onPatternCompleted = {
+                            viewModel.onPatternPracticeCompleted(context, loadedPattern)
+                        }
+                    )
+                } else {
+                    page = LearningPage.EXPLANATION
+                }
             }
         }
+
+        CelebrationOverlay(
+            event = celebration,
+            onDismiss = { viewModel.dismissCelebration() }
+        )
     }
 }
 
@@ -918,7 +931,8 @@ private fun ExampleSentenceCard(
 @Composable
 private fun SpeakingPracticeScreen(
     pattern: PatternDetail,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onPatternCompleted: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val audioPlayer = rememberPatternAudioPlayer(context)
@@ -1107,7 +1121,12 @@ private fun SpeakingPracticeScreen(
             Button(
                 onClick = {
                     audioPlayer.stopAll()
-                    currentIndex = if (safeIndex < examples.lastIndex) safeIndex + 1 else 0
+                    if (safeIndex == examples.lastIndex) {
+                        onPatternCompleted()
+                        currentIndex = 0
+                    } else {
+                        currentIndex = safeIndex + 1
+                    }
                     showAnswer = false
                 },
                 modifier = Modifier
