@@ -8,6 +8,7 @@ import com.example.core.common.OperationType
 import com.example.core.common.UiState
 import com.example.core.common.ValidationUtils
 import com.example.core.common.handleFirestoreError
+import com.example.core.network.toUserFriendlyBackendMessage
 import com.example.core.ui.BannerTone
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.UserRepository
@@ -117,7 +118,9 @@ class DashboardViewModel(
                 _actionState.update {
                     it.copy(
                         isSyncingBackend = false,
-                        backendSyncError = err.message ?: "Could not sync account to MongoDB backend."
+                        backendSyncError = err.toUserFriendlyBackendMessage(
+                            "Could not connect to the server to sync your account. Please check your internet connection."
+                        )
                     )
                 }
             }

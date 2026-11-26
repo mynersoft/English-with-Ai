@@ -1,6 +1,7 @@
 package com.example.feature.vocabulary
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -10,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.core.common.UiState
+import com.example.ui.theme.EnglishAITheme
 
 private object VocabRoutes {
     const val DASHBOARD = "vocab_dashboard"
@@ -56,10 +58,12 @@ fun VocabularyRoute(
 
     val autoPronounce = (settingsState as? UiState.Success)?.data?.autoPronounce ?: true
 
-    NavHost(
-        navController = nav,
-        startDestination = VocabRoutes.DASHBOARD
-    ) {
+    EnglishAITheme(darkTheme = false) {
+        CompositionLocalProvider(LocalVocabDarkTheme provides false) {
+            NavHost(
+                navController = nav,
+                startDestination = VocabRoutes.DASHBOARD
+            ) {
         composable(VocabRoutes.DASHBOARD) {
             VocabularyDashboardScreen(
                 dashboardState = dashboardState,
@@ -278,6 +282,8 @@ fun VocabularyRoute(
                 onDeleteCategory = { id -> adminVm.deleteCategory(id) },
                 onImportCsv = { csv -> adminVm.importCsv(csv) }
             )
+        }
+    }
         }
     }
 }

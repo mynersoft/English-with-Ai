@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
+import com.example.core.network.toUserFriendlyBackendMessage
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -69,11 +70,11 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
         } catch (e: CancellationException) {
             throw e
         } catch (e: SpeakingException) {
-            Result.failure(e)
+            Result.failure(SpeakingException(e.toUserFriendlyBackendMessage("Unable to reach the AI tutor right now. Please try again."), e.code))
         } catch (e: IOException) {
-            Result.failure(SpeakingException("Cannot reach the server. Check your internet and backend URL."))
+            Result.failure(SpeakingException(e.toUserFriendlyBackendMessage("Unable to connect to the server. Please check your internet connection and try again.")))
         } catch (e: Exception) {
-            Result.failure(SpeakingException(e.message ?: "Something went wrong. Please try again."))
+            Result.failure(SpeakingException(e.toUserFriendlyBackendMessage("Something went wrong. Please try again.")))
         }
     }
 

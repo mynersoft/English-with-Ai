@@ -169,10 +169,10 @@ fun VocabularyDashboardScreen(
                             item { VocabFeedbackBanner(message = feedback.message, isError = feedback.isError) }
                         }
 
-                        if (data.isFromOfflineCache) {
+                        if (data.isFromOfflineCache && feedback.message.isNullOrBlank()) {
                             item {
                                 VocabFeedbackBanner(
-                                    message = "Showing cached progress. Pull or tap retry when online.",
+                                    message = "Showing saved offline progress. Tap retry when online.",
                                     isError = false
                                 )
                             }
@@ -258,6 +258,7 @@ fun VocabularyDashboardScreen(
                                                     containerColor = Color.White,
                                                     contentColor = BrandGreen
                                                 ),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                                 shape = RoundedCornerShape(14.dp),
                                                 modifier = Modifier
                                                     .weight(1f)
@@ -277,6 +278,7 @@ fun VocabularyDashboardScreen(
                                                 onClick = onStartReview,
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                                                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                                 shape = RoundedCornerShape(14.dp),
                                                 modifier = Modifier
                                                     .minimumInteractiveComponentSize()

@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
+import com.example.core.network.sanitizeForBackendFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,7 +72,7 @@ class PatternRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.sanitizeForBackendFailure())
         }
     }
 
@@ -106,7 +107,7 @@ class PatternRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.sanitizeForBackendFailure())
         }
     }
 

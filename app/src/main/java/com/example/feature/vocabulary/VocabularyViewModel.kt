@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.example.core.common.UiState
+import com.example.core.network.toUserFriendlyBackendMessage
 import com.example.data.repository.BackendApiException
 import com.example.data.repository.VocabularyRepository
 import com.example.domain.model.DailyWordsData
@@ -147,13 +148,16 @@ class VocabularyViewModel(
             repo.fetchDashboard()
                 .onSuccess { _dashboardState.value = UiState.Success(it) }
                 .onFailure { err ->
+                    val friendly = err.toUserFriendlyBackendMessage(
+                        "Unable to reach the server. Please check your internet connection."
+                    )
                     if (cached != null) {
                         _feedback.value = VocabActionFeedback(
-                            message = "Offline cache shown: ${err.message ?: "Unable to reach server"}",
+                            message = "$friendly Showing saved offline progress.",
                             isError = true
                         )
                     } else {
-                        _dashboardState.value = UiState.Error(err.message ?: "Failed to load vocabulary dashboard.")
+                        _dashboardState.value = UiState.Error(friendly)
                     }
                 }
         }

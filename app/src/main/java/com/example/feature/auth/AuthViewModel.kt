@@ -138,7 +138,8 @@ class AuthViewModel(
                 it.copy(isLoading = true, bannerMessage = null)
             }
             val result = authRepository.registerWithEmail(trimmedName, trimmedEmail, password)
-            result.onSuccess { user ->
+            result.onSuccess { outcome ->
+                val user = outcome.user
                 viewModelScope.launch {
                     authRepository.syncCurrentUserToBackend(
                         preferredName = trimmedName,
@@ -160,13 +161,24 @@ class AuthViewModel(
                         authProvider = "password"
                     )
                 }
-                startVerificationCooldown()
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        bannerMessage = "Verification email sent to $trimmedEmail.",
-                        bannerTone = BannerTone.SUCCESS
-                    )
+                if (outcome.verificationEmailSent) {
+                    startVerificationCooldown()
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            bannerMessage = "Verification email sent to $trimmedEmail.",
+                            bannerTone = BannerTone.SUCCESS
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            bannerMessage = outcome.verificationWarning
+                                ?: "Account created. Tap Resend Verification Email to receive your link.",
+                            bannerTone = BannerTone.WARNING
+                        )
+                    }
                 }
             }.onFailure { error ->
                 handleAuthThrowable(error, "Registration failed.")

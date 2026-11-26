@@ -6,6 +6,7 @@ import com.example.R
 import com.example.core.common.OperationType
 import com.example.core.common.handleFirestoreError
 import com.example.core.network.NetworkClient
+import com.example.core.network.sanitizeForBackendFailure
 import com.example.domain.model.CsvImportSummary
 import com.example.domain.model.DailyWordsData
 import com.example.domain.model.PaginatedWordsData
@@ -602,7 +603,7 @@ class VocabularyRepository(context: Context? = null) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.sanitizeForBackendFailure())
         }
     }
 

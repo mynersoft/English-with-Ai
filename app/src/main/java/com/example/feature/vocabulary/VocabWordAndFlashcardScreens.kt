@@ -1,7 +1,6 @@
 package com.example.feature.vocabulary
 
 import android.graphics.BitmapFactory
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
@@ -36,7 +35,6 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flip
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -96,7 +94,6 @@ fun WordDetailDeckScreen(
     DisposableEffect(Unit) { onDispose { player.release() } }
 
     val currentWord = deck.getOrNull(currentIndex)
-    var meaningRevealed by remember(currentWord?.id) { mutableStateOf(false) }
 
     LaunchedEffect(currentWord?.id, autoPronounce) {
         if (currentWord != null && autoPronounce) {
@@ -269,36 +266,18 @@ fun WordDetailDeckScreen(
                                         }
                                     }
 
-                                    if (!meaningRevealed) {
-                                        OutlinedButton(
-                                            onClick = { meaningRevealed = true },
-                                            shape = RoundedCornerShape(14.dp),
-                                            border = BorderStroke(1.dp, pal.primary),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .minimumInteractiveComponentSize()
-                                                .testTag("vocab_reveal_meaning_button")
-                                        ) {
-                                            Icon(Icons.Filled.Visibility, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Reveal Meaning (বাংলা অর্থ দেখুন)", fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-
-                                    AnimatedVisibility(visible = meaningRevealed) {
-                                        Surface(
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = pal.primaryContainer.copy(alpha = 0.7f),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = currentWord.meaning,
-                                                style = MaterialTheme.typography.headlineSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = pal.primary,
-                                                modifier = Modifier.padding(16.dp)
-                                            )
-                                        }
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = pal.primaryContainer.copy(alpha = 0.7f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = currentWord.meaning,
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = pal.primary,
+                                            modifier = Modifier.padding(16.dp)
+                                        )
                                     }
                                 }
                             }

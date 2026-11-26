@@ -150,7 +150,19 @@ fun AdminRoute(
                     )
                 }
                 readingEditorState.isEditing -> {
-                    ReadingAdminPanel(vm = readingAdminVm)
+                    Scaffold(
+                        contentWindowInsets = WindowInsets.safeDrawing,
+                        containerColor = MaterialTheme.colorScheme.background
+                    ) { innerPadding ->
+                        Box(
+                            modifier = Modifier
+                                .padding(innerPadding)
+                                .fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            ReadingAdminPanel(vm = readingAdminVm)
+                        }
+                    }
                 }
                 else -> {
                     AdminDashboardHub(

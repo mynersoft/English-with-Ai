@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
+import com.example.core.network.sanitizeForBackendFailure
 import com.example.domain.model.ChatAiCorrection
 import com.example.domain.model.ChatCorrectionToken
 import com.example.domain.model.ChatMemberSummary
@@ -160,7 +161,7 @@ class ChatRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.sanitizeForBackendFailure())
         }
     }
 

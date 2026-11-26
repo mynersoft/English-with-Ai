@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
+import com.example.core.network.sanitizeForBackendFailure
 import com.example.domain.model.PaginatedReadingPassages
 import com.example.domain.model.ReadingAttemptAnswerResult
 import com.example.domain.model.ReadingAttemptRecord
@@ -523,7 +524,7 @@ class ReadingRepository {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Result.failure(e)
+                Result.failure(e.sanitizeForBackendFailure())
             }
         }
 

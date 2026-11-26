@@ -72,14 +72,20 @@ function userBadgeLabel(userDoc) {
 
 function serializeMessage(m, currentUserIdStr) {
   const ai = m.aiCorrection || {};
+  const isMine = String(m.senderId) === currentUserIdStr;
+  const corrected =
+    ai.hasMistake && typeof ai.correctedText === "string" && ai.correctedText.trim()
+      ? ai.correctedText.trim()
+      : "";
+  const visibleText = !isMine && corrected ? corrected : m.text;
   return {
     id: String(m._id),
     roomId: String(m.roomId),
     senderId: String(m.senderId),
     senderName: m.senderName || "Learner",
     senderBadge: m.senderBadge || "",
-    isMine: String(m.senderId) === currentUserIdStr,
-    text: m.text,
+    isMine,
+    text: visibleText,
     replyTo: m.replyTo?.messageId
       ? {
           messageId: String(m.replyTo.messageId),
@@ -446,13 +452,18 @@ export async function sendChatMessage(userDoc, roomIdRaw, body = {}) {
   if (body?.replyToMessageId) {
     const replyId = assertChatObjectId(body.replyToMessageId, "replyToMessageId");
     const targetMsg = await ChatMessage.findOne({ _id: replyId, roomId: room._id })
-      .select("_id senderName text")
+      .select("_id senderId senderName text aiCorrection")
       .lean();
     if (targetMsg) {
+      const targetCorrected =
+        targetMsg.aiCorrection?.hasMistake && targetMsg.aiCorrection?.correctedText
+          ? String(targetMsg.aiCorrection.correctedText).trim()
+          : "";
+      const previewSource = targetCorrected || targetMsg.text;
       replyTo = {
         messageId: targetMsg._id,
         senderName: targetMsg.senderName || "Learner",
-        textPreview: String(targetMsg.text || "").slice(0, 140),
+        textPreview: String(previewSource || "").slice(0, 140),
       };
     }
   }
@@ -472,12 +483,17 @@ export async function sendChatMessage(userDoc, roomIdRaw, body = {}) {
     aiCorrection,
   });
 
+  const publicRoomPreview =
+    aiCorrection.hasMistake && aiCorrection.correctedText
+      ? aiCorrection.correctedText
+      : text;
+
   await Promise.all([
     ChatRoom.updateOne(
       { _id: room._id },
       {
         $set: {
-          lastMessageText: `${userDoc.name || "Learner"}: ${text.slice(0, 80)}`,
+          lastMessageText: `${userDoc.name || "Learner"}: ${publicRoomPreview.slice(0, 80)}`,
           lastMessageAt: created.createdAt,
         },
       }

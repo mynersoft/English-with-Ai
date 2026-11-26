@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.core.network.toUserFriendlyBackendMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,7 +73,7 @@ class AdminViewModel : ViewModel() {
                 val items = AdminApi.listPatterns()
                 _list.update { it.copy(loading = false, patterns = items) }
             } catch (e: Exception) {
-                _list.update { it.copy(loading = false, message = e.message ?: "Failed to load") }
+                _list.update { it.copy(loading = false, message = e.toUserFriendlyBackendMessage("Failed to load patterns. Please try again.")) }
             }
         }
     }
@@ -84,7 +85,7 @@ class AdminViewModel : ViewModel() {
                 _list.update { it.copy(message = "Deleted") }
                 loadList()
             } catch (e: Exception) {
-                _list.update { it.copy(message = e.message ?: "Delete failed") }
+                _list.update { it.copy(message = e.toUserFriendlyBackendMessage("Could not delete pattern. Please try again.")) }
             }
         }
     }
@@ -102,7 +103,7 @@ class AdminViewModel : ViewModel() {
             try {
                 _edit.value = AdminEditState(form = AdminApi.getPattern(id))
             } catch (e: Exception) {
-                _edit.value = AdminEditState(message = e.message ?: "Failed to load")
+                _edit.value = AdminEditState(message = e.toUserFriendlyBackendMessage("Failed to load pattern details."))
             }
         }
     }
@@ -148,7 +149,7 @@ class AdminViewModel : ViewModel() {
                 val fresh = AdminApi.getPattern(id) // new example ids + audio flags
                 _edit.value = AdminEditState(form = fresh, message = "Saved")
             } catch (e: Exception) {
-                _edit.update { it.copy(saving = false, message = e.message ?: "Save failed") }
+                _edit.update { it.copy(saving = false, message = e.toUserFriendlyBackendMessage("Could not save changes. Please try again.")) }
             }
         }
     }
@@ -182,7 +183,7 @@ class AdminViewModel : ViewModel() {
                 refreshAudio()
                 _edit.update { it.copy(busyId = null, message = msg) }
             } catch (e: Exception) {
-                _edit.update { it.copy(busyId = null, message = e.message ?: "Audio action failed") }
+                _edit.update { it.copy(busyId = null, message = e.toUserFriendlyBackendMessage("Audio action failed. Please try again.")) }
             }
         }
     }

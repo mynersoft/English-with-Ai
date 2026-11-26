@@ -72,51 +72,28 @@ data class ReadingPalette(
 
 @Composable
 fun readingPalette(dark: Boolean = isSystemInDarkTheme()): ReadingPalette {
-    return if (dark) {
-        ReadingPalette(
-            primary = Color(0xFF52B788),
-            onPrimary = Color(0xFF072214),
-            primaryContainer = Color(0xFF163D28),
-            amber = Color(0xFFF3B44B),
-            amberContainer = Color(0xFF3E2B0D),
-            background = Color(0xFF0D1410),
-            card = Color(0xFF152019),
-            paperHighlight = Color(0xFF1C3326),
-            border = Color(0xFF263B2E),
-            textPrimary = Color(0xFFF0F7F2),
-            textSecondary = Color(0xFFA7BDB0),
-            matched = Color(0xFF6EE7B7),
-            matchedBg = Color(0xFF133827),
-            missing = Color(0xFFFCA5A5),
-            missingBg = Color(0xFF471C1C),
-            mismatched = Color(0xFFFCD34D),
-            mismatchedBg = Color(0xFF433010),
-            extra = Color(0xFF93C5FD),
-            extraBg = Color(0xFF1A2F4B)
-        )
-    } else {
-        ReadingPalette(
-            primary = Color(0xFF14643E),
-            onPrimary = Color.White,
-            primaryContainer = Color(0xFFE5F4EC),
-            amber = Color(0xFFB45309),
-            amberContainer = Color(0xFFFEF3C7),
-            background = Color(0xFFF8FAF8),
-            card = Color.White,
-            paperHighlight = Color(0xFFECF9F2),
-            border = Color(0xFFDDE6DF),
-            textPrimary = Color(0xFF132219),
-            textSecondary = Color(0xFF52665A),
-            matched = Color(0xFF15803D),
-            matchedBg = Color(0xFFDCFCE7),
-            missing = Color(0xFFB91C1C),
-            missingBg = Color(0xFFFEE2E2),
-            mismatched = Color(0xFFB45309),
-            mismatchedBg = Color(0xFFFEF3C7),
-            extra = Color(0xFF1D4ED8),
-            extraBg = Color(0xFFDBEAFE)
-        )
-    }
+    val vp = com.example.feature.vocabulary.vocabPalette(dark)
+    return ReadingPalette(
+        primary = vp.primary,
+        onPrimary = vp.onPrimary,
+        primaryContainer = vp.primaryContainer,
+        amber = vp.gold,
+        amberContainer = vp.goldContainer,
+        background = vp.background,
+        card = vp.card,
+        paperHighlight = vp.primaryContainer,
+        border = vp.border,
+        textPrimary = vp.textPrimary,
+        textSecondary = vp.textSecondary,
+        matched = vp.primary,
+        matchedBg = vp.primaryContainer,
+        missing = vp.danger,
+        missingBg = vp.dangerContainer,
+        mismatched = vp.gold,
+        mismatchedBg = vp.goldContainer,
+        extra = vp.primary,
+        extraBg = vp.primaryContainer
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

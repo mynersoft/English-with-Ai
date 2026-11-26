@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
+import com.example.core.network.sanitizeForBackendFailure
 import com.example.domain.model.CourseReportData
 import com.example.domain.model.CourseReportModule
 import com.example.domain.model.ReadingReportRecentAttempt
@@ -137,7 +138,7 @@ class StudentDashboardRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.sanitizeForBackendFailure())
         }
     }
 

@@ -2,8 +2,10 @@ package com.example
 
 import com.example.domain.model.ChatAiCorrection
 import com.example.domain.model.ChatCorrectionToken
+import com.example.domain.model.ChatMessageItem
 import com.example.feature.chat.ChatThreadUiState
 import com.example.feature.chat.HandwritingImageHelper
+import com.example.feature.chat.displayTextForViewer
 import com.example.feature.chat.formatDateDivider
 import com.example.feature.chat.formatMessageTime
 import org.junit.Assert.assertEquals
@@ -46,6 +48,28 @@ class ChatLogicTest {
         assertFalse(state.extractingHandwriting)
         assertNull(state.extractedHandwritingText)
         assertNull(state.ocrError)
+    }
+
+    @Test
+    fun `displayTextForViewer shows corrected text to other students and original to sender`() {
+        val correction = ChatAiCorrection(
+            status = "corrected",
+            hasMistake = true,
+            correctedText = "I'm planning to go to Dhaka"
+        )
+        val incomingFromPeer = ChatMessageItem(
+            id = "m1",
+            roomId = "r1",
+            senderId = "u2",
+            senderName = "Peer",
+            isMine = false,
+            text = "I'm planning to going Dhaka",
+            aiCorrection = correction
+        )
+        val outgoingFromMe = incomingFromPeer.copy(isMine = true)
+
+        assertEquals("I'm planning to go to Dhaka", incomingFromPeer.displayTextForViewer())
+        assertEquals("I'm planning to going Dhaka", outgoingFromMe.displayTextForViewer())
     }
 
     @Test

@@ -98,6 +98,13 @@ fun ChatDateDivider(label: String) {
     }
 }
 
+fun ChatMessageItem.displayTextForViewer(): String {
+    if (!isMine && aiCorrection.hasMistake && aiCorrection.correctedText.isNotBlank()) {
+        return aiCorrection.correctedText
+    }
+    return text
+}
+
 @Composable
 fun ChatMessageBubbleRow(
     msg: ChatMessageItem,
@@ -219,7 +226,7 @@ private fun IncomingBubble(
                             ReplyQuoteCard(quote = quote, isOutgoingBubble = false)
                         }
                         Text(
-                            text = msg.text,
+                            text = msg.displayTextForViewer(),
                             style = MaterialTheme.typography.bodyLarge,
                             color = Color(0xFF111827)
                         )

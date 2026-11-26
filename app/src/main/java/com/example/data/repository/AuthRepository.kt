@@ -5,6 +5,7 @@ import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
+import com.example.core.network.toUserFriendlyBackendMessage
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.EmailAuthProvider
@@ -67,16 +68,26 @@ class AuthRepository(
         displayName: String,
         email: String,
         password: String
-    ): Result<FirebaseUser> {
+    ): Result<RegistrationOutcome> {
         return try {
             val result = auth.createUserWithEmailAndPassword(email.trim(), password).await()
             val user = result.user ?: return Result.failure(IllegalStateException("Registration failed to create user."))
             val profileUpdates = UserProfileChangeRequest.Builder()
                 .setDisplayName(displayName.trim())
                 .build()
-            user.updateProfile(profileUpdates).await()
-            user.sendEmailVerification().await()
-            Result.success(user)
+            runCatching { user.updateProfile(profileUpdates).await() }
+                .onFailure { Log.w(TAG, "Profile name update after registration failed: ${it.message}") }
+            val verifyAttempt = runCatching { user.sendEmailVerification().await() }
+            if (verifyAttempt.isFailure) {
+                Log.w(TAG, "Verification email send after registration failed: ${verifyAttempt.exceptionOrNull()?.message}")
+            }
+            Result.success(
+                RegistrationOutcome(
+                    user = user,
+                    verificationEmailSent = verifyAttempt.isSuccess,
+                    verificationWarning = verifyAttempt.exceptionOrNull()?.let { mapAuthError(it as? Exception ?: Exception(it)) }
+                )
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -273,16 +284,23 @@ class AuthRepository(
                     } else {
                         response.message
                     }
-                    val msg = "Backend user sync failed (HTTP ${response.code}): $detail"
-                    Log.w(TAG, msg)
-                    Result.failure(IOException(msg))
+                    val logMsg = "Backend user sync failed (HTTP ${response.code}): $detail"
+                    Log.w(TAG, logMsg)
+                    val userMsg = if (response.code >= 500) {
+                        "Unable to sync with the server right now. Some features may update once connection is restored."
+                    } else {
+                        BackendApiException(response.message, null, response.code).toUserFriendlyBackendMessage(
+                            "Could not sync your account right now. Please try again."
+                        )
+                    }
+                    Result.failure(IOException(userMsg))
                 }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Backend user sync skipped: ${e.message}")
-            Result.failure(e)
+            Result.failure(IOException(e.toUserFriendlyBackendMessage("Could not sync your account right now. Please try again.")))
         }
     }
 
@@ -355,10 +373,27 @@ class AuthRepository(
                         "Too many requests in a short time. Please wait a minute before trying again."
                     "ERROR_USER_DISABLED" ->
                         "This account has been disabled. Contact support for assistance."
-                    else -> e.localizedMessage ?: "Authentication failed. Please try again."
+                    "ERROR_APP_NOT_AUTHORIZED",
+                    "ERROR_INVALID_API_KEY" ->
+                        "This build is not authorized in Firebase Console. Verify the app package and SHA-1 certificate."
+                    else -> {
+                        if (rawMsg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) ||
+                            rawMsg.contains("operation is not allowed", ignoreCase = true)
+                        ) {
+                            EMAIL_PROVIDER_DISABLED_MSG
+                        } else {
+                            e.localizedMessage ?: "Authentication failed. Please try again."
+                        }
+                    }
                 }
             }
-            else -> e.localizedMessage ?: "Authentication failed. Please try again."
+            else -> {
+                if (rawMsg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true)) {
+                    EMAIL_PROVIDER_DISABLED_MSG
+                } else {
+                    e.localizedMessage ?: "Authentication failed. Please try again."
+                }
+            }
         }
     }
 
@@ -366,7 +401,8 @@ class AuthRepository(
         if (e is FirebaseAuthException && e.errorCode == "ERROR_OPERATION_NOT_ALLOWED") return true
         val msg = e.message.orEmpty()
         return msg.contains("operation is not allowed", ignoreCase = true) ||
-            msg.contains("sign-in provider is disabled", ignoreCase = true)
+            msg.contains("sign-in provider is disabled", ignoreCase = true) ||
+            msg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true)
     }
 
     private fun toAuthFailure(e: Exception): AuthFailureException {
@@ -383,6 +419,12 @@ class AuthRepository(
             "Email/Password authentication is currently disabled in Firebase Console for this project. Enable it under Authentication > Sign-in method, or sign in with Google below."
     }
 }
+
+data class RegistrationOutcome(
+    val user: FirebaseUser,
+    val verificationEmailSent: Boolean,
+    val verificationWarning: String? = null
+)
 
 class AuthFailureException(
     override val message: String,

@@ -2,9 +2,11 @@ package com.example.core.ui
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import com.example.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -54,6 +56,8 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import com.example.core.common.PasswordStrength
 import com.example.core.common.ValidationUtils
 import com.example.ui.theme.SuccessGreen
@@ -74,9 +78,9 @@ import kotlinx.coroutines.launch
  * the project compiling without it (Google Sign-In then reports a config error).
  */
 private fun webClientId(context: Context): String? {
-    val id = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-    if (id == 0) return null
-    return runCatching { context.getString(id) }.getOrNull()?.takeIf { it.isNotBlank() }
+    return runCatching { context.getString(R.string.default_web_client_id) }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
 }
 
 enum class BannerTone {
@@ -477,7 +481,7 @@ fun launchGoogleCredentialFlow(
         onError("Google Sign-In configuration missing: default_web_client_id not found.")
         return
     }
-    val activity = context as? Activity
+    val activity = context.findActivity()
     if (activity == null) {
         onError("Google Sign-In requires an active screen context.")
         return
@@ -500,6 +504,21 @@ fun launchGoogleCredentialFlow(
         } catch (e: GetCredentialCancellationException) {
             Log.w("Auth", "Google Sign-In cancelled or dismissed: ${e.message}", e)
             onCancelled()
+        } catch (e: NoCredentialException) {
+            Log.e("Auth", "Google Sign-In no credential available", e)
+            onError("No Google account found on this device, or this app's SHA-1 certificate is not registered in Firebase Console.")
+        } catch (e: GetCredentialException) {
+            Log.e("Auth", "Google Sign-In failed (${e.type})", e)
+            val msg = e.errorMessage?.toString().orEmpty()
+            val friendly = when {
+                msg.contains("developer console", ignoreCase = true) ||
+                    msg.contains("10:", ignoreCase = true) ||
+                    msg.contains("28444", ignoreCase = true) ->
+                    "Google Sign-In is not configured for this build's SHA-1 certificate in Firebase Console."
+                msg.isNotBlank() -> msg
+                else -> "Google Sign-In failed. Please try again."
+            }
+            onError(friendly)
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
             onError(e.localizedMessage ?: "Google Sign-In failed. Please try again.")

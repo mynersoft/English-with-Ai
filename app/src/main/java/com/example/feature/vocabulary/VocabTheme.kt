@@ -39,6 +39,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,12 +51,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-val BrandGreen = Color(0xFF1F5D3B)
-val BrandGreenLight = Color(0xFFE6F3EB)
-val BrandGold = Color(0xFFC88214)
-val BrandGoldLight = Color(0xFFFEF5E6)
-val BrandBackgroundLight = Color(0xFFF7FBF7)
-val BrandBorderLight = Color(0xFFDCE7DF)
+val BrandGreen = Color(0xFF0E6B3B)
+val BrandGreenLight = Color(0xFFD1FAE5)
+val BrandGold = Color(0xFFD97706)
+val BrandGoldLight = Color(0xFFFEF3C7)
+val BrandBackgroundLight = Color(0xFFF8FAF9)
+val BrandBorderLight = Color(0xFFE5E7EB)
+
+val LocalVocabDarkTheme = compositionLocalOf<Boolean?> { null }
 
 @Immutable
 data class VocabPalette(
@@ -74,7 +77,7 @@ data class VocabPalette(
 )
 
 @Composable
-fun vocabPalette(dark: Boolean = isSystemInDarkTheme()): VocabPalette {
+fun vocabPalette(dark: Boolean = LocalVocabDarkTheme.current ?: isSystemInDarkTheme()): VocabPalette {
     return if (dark) {
         VocabPalette(
             primary = Color(0xFF52B788),
@@ -100,9 +103,9 @@ fun vocabPalette(dark: Boolean = isSystemInDarkTheme()): VocabPalette {
             background = BrandBackgroundLight,
             card = Color.White,
             border = BrandBorderLight,
-            textPrimary = Color(0xFF13261B),
-            textSecondary = Color(0xFF52665A),
-            danger = Color(0xFFB91C1C),
+            textPrimary = Color(0xFF111827),
+            textSecondary = Color(0xFF6B7280),
+            danger = Color(0xFFDC2626),
             dangerContainer = Color(0xFFFEE2E2)
         )
     }

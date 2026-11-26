@@ -734,7 +734,7 @@ private fun ChatComposerBar(
                                 color = ChatPrimaryGreen
                             )
                             Text(
-                                text = target.text,
+                                text = target.displayTextForViewer(),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF4B5563),
                                 maxLines = 1,
