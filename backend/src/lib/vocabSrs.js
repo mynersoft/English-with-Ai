@@ -331,3 +331,89 @@ export function normalizeVocabularyPayload(input = {}) {
     sortOrder: Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0,
   };
 }
+
+function stableHashInt(input = "") {
+  let hash = 2166136261;
+  const s = String(input || "");
+  for (let i = 0; i < s.length; i += 1) {
+    hash ^= s.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function formatWordOfTheDayItem(wordDoc, dateStr) {
+  const firstEx = Array.isArray(wordDoc?.examples) ? wordDoc.examples[0] : null;
+  return {
+    id: String(wordDoc._id || wordDoc.id || ""),
+    word: String(wordDoc.word || "").trim(),
+    meaning: String(wordDoc.meaning || "").trim(),
+    pronunciation: String(wordDoc.pronunciation || "").trim(),
+    partOfSpeech: String(wordDoc.partOfSpeech || "noun").trim(),
+    level: String(wordDoc.level || "A1").trim(),
+    categoryName: String(wordDoc.categoryName || wordDoc.categoryId?.name || "").trim(),
+    exampleEn: String(firstEx?.en || wordDoc.exampleEn || "").trim(),
+    exampleBn: String(firstEx?.bn || wordDoc.exampleBn || "").trim(),
+    date: dateStr,
+  };
+}
+
+export function selectWordOfTheDayFromPool({
+  words = [],
+  learnedIds = new Set(),
+  masteredIds = new Set(),
+  dateStr = "2026-01-01",
+  userId = "",
+  upcomingCount = 7,
+}) {
+  const valid = words.filter(
+    (w) => String(w?.word || "").trim() && String(w?.meaning || "").trim()
+  );
+  if (valid.length === 0) {
+    return { date: dateStr, wordOfTheDay: null, upcoming: [] };
+  }
+
+  const unlearned = valid.filter((w) => {
+    const id = String(w._id || w.id || "");
+    return !learnedIds.has(id) && !masteredIds.has(id);
+  });
+  const nonMastered = valid.filter((w) => !masteredIds.has(String(w._id || w.id || "")));
+
+  const primaryPool =
+    unlearned.length > 0 ? unlearned : nonMastered.length > 0 ? nonMastered : valid;
+
+  const dayNumber = Math.floor(Date.parse(`${dateStr}T00:00:00Z`) / 86400000) || 0;
+  const userOffset = stableHashInt(String(userId || "")) % primaryPool.length;
+  const startIdx = ((dayNumber % primaryPool.length) + primaryPool.length + userOffset) % primaryPool.length;
+
+  const ordered = [];
+  const seenWords = new Set();
+  for (let i = 0; i < primaryPool.length && ordered.length < 1 + upcomingCount; i += 1) {
+    const item = primaryPool[(startIdx + i) % primaryPool.length];
+    const key = String(item.word || "").trim().toLowerCase();
+    if (!seenWords.has(key)) {
+      seenWords.add(key);
+      ordered.push(item);
+    }
+  }
+  if (ordered.length < 1 + upcomingCount) {
+    for (const item of valid) {
+      if (ordered.length >= 1 + upcomingCount) break;
+      const key = String(item.word || "").trim().toLowerCase();
+      if (!seenWords.has(key)) {
+        seenWords.add(key);
+        ordered.push(item);
+      }
+    }
+  }
+
+  const [todayDoc, ...restDocs] = ordered;
+  return {
+    date: dateStr,
+    wordOfTheDay: todayDoc ? formatWordOfTheDayItem(todayDoc, dateStr) : null,
+    upcoming: restDocs.slice(0, upcomingCount).map((doc, idx) =>
+      formatWordOfTheDayItem(doc, shiftLocalDate(dateStr, idx + 1))
+    ),
+  };
+}
+

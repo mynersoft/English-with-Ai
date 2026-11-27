@@ -158,21 +158,85 @@ class ReadingRepository {
     }
 
     suspend fun lookupWord(word: String, passageId: String?): Result<ReadingWordLookup> = safeCall {
+        val candidates = WordLookupCandidates.build(word)
+        val primary = candidates.firstOrNull() ?: word.trim()
         val q = buildString {
-            append("?word=").append(urlEnc(word))
+            append("?word=").append(urlEnc(primary))
             if (!passageId.isNullOrBlank()) append("&passageId=").append(urlEnc(passageId))
         }
-        val data = requestJson("GET", "/api/v1/reading/word-lookup$q")
-        ReadingWordLookup(
-            word = data.optString("word", word),
-            found = data.optBoolean("found", false),
-            meaningBn = data.optStringOrNull("meaningBn"),
-            pronunciation = data.optString("pronunciation"),
-            partOfSpeech = data.optString("partOfSpeech"),
-            example = data.optString("example"),
-            existingVocabularyId = data.optStringOrNull("existingVocabularyId"),
-            inUserVocabulary = data.optBoolean("inUserVocabulary", false)
-        )
+        var lastError: Throwable? = null
+        val direct = try {
+            val data = requestJson("GET", "/api/v1/reading/word-lookup$q")
+            ReadingWordLookup(
+                word = data.optString("word", primary),
+                found = data.optBoolean("found", false),
+                meaningBn = data.optStringOrNull("meaningBn"),
+                pronunciation = data.optString("pronunciation"),
+                partOfSpeech = data.optString("partOfSpeech"),
+                example = data.optString("example"),
+                existingVocabularyId = data.optStringOrNull("existingVocabularyId"),
+                inUserVocabulary = data.optBoolean("inUserVocabulary", false)
+            )
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            lastError = t
+            null
+        }
+
+        if (direct != null && direct.found && !direct.meaningBn.isNullOrBlank()) {
+            return@safeCall direct
+        }
+
+        // Fall back to /api/vocabulary/words across exact & base-word candidates so clicking any
+        // word still shows its Bangla meaning from the Vocabulary database.
+        val vocabHit = lookupFromVocabularyCatalog(candidates)
+        if (vocabHit != null) {
+            return@safeCall vocabHit
+        }
+
+        if (direct != null) {
+            return@safeCall direct
+        }
+        throw lastError ?: BackendApiException("Could not look up word.", "LOOKUP_FAILED", 500)
+    }
+
+    private suspend fun lookupFromVocabularyCatalog(candidates: List<String>): ReadingWordLookup? {
+        for (candidate in candidates.take(4)) {
+            val res = runCatching {
+                requestJson("GET", "/api/vocabulary/words?search=${urlEnc(candidate)}&limit=15")
+            }.getOrNull() ?: continue
+            val items = res.optJSONArray("items") ?: continue
+            var bestObj: JSONObject? = null
+            for (i in 0 until items.length()) {
+                val obj = items.optJSONObject(i) ?: continue
+                val w = obj.optString("word").trim().lowercase()
+                val meaning = obj.optString("meaning").trim()
+                if (meaning.isBlank()) continue
+                if (candidates.any { it == w }) {
+                    bestObj = obj
+                    break
+                }
+                if (bestObj == null && w.startsWith(candidate)) {
+                    bestObj = obj
+                }
+            }
+            if (bestObj != null) {
+                val meaning = bestObj.optString("meaning").trim()
+                val examples = bestObj.optJSONArray("examples")
+                val firstExampleEn = examples?.optJSONObject(0)?.optString("en")?.trim().orEmpty()
+                return ReadingWordLookup(
+                    word = bestObj.optString("word").ifBlank { candidate },
+                    found = meaning.isNotBlank(),
+                    meaningBn = meaning.ifBlank { null },
+                    pronunciation = bestObj.optString("pronunciation"),
+                    partOfSpeech = bestObj.optString("partOfSpeech"),
+                    example = firstExampleEn,
+                    existingVocabularyId = bestObj.optStringOrNull("id"),
+                    inUserVocabulary = !bestObj.isNull("progress") && bestObj.optJSONObject("progress") != null
+                )
+            }
+        }
+        return null
     }
 
     suspend fun saveWordToVocabulary(
@@ -584,3 +648,144 @@ class ReadingRepository {
         val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }
+
+internal object WordLookupCandidates {
+    private val irregulars = mapOf(
+        "am" to "be",
+        "is" to "be",
+        "are" to "be",
+        "was" to "be",
+        "were" to "be",
+        "been" to "be",
+        "has" to "have",
+        "had" to "have",
+        "does" to "do",
+        "did" to "do",
+        "done" to "do",
+        "went" to "go",
+        "gone" to "go",
+        "goes" to "go",
+        "ate" to "eat",
+        "eaten" to "eat",
+        "drank" to "drink",
+        "drunk" to "drink",
+        "slept" to "sleep",
+        "woke" to "wake",
+        "wrote" to "write",
+        "written" to "write",
+        "spoke" to "speak",
+        "spoken" to "speak",
+        "took" to "take",
+        "taken" to "take",
+        "made" to "make",
+        "came" to "come",
+        "saw" to "see",
+        "seen" to "see",
+        "gave" to "give",
+        "given" to "give",
+        "got" to "get",
+        "ran" to "run",
+        "sat" to "sit",
+        "stood" to "stand",
+        "said" to "say",
+        "told" to "tell",
+        "taught" to "teach",
+        "bought" to "buy",
+        "brought" to "bring",
+        "thought" to "think",
+        "felt" to "feel",
+        "found" to "find",
+        "kept" to "keep",
+        "left" to "leave",
+        "met" to "meet",
+        "paid" to "pay",
+        "children" to "child",
+        "men" to "man",
+        "women" to "woman",
+        "teeth" to "tooth",
+        "feet" to "foot",
+        "people" to "person",
+        "better" to "good",
+        "best" to "good",
+        "worse" to "bad",
+        "worst" to "bad"
+    )
+
+    fun build(rawWord: String): List<String> {
+        val cleaned = rawWord
+            .trim()
+            .replace(Regex("^[^a-zA-Z]+|[^a-zA-Z'’-]+$"), "")
+            .replace('’', '\'')
+            .replace('‘', '\'')
+            .lowercase()
+        if (cleaned.isBlank()) return emptyList()
+
+        val result = linkedSetOf<String>()
+        fun add(w: String) {
+            val s = w.trim().lowercase()
+            if (s.isNotEmpty() && s.matches(Regex("[a-z][a-z'-]*"))) {
+                result.add(s)
+            }
+        }
+
+        add(cleaned)
+        val noPossessive = cleaned
+            .removeSuffix("'s")
+            .let { if (it.endsWith("s'")) it.dropLast(1) else it }
+            .trimEnd('\'')
+        add(noPossessive)
+
+        val base = noPossessive.ifBlank { cleaned }
+        irregulars[base]?.let(::add)
+
+        if (base.length > 4 && base.endsWith("ies")) add(base.dropLast(3) + "y")
+        if (base.length > 4 && base.endsWith("ves")) {
+            add(base.dropLast(3) + "f")
+            add(base.dropLast(3) + "fe")
+        }
+        if (base.length > 3 && base.endsWith("es")) {
+            if (base.endsWith("ches") || base.endsWith("shes") || base.endsWith("xes") ||
+                base.endsWith("zes") || base.endsWith("sses") || base.endsWith("oes")
+            ) {
+                add(base.dropLast(2))
+            }
+            add(base.dropLast(1))
+        }
+        if (base.length > 2 && base.endsWith("s") && !base.endsWith("ss")) {
+            add(base.dropLast(1))
+        }
+        if (base.length > 4 && base.endsWith("ied")) add(base.dropLast(3) + "y")
+        if (base.length > 3 && base.endsWith("ed")) {
+            val stem = base.dropLast(2)
+            add(stem)
+            add(stem + "e")
+            if (stem.length >= 3 && stem.last() == stem[stem.length - 2]) add(stem.dropLast(1))
+        }
+        if (base.length > 4 && base.endsWith("ing")) {
+            if (base.endsWith("ying")) add(base.dropLast(4) + "ie")
+            val stem = base.dropLast(3)
+            add(stem)
+            add(stem + "e")
+            if (stem.length >= 3 && stem.last() == stem[stem.length - 2]) add(stem.dropLast(1))
+        }
+        if (base.length > 4 && base.endsWith("ier")) add(base.dropLast(3) + "y")
+        if (base.length > 5 && base.endsWith("iest")) add(base.dropLast(4) + "y")
+        if (base.length > 3 && base.endsWith("er")) {
+            val stem = base.dropLast(2)
+            add(stem)
+            add(stem + "e")
+        }
+        if (base.length > 4 && base.endsWith("est")) {
+            val stem = base.dropLast(3)
+            add(stem)
+            add(stem + "e")
+        }
+        if (base.length > 4 && base.endsWith("ily")) add(base.dropLast(3) + "y")
+        if (base.length > 3 && base.endsWith("ly")) {
+            add(base.dropLast(2))
+            add(base.dropLast(2) + "le")
+        }
+        return result.toList()
+    }
+}
+

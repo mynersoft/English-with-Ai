@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildEnglishWordCandidates,
   evaluateComprehensionAnswers,
   isValidOptionalAudioUrl,
   normalizeAccent,
@@ -119,3 +120,16 @@ test("All student & admin reading routes enforce withAuth / withAdmin and never 
     assert.match(src, /withAdmin/, `${rel} must use withAdmin`);
   }
 });
+
+test("buildEnglishWordCandidates resolves inflected, possessive, and irregular English words to base vocabulary forms", () => {
+  assert.ok(buildEnglishWordCandidates("brushes").includes("brush"));
+  assert.ok(buildEnglishWordCandidates("walked").includes("walk"));
+  assert.ok(buildEnglishWordCandidates("stopped").includes("stop"));
+  assert.ok(buildEnglishWordCandidates("writing").includes("write"));
+  assert.ok(buildEnglishWordCandidates("studies").includes("study"));
+  assert.ok(buildEnglishWordCandidates("friend's").includes("friend"));
+  assert.ok(buildEnglishWordCandidates("went").includes("go"));
+  assert.ok(buildEnglishWordCandidates("children").includes("child"));
+  assert.equal(buildEnglishWordCandidates("walks")[0], "walks");
+});
+

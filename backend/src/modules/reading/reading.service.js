@@ -4,6 +4,7 @@ import { DEFAULT_TIMEZONE, getLocalDateString, normalizeTimezone, shiftLocalDate
 import { buildWeekWindow, computeStreaksFromActiveDates } from "@/lib/studentStats";
 import {
   READING_CEFR_LEVELS,
+  buildEnglishWordCandidates,
   evaluateComprehensionAnswers,
   isValidOptionalAudioUrl,
   normalizeAccent,
@@ -650,26 +651,48 @@ export async function submitReadingAttempt({ userDoc, passageId, body = {}, now 
 export async function lookupReadingWord({ userId, rawWord, passageId = null }) {
   const clean = String(rawWord || "")
     .trim()
-    .replace(/^[^a-zA-Z]+|[^a-zA-Z'-]+$/g, "");
+    .replace(/^[^a-zA-Z]+|[^a-zA-Z'’-]+$/g, "");
   if (!clean) {
     throw new AppError(400, "INVALID_WORD", "Word is required.");
   }
-  const lower = clean.toLowerCase();
+  const candidates = buildEnglishWordCandidates(clean);
+  const candidateSlugs = candidates.map((c) => slugifyReadingText(c));
+  const candidateRegexes = candidates.map(
+    (c) => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+  );
 
   let passageVocabMatch = null;
   if (passageId && mongoose.Types.ObjectId.isValid(String(passageId))) {
     const p = await ReadingPassage.findById(passageId).select("vocabulary").lean();
-    passageVocabMatch = (p?.vocabulary || []).find(
-      (v) => String(v.word || "").trim().toLowerCase() === lower
-    );
+    const vocabList = p?.vocabulary || [];
+    for (const candidate of candidates) {
+      passageVocabMatch = vocabList.find(
+        (v) => String(v.word || "").trim().toLowerCase() === candidate
+      );
+      if (passageVocabMatch) break;
+    }
   }
 
-  // Also check Vocabulary collection for canonical word entry & whether already saved
-  const escaped = lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const vocabDoc = await Vocabulary.findOne({
-    isPublished: true,
-    $or: [{ slug: slugifyReadingText(lower) }, { word: new RegExp(`^${escaped}$`, "i") }],
+  // Check Vocabulary collection across exact + inflected base candidates
+  const matchedVocabs = await Vocabulary.find({
+    $or: [{ slug: { $in: candidateSlugs } }, { word: { $in: candidateRegexes } }],
   }).lean();
+
+  let vocabDoc = null;
+  for (const candidate of candidates) {
+    const candidateSlug = slugifyReadingText(candidate);
+    vocabDoc =
+      matchedVocabs.find(
+        (doc) =>
+          doc.isPublished !== false &&
+          (doc.slug === candidateSlug || String(doc.word || "").trim().toLowerCase() === candidate)
+      ) ||
+      matchedVocabs.find(
+        (doc) =>
+          doc.slug === candidateSlug || String(doc.word || "").trim().toLowerCase() === candidate
+      );
+    if (vocabDoc) break;
+  }
 
   let inUserVocabulary = false;
   if (vocabDoc) {

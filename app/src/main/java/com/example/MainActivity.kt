@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -65,8 +66,15 @@ import com.englishai.feature.speaking.SentenceLearningScreen
 import com.example.core.common.UiState
 import com.example.core.reminder.DailySessionReminderPrefs
 import com.example.core.reminder.DailySessionReminderScheduler
+import com.example.core.wordofday.WordOfTheDayDialog
+import com.example.core.wordofday.WordOfTheDayEntry
+import com.example.core.wordofday.WordOfTheDayNotificationConstants
+import com.example.core.wordofday.WordOfTheDayScheduler
+import com.example.core.wordofday.WordOfTheDayStorage
+import com.example.core.wordofday.WordOfTheDaySync
 import com.example.core.ui.SystemBarsAppearance
 import com.example.core.ui.attemptSilentGoogleAutoSignIn
+import org.json.JSONObject
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.UserRepository
 import com.example.domain.model.AccountStatus
@@ -114,20 +122,51 @@ private object AppRoutes {
 }
 
 class MainActivity : ComponentActivity() {
+    private var launchedWordOfTheDay by mutableStateOf<WordOfTheDayEntry?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         DailySessionReminderScheduler.scheduleDailyReminder(this)
+        WordOfTheDayScheduler.scheduleMorningNotification(this)
+        handleWordOfTheDayIntent(intent)
         setContent {
             EnglishAITheme {
-                EnglishAIApp()
+                EnglishAIApp(
+                    wordOfTheDayPopup = launchedWordOfTheDay,
+                    onDismissWordOfTheDay = { launchedWordOfTheDay = null }
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWordOfTheDayIntent(intent)
+    }
+
+    private fun handleWordOfTheDayIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(WordOfTheDayNotificationConstants.EXTRA_OPEN_WORD_OF_THE_DAY, false) != true) {
+            return
+        }
+        val rawJson = intent.getStringExtra(WordOfTheDayNotificationConstants.EXTRA_WORD_JSON)
+        val parsed = rawJson
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+            ?.let { WordOfTheDayEntry.fromJson(it) }
+            ?: WordOfTheDayStorage.getCurrentEntry(this)
+        if (parsed != null) {
+            launchedWordOfTheDay = parsed
+        }
+        intent.removeExtra(WordOfTheDayNotificationConstants.EXTRA_OPEN_WORD_OF_THE_DAY)
     }
 }
 
 @Composable
-fun EnglishAIApp() {
+fun EnglishAIApp(
+    wordOfTheDayPopup: WordOfTheDayEntry? = null,
+    onDismissWordOfTheDay: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val authRepository = remember { AuthRepository(Firebase.auth) }
@@ -178,24 +217,32 @@ fun EnglishAIApp() {
         if (granted || DailySessionReminderPrefs.hasNotificationPermission(context)) {
             DailySessionReminderScheduler.scheduleDailyReminder(context)
             DailySessionReminderScheduler.postNotificationIfEligible(context)
+            WordOfTheDayScheduler.scheduleMorningNotification(context)
         }
     }
 
     LaunchedEffect(user?.uid) {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !DailySessionReminderPrefs.hasNotificationPermission(context) &&
+            !DailySessionReminderPrefs.hasPromptedNotificationPermission(context)
+        ) {
+            DailySessionReminderPrefs.markNotificationPermissionPrompted(context)
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         if (user != null) {
             DailySessionReminderPrefs.markLoggedInToday(context)
-        } else {
-            if (
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                !DailySessionReminderPrefs.hasNotificationPermission(context) &&
-                !DailySessionReminderPrefs.hasPromptedNotificationPermission(context)
-            ) {
-                DailySessionReminderPrefs.markNotificationPermissionPrompted(context)
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                DailySessionReminderScheduler.postNotificationIfEligible(context)
-            }
+            WordOfTheDaySync.syncPool(context)
+        } else if (DailySessionReminderPrefs.hasNotificationPermission(context)) {
+            DailySessionReminderScheduler.postNotificationIfEligible(context)
         }
+    }
+
+    if (wordOfTheDayPopup != null) {
+        WordOfTheDayDialog(
+            entry = wordOfTheDayPopup,
+            onDismiss = onDismissWordOfTheDay
+        )
     }
 
     val systemDark = isSystemInDarkTheme()

@@ -393,8 +393,10 @@ class PassageReaderViewModel(
         if (cleaned.isBlank()) return
 
         val passage = _uiState.value.passage
-        val localMatch = passage?.vocabulary?.firstOrNull {
-            TextMatchComparator.normalizeWord(it.word) == cleaned
+        val candidates = com.example.data.repository.WordLookupCandidates.build(cleaned)
+        val localMatch = passage?.vocabulary?.firstOrNull { vocab ->
+            val norm = TextMatchComparator.normalizeWord(vocab.word)
+            candidates.any { it == norm }
         }
 
         _uiState.update {
@@ -423,13 +425,24 @@ class PassageReaderViewModel(
                 onSuccess = { lookup ->
                     _uiState.update { state ->
                         if (state.wordPopup.word != cleaned) state
-                        else state.copy(
-                            wordPopup = state.wordPopup.copy(
-                                isLoading = false,
-                                lookup = lookup,
-                                savedDone = lookup.inUserVocabulary
+                        else {
+                            val existing = state.wordPopup.lookup
+                            val mergedLookup = if (!lookup.found && existing?.found == true) {
+                                existing.copy(
+                                    existingVocabularyId = lookup.existingVocabularyId ?: existing.existingVocabularyId,
+                                    inUserVocabulary = lookup.inUserVocabulary
+                                )
+                            } else {
+                                lookup
+                            }
+                            state.copy(
+                                wordPopup = state.wordPopup.copy(
+                                    isLoading = false,
+                                    lookup = mergedLookup,
+                                    savedDone = mergedLookup.inUserVocabulary
+                                )
                             )
-                        )
+                        }
                     }
                 },
                 onFailure = { err ->

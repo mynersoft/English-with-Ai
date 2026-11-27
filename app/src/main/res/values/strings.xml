@@ -26,4 +26,7 @@
     <string name="daily_reminder_alert_body">You haven\'t logged in today yet. Sign in to complete today\'s English practice session.</string>
     <string name="daily_reminder_enable_cta">Enable Phone Reminders</string>
     <string name="daily_reminder_dismiss_cd">Dismiss daily reminder</string>
+    <string name="word_of_the_day_channel_name">Word of the Day</string>
+    <string name="word_of_the_day_channel_desc">Delivers a new English word with its Bangla meaning and example sentence each morning.</string>
 </resources>
+

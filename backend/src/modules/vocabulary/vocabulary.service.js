@@ -10,6 +10,7 @@ import {
   getLocalDateString,
   normalizeDailyGoal,
   normalizeTimezone,
+  selectWordOfTheDayFromPool,
   shiftLocalDate,
 } from "@/lib/vocabSrs";
 import UserSettings from "@/models/UserSettings";
@@ -1185,3 +1186,40 @@ Return ONLY valid JSON:
     createdAt: session.createdAt,
   };
 }
+
+export async function getWordOfTheDay({ userId, settings, now = new Date() }) {
+  const todayStr = getLocalDateString(now, settings?.timezone);
+  const [progressRows, catalogWords] = await Promise.all([
+    UserVocabularyProgress.find({ userId })
+      .select("vocabularyId status learnedAt")
+      .lean(),
+    Vocabulary.find({ isPublished: true })
+      .sort({ sortOrder: 1, _id: 1 })
+      .limit(400)
+      .populate("categoryId", "name")
+      .lean(),
+  ]);
+
+  const learnedIds = new Set(
+    progressRows.filter((p) => Boolean(p.learnedAt)).map((p) => String(p.vocabularyId))
+  );
+  const masteredIds = new Set(
+    progressRows.filter((p) => p.status === "mastered").map((p) => String(p.vocabularyId))
+  );
+
+  // Prefer words that already include an example sentence when available
+  const withExamples = catalogWords.filter(
+    (w) => Array.isArray(w.examples) && w.examples.some((e) => String(e?.en || "").trim())
+  );
+  const pool = withExamples.length >= 7 ? withExamples : catalogWords;
+
+  return selectWordOfTheDayFromPool({
+    words: pool,
+    learnedIds,
+    masteredIds,
+    dateStr: todayStr,
+    userId: String(userId || ""),
+    upcomingCount: 7,
+  });
+}
+

@@ -9,6 +9,7 @@ import {
   normalizeVocabularyPayload,
   parseVocabularyCsv,
   scoreQuizAnswers,
+  selectWordOfTheDayFromPool,
   shiftLocalDate,
 } from "../src/lib/vocabSrs.js";
 
@@ -197,4 +198,30 @@ test("All admin vocabulary routes enforce withAdmin and adminGuard blocks non-ad
   assert.ok(guardSrc.includes("401") && guardSrc.includes("UNAUTHORIZED"));
   assert.ok(guardSrc.includes("403") && guardSrc.includes("FORBIDDEN"));
 });
+
+test("selectWordOfTheDayFromPool selects unlearned words first, formats Bangla meaning/example, and returns upcoming days", () => {
+  const words = [
+    { _id: "w1", word: "morning", meaning: "সকাল", level: "A1", examples: [{ en: "Good morning!", bn: "সুপ্রভাত!" }] },
+    { _id: "w2", word: "confident", meaning: "আত্মবিশ্বাসী", level: "A2", examples: [{ en: "She feels confident today.", bn: "সে আজ আত্মবিশ্বাসী।" }] },
+    { _id: "w3", word: "journey", meaning: "ভ্রমণ", level: "B1", examples: [{ en: "Every journey begins with one step.", bn: "প্রতিটি যাত্রা এক ধাপে শুরু হয়।" }] },
+    { _id: "w4", word: "gratitude", meaning: "কৃতজ্ঞতা", level: "B1", examples: [{ en: "Express gratitude daily.", bn: "প্রতিদিন কৃতজ্ঞতা প্রকাশ করো।" }] },
+  ];
+
+  const picked = selectWordOfTheDayFromPool({
+    words,
+    learnedIds: new Set(["w1"]),
+    masteredIds: new Set(["w2"]),
+    dateStr: "2026-11-27",
+    userId: "uid-123",
+    upcomingCount: 3,
+  });
+
+  assert.ok(picked.wordOfTheDay);
+  assert.ok(["journey", "gratitude"].includes(picked.wordOfTheDay.word));
+  assert.ok(picked.wordOfTheDay.meaning.length > 0);
+  assert.ok(picked.wordOfTheDay.exampleEn.length > 0);
+  assert.equal(picked.upcoming.length, 3);
+  assert.equal(new Set([picked.wordOfTheDay.word, ...picked.upcoming.map((u) => u.word)]).size, 4);
+});
+
 

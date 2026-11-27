@@ -168,3 +168,177 @@ export function evaluateComprehensionAnswers(questions = [], submittedAnswers = 
     answers: results,
   };
 }
+
+const IRREGULAR_WORD_BASES = {
+  am: "be",
+  is: "be",
+  are: "be",
+  was: "be",
+  were: "be",
+  been: "be",
+  being: "be",
+  has: "have",
+  had: "have",
+  having: "have",
+  does: "do",
+  did: "do",
+  done: "do",
+  doing: "do",
+  went: "go",
+  gone: "go",
+  goes: "go",
+  ate: "eat",
+  eaten: "eat",
+  drank: "drink",
+  drunk: "drink",
+  slept: "sleep",
+  woke: "wake",
+  woken: "wake",
+  wrote: "write",
+  written: "write",
+  spoke: "speak",
+  spoken: "speak",
+  took: "take",
+  taken: "take",
+  made: "make",
+  came: "come",
+  saw: "see",
+  seen: "see",
+  gave: "give",
+  given: "give",
+  got: "get",
+  gotten: "get",
+  ran: "run",
+  sat: "sit",
+  stood: "stand",
+  said: "say",
+  told: "tell",
+  taught: "teach",
+  bought: "buy",
+  brought: "bring",
+  thought: "think",
+  felt: "feel",
+  found: "find",
+  kept: "keep",
+  left: "leave",
+  met: "meet",
+  paid: "pay",
+  children: "child",
+  men: "man",
+  women: "woman",
+  teeth: "tooth",
+  feet: "foot",
+  mice: "mouse",
+  geese: "goose",
+  people: "person",
+  better: "good",
+  best: "good",
+  worse: "bad",
+  worst: "bad",
+};
+
+/**
+ * Generates ordered lowercase lookup candidates (exact word first, then common
+ * English inflection/lemma candidates) so tapping inflected words in passages
+ * resolves their base entry in Vocabulary.
+ */
+export function buildEnglishWordCandidates(rawWord = "") {
+  const cleaned = String(rawWord || "")
+    .trim()
+    .replace(/^[^a-zA-Z]+|[^a-zA-Z'’-]+$/g, "")
+    .replace(/[’‘]/g, "'")
+    .toLowerCase();
+  if (!cleaned) return [];
+
+  const seen = new Set();
+  const candidates = [];
+  const add = (w) => {
+    const normalized = String(w || "").trim().toLowerCase();
+    if (normalized && /^[a-z][a-z'-]*$/.test(normalized) && !seen.has(normalized)) {
+      seen.add(normalized);
+      candidates.push(normalized);
+    }
+  };
+
+  add(cleaned);
+
+  const withoutPossessive = cleaned.replace(/'s$/i, "").replace(/s'$/i, "s").replace(/'$/i, "");
+  add(withoutPossessive);
+
+  const base = withoutPossessive || cleaned;
+  if (IRREGULAR_WORD_BASES[base]) {
+    add(IRREGULAR_WORD_BASES[base]);
+  }
+
+  // Plurals / 3rd-person singular verbs
+  if (base.length > 4 && base.endsWith("ies")) {
+    add(`${base.slice(0, -3)}y`);
+  }
+  if (base.length > 4 && base.endsWith("ves")) {
+    add(`${base.slice(0, -3)}f`);
+    add(`${base.slice(0, -3)}fe`);
+  }
+  if (base.length > 3 && base.endsWith("es")) {
+    if (/(ches|shes|xes|zes|sses|oes)$/.test(base)) {
+      add(base.slice(0, -2));
+    }
+    add(base.slice(0, -1));
+  }
+  if (base.length > 2 && base.endsWith("s") && !base.endsWith("ss")) {
+    add(base.slice(0, -1));
+  }
+
+  // Past tense / past participle
+  if (base.length > 4 && base.endsWith("ied")) {
+    add(`${base.slice(0, -3)}y`);
+  }
+  if (base.length > 3 && base.endsWith("ed")) {
+    const stem = base.slice(0, -2);
+    add(stem);
+    add(`${stem}e`);
+    if (stem.length >= 3 && stem[stem.length - 1] === stem[stem.length - 2]) {
+      add(stem.slice(0, -1));
+    }
+  }
+
+  // Present participle / gerund
+  if (base.length > 4 && base.endsWith("ing")) {
+    const stem = base.slice(0, -3);
+    if (base.endsWith("ying")) {
+      add(`${base.slice(0, -4)}ie`);
+    }
+    add(stem);
+    add(`${stem}e`);
+    if (stem.length >= 3 && stem[stem.length - 1] === stem[stem.length - 2]) {
+      add(stem.slice(0, -1));
+    }
+  }
+
+  // Comparatives, superlatives, adverbs
+  if (base.length > 4 && base.endsWith("ier")) {
+    add(`${base.slice(0, -3)}y`);
+  }
+  if (base.length > 5 && base.endsWith("iest")) {
+    add(`${base.slice(0, -4)}y`);
+  }
+  if (base.length > 3 && base.endsWith("er")) {
+    const stem = base.slice(0, -2);
+    add(stem);
+    add(`${stem}e`);
+  }
+  if (base.length > 4 && base.endsWith("est")) {
+    const stem = base.slice(0, -3);
+    add(stem);
+    add(`${stem}e`);
+  }
+  if (base.length > 4 && base.endsWith("ily")) {
+    add(`${base.slice(0, -3)}y`);
+  }
+  if (base.length > 3 && base.endsWith("ly")) {
+    add(base.slice(0, -2));
+    add(`${base.slice(0, -2)}le`);
+  }
+
+  return candidates;
+}
+
