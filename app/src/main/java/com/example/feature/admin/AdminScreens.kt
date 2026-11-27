@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.UploadFile
@@ -83,16 +84,18 @@ fun AdminRoute(
     onBack: () -> Unit,
     vm: AdminViewModel = viewModel(),
     vocabAdminVm: VocabAdminViewModel = viewModel(),
-    readingAdminVm: ReadingAdminViewModel = viewModel()
+    readingAdminVm: ReadingAdminViewModel = viewModel(),
+    studentsAdminVm: AdminStudentsViewModel = viewModel()
 ) {
     val access by vm.access.collectAsStateWithLifecycle()
     val patternListState by vm.list.collectAsStateWithLifecycle()
     val vocabAdminState by vocabAdminVm.state.collectAsStateWithLifecycle()
     val readingListState by readingAdminVm.listState.collectAsStateWithLifecycle()
     val readingEditorState by readingAdminVm.editorState.collectAsStateWithLifecycle()
+    val studentsState by studentsAdminVm.state.collectAsStateWithLifecycle()
 
     var showPatternEditor by rememberSaveable { mutableStateOf(false) }
-    var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary, 3=Reading
+    var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary, 3=Reading, 4=Students
     var vocabSubTab by rememberSaveable { mutableIntStateOf(0) }
     var openAddWordTrigger by remember { mutableIntStateOf(0) }
 
@@ -104,6 +107,7 @@ fun AdminRoute(
         if (access is AdminAccessState.Allowed) {
             vocabAdminVm.loadInitial()
             readingAdminVm.loadInitial()
+            studentsAdminVm.loadInitial()
         }
     }
 
@@ -116,6 +120,9 @@ fun AdminRoute(
             readingEditorState.isEditing -> {
                 readingAdminVm.closeEditor()
                 readingAdminVm.loadInitial()
+            }
+            activeSectionTab == 4 && studentsState.isViewingDetail -> {
+                studentsAdminVm.closeStudentDetail()
             }
             else -> onBack()
         }
@@ -171,6 +178,7 @@ fun AdminRoute(
                         patternState = patternListState,
                         vocabState = vocabAdminState,
                         readingState = readingListState,
+                        studentsState = studentsState,
                         vocabSubTab = vocabSubTab,
                         openAddWordTrigger = openAddWordTrigger,
                         onBack = onBack,
@@ -178,6 +186,7 @@ fun AdminRoute(
                             vm.loadList()
                             vocabAdminVm.loadInitial()
                             readingAdminVm.loadInitial()
+                            studentsAdminVm.refresh()
                         },
                         onNewPattern = {
                             vm.openNew()
@@ -209,9 +218,13 @@ fun AdminRoute(
                         onQuickManageReading = {
                             activeSectionTab = 3
                         },
+                        onQuickManageStudents = {
+                            activeSectionTab = 4
+                        },
                         onClearReadingMessage = { readingAdminVm.clearBanner() },
                         vocabAdminVm = vocabAdminVm,
-                        readingAdminVm = readingAdminVm
+                        readingAdminVm = readingAdminVm,
+                        studentsAdminVm = studentsAdminVm
                     )
                 }
             }
@@ -300,6 +313,7 @@ private fun AdminDashboardHub(
     patternState: AdminListState,
     vocabState: VocabAdminUiState,
     readingState: ReadingAdminListState,
+    studentsState: AdminStudentsUiState,
     vocabSubTab: Int,
     openAddWordTrigger: Int,
     onBack: () -> Unit,
@@ -313,9 +327,11 @@ private fun AdminDashboardHub(
     onQuickCsvImport: () -> Unit,
     onQuickCreateReading: () -> Unit,
     onQuickManageReading: () -> Unit,
+    onQuickManageStudents: () -> Unit,
     onClearReadingMessage: () -> Unit,
     vocabAdminVm: VocabAdminViewModel,
-    readingAdminVm: ReadingAdminViewModel
+    readingAdminVm: ReadingAdminViewModel,
+    studentsAdminVm: AdminStudentsViewModel
 ) {
     val snackbar = remember { SnackbarHostState() }
     var confirmDeletePattern by remember { mutableStateOf<AdminPatternSummary?>(null) }
@@ -335,6 +351,14 @@ private fun AdminDashboardHub(
         }
     }
 
+    LaunchedEffect(studentsState.message, studentsState.error) {
+        val msg = studentsState.message ?: studentsState.error
+        if (!msg.isNullOrBlank()) {
+            snackbar.showSnackbar(msg)
+            studentsAdminVm.clearBanner()
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
@@ -343,7 +367,7 @@ private fun AdminDashboardHub(
                     Column {
                         Text("Admin Dashboard", fontWeight = FontWeight.Bold)
                         Text(
-                            text = "Manage Patterns, Vocabulary & Reading",
+                            text = "Manage Patterns, Vocabulary, Reading & Students",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -418,6 +442,12 @@ private fun AdminDashboardHub(
                     text = { Text("Reading (${readingState.total})") },
                     modifier = Modifier.testTag("admin_tab_reading")
                 )
+                Tab(
+                    selected = activeTab == 4,
+                    onClick = { onSelectTab(4) },
+                    text = { Text("Students (${studentsState.counts.totalStudents})") },
+                    modifier = Modifier.testTag("admin_tab_students")
+                )
             }
 
             when (activeTab) {
@@ -426,13 +456,15 @@ private fun AdminDashboardHub(
                     vocabCount = vocabState.total,
                     categoryCount = vocabState.categories.size,
                     readingCount = readingState.total,
+                    studentCount = studentsState.counts.totalStudents,
                     onPostNewPattern = onNewPattern,
                     onOpenPatterns = { onSelectTab(1) },
                     onPostNewVocabulary = onQuickAddVocabulary,
                     onManageCategories = onQuickManageCategories,
                     onCsvImport = onQuickCsvImport,
                     onCreateReading = onQuickCreateReading,
-                    onManageReading = onQuickManageReading
+                    onManageReading = onQuickManageReading,
+                    onManageStudents = onQuickManageStudents
                 )
                 1 -> AdminPatternsListTab(
                     state = patternState,
@@ -467,6 +499,24 @@ private fun AdminDashboardHub(
                 ) {
                     ReadingAdminPanel(vm = readingAdminVm)
                 }
+                4 -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    AdminStudentsPanel(
+                        state = studentsState,
+                        onSearchQueryChange = { studentsAdminVm.onSearchQueryChange(it) },
+                        onAccountFilterChange = { studentsAdminVm.setAccountStatusFilter(it) },
+                        onSubscriptionFilterChange = { studentsAdminVm.setSubscriptionFilter(it) },
+                        onPageChange = { studentsAdminVm.loadStudents(it) },
+                        onSelectStudent = { studentsAdminVm.openStudentDetail(it) },
+                        onCloseDetail = { studentsAdminVm.closeStudentDetail() },
+                        onUpdateAccountStatus = { id, st -> studentsAdminVm.updateAccountStatus(id, st) },
+                        onUpdateSubscription = { id, st, pl, exp ->
+                            studentsAdminVm.updateSubscription(id, st, pl, exp)
+                        }
+                    )
+                }
             }
         }
     }
@@ -493,13 +543,15 @@ private fun AdminOverviewTab(
     vocabCount: Int,
     categoryCount: Int,
     readingCount: Int,
+    studentCount: Int,
     onPostNewPattern: () -> Unit,
     onOpenPatterns: () -> Unit,
     onPostNewVocabulary: () -> Unit,
     onManageCategories: () -> Unit,
     onCsvImport: () -> Unit,
     onCreateReading: () -> Unit,
-    onManageReading: () -> Unit
+    onManageReading: () -> Unit,
+    onManageStudents: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -513,19 +565,29 @@ private fun AdminOverviewTab(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                AdminStatTile("Students", studentCount.toString(), Modifier.weight(1f))
                 AdminStatTile("Patterns", patternCount.toString(), Modifier.weight(1f))
                 AdminStatTile("Words", vocabCount.toString(), Modifier.weight(1f))
-                AdminStatTile("Categories", categoryCount.toString(), Modifier.weight(1f))
                 AdminStatTile("Reading", readingCount.toString(), Modifier.weight(1f))
             }
         }
 
         item {
             Text(
-                text = "Content Management (Admin Only)",
+                text = "Student & Content Management (Admin Only)",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.People,
+                title = "Manage Students",
+                subtitle = "Search students, view learning progress, and update account or subscription status ($categoryCount vocab categories)",
+                testTag = "admin_quick_manage_students",
+                onClick = onManageStudents
             )
         }
 

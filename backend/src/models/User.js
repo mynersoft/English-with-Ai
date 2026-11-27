@@ -9,7 +9,19 @@ const userSchema = new mongoose.Schema(
     photoUrl: { type: String, default: null },
     authProviders: { type: [String], default: [] }, // "password", "google.com"
     role: { type: String, enum: ["student", "admin"], default: "student" },
-    status: { type: String, enum: ["active", "deactivated"], default: "active", index: true },
+    status: { type: String, enum: ["active", "suspended", "deactivated"], default: "active", index: true },
+    subscriptionStatus: {
+      type: String,
+      enum: ["free", "trial", "active", "expired", "cancelled"],
+      default: "free",
+      index: true,
+    },
+    subscriptionPlan: {
+      type: String,
+      enum: ["free", "monthly", "yearly", "lifetime"],
+      default: "free",
+    },
+    subscriptionExpiresAt: { type: Date, default: null },
     learningLevel: { type: String, enum: ["beginner", "intermediate", "advanced", null], default: null },
     dailyGoalMinutes: { type: Number, default: 20, min: 5, max: 240 },
     lastLoginAt: { type: Date, default: null },
