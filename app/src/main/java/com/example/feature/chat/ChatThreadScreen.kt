@@ -81,8 +81,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.isPermissionPermanentlyDenied
 import com.example.core.ui.openAppPermissionSettings
-import com.example.core.ui.shouldOpenAppSettings
+import com.example.core.ui.requestSystemPermission
 import com.example.domain.model.ChatMessageItem
 import com.example.domain.model.ChatRoomSummary
 import java.io.File
@@ -106,6 +107,7 @@ fun ChatThreadScreen(
     onDismissExtractedText: () -> Unit = {},
     onOcrError: (String) -> Unit = {},
     onClearOcrError: () -> Unit = {},
+    onClearHighlight: () -> Unit = {},
     onClearError: () -> Unit
 ) {
     val room = state.room ?: return
@@ -114,7 +116,6 @@ fun ChatThreadScreen(
     var showRoomInfo by remember { mutableStateOf(false) }
     var showCaptureOptions by remember { mutableStateOf(false) }
     var showCameraPermissionDialog by remember { mutableStateOf(false) }
-    var cameraPermissionDeniedOnce by remember { mutableStateOf(false) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     val listState = rememberLazyListState()
@@ -149,10 +150,8 @@ fun ChatThreadScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            cameraPermissionDeniedOnce = false
             launchCamera()
-        } else {
-            cameraPermissionDeniedOnce = true
+        } else if (isPermissionPermanentlyDenied(context, Manifest.permission.CAMERA)) {
             showCameraPermissionDialog = true
         }
     }
@@ -165,9 +164,24 @@ fun ChatThreadScreen(
         }
     }
 
-    LaunchedEffect(state.messages.size) {
+    LaunchedEffect(state.messages.size, state.highlightedMessageId) {
+        val highlightId = state.highlightedMessageId
+        if (!highlightId.isNullOrBlank()) {
+            val targetIndex = state.messages.indexOfFirst { it.id == highlightId }
+            if (targetIndex >= 0) {
+                listState.animateScrollToItem(targetIndex)
+                return@LaunchedEffect
+            }
+        }
         if (state.messages.isNotEmpty()) {
             listState.animateScrollToItem(state.messages.lastIndex)
+        }
+    }
+
+    LaunchedEffect(state.highlightedMessageId) {
+        if (!state.highlightedMessageId.isNullOrBlank()) {
+            kotlinx.coroutines.delay(2600L)
+            onClearHighlight()
         }
     }
 
@@ -357,6 +371,7 @@ fun ChatThreadScreen(
                                 ChatMessageBubbleRow(
                                     msg = msg,
                                     isCorrecting = state.correctingIds.contains(msg.id),
+                                    isHighlighted = state.highlightedMessageId == msg.id,
                                     onReply = { onReplySelect(msg) },
                                     onRequestAiCorrection = { onRequestAiCorrection(msg.id) }
                                 )
@@ -382,15 +397,13 @@ fun ChatThreadScreen(
                     Button(
                         onClick = {
                             showCaptureOptions = false
-                            val hasPerm = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.CAMERA
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (hasPerm) {
-                                launchCamera()
-                            } else {
-                                showCameraPermissionDialog = true
-                            }
+                            requestSystemPermission(
+                                context = context,
+                                permission = Manifest.permission.CAMERA,
+                                launcher = cameraPermissionLauncher,
+                                onAlreadyGranted = { launchCamera() },
+                                onPermanentlyDenied = { showCameraPermissionDialog = true }
+                            )
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = ChatPrimaryGreen),
                         shape = RoundedCornerShape(12.dp),
@@ -433,15 +446,11 @@ fun ChatThreadScreen(
     if (showCameraPermissionDialog) {
         PermissionPromptDialog(
             title = "Camera Permission Required",
-            message = "Allow camera permission to take a photo of your handwriting.",
+            message = "Camera permission was denied. Enable it in App Settings to take a photo of your handwriting.",
             icon = Icons.Filled.PhotoCamera,
             onAllow = {
                 showCameraPermissionDialog = false
-                if (shouldOpenAppSettings(context, Manifest.permission.CAMERA, cameraPermissionDeniedOnce)) {
-                    openAppPermissionSettings(context)
-                } else {
-                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                }
+                openAppPermissionSettings(context)
             },
             onCancel = { showCameraPermissionDialog = false }
         )

@@ -22,5 +22,6 @@ const chatPresenceSchema = new mongoose.Schema(
 );
 
 chatPresenceSchema.index({ roomId: 1, userId: 1 }, { unique: true });
+chatPresenceSchema.index({ roomId: 1, lastSeenAt: -1 });
 
 export default mongoose.models.ChatPresence || mongoose.model("ChatPresence", chatPresenceSchema);

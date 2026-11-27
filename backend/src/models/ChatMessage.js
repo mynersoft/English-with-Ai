@@ -46,5 +46,7 @@ const chatMessageSchema = new mongoose.Schema(
 );
 
 chatMessageSchema.index({ roomId: 1, createdAt: -1 });
+chatMessageSchema.index({ senderId: 1, createdAt: -1 });
+chatMessageSchema.index({ createdAt: -1, roomId: 1 });
 
 export default mongoose.models.ChatMessage || mongoose.model("ChatMessage", chatMessageSchema);

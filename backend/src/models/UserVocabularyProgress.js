@@ -30,7 +30,8 @@ const userVocabularyProgressSchema = new mongoose.Schema(
 
 userVocabularyProgressSchema.index({ userId: 1, vocabularyId: 1 }, { unique: true });
 userVocabularyProgressSchema.index({ userId: 1, nextReviewAt: 1 });
-userVocabularyProgressSchema.index({ userId: 1, status: 1 });
+userVocabularyProgressSchema.index({ userId: 1, status: 1, nextReviewAt: 1 });
+userVocabularyProgressSchema.index({ userId: 1, learnedAt: 1 });
 userVocabularyProgressSchema.index({ userId: 1, isFavorite: 1 });
 
 export default mongoose.models.UserVocabularyProgress ||

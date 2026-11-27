@@ -2,9 +2,13 @@ package com.example.feature.admin
 
 import com.example.BuildConfig
 import com.example.core.network.NetworkClient
+import com.example.core.network.sanitizeForBackendFailure
+import com.example.data.repository.BackendApiException
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -79,42 +83,82 @@ data class AudioTarget(val target: String, val index: Int? = null, val lang: Str
 object AdminApi {
     private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
 
-    private suspend fun idToken(): String {
-        val user = Firebase.auth.currentUser ?: throw IOException("Not signed in")
-        return user.getIdToken(false).await().token ?: throw IOException("No auth token")
+    private suspend fun idToken(forceRefresh: Boolean = false): String {
+        val user = Firebase.auth.currentUser
+            ?: throw BackendApiException("Not signed in", "UNAUTHORIZED", 401)
+        return user.getIdToken(forceRefresh).await().token
+            ?: throw BackendApiException("No auth token", "UNAUTHORIZED", 401)
     }
 
     private suspend fun call(path: String, method: String, body: RequestBody? = null): String {
         val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
         if (baseUrl.isBlank()) {
-            throw IOException("Backend URL is not configured yet.")
+            throw BackendApiException("Backend URL is not configured yet.", "CONFIG_MISSING", 500)
         }
-        val token = idToken()
+        val upperMethod = method.uppercase()
+        var token = idToken(false)
+        var refreshed = false
+        var attempt = 0
+        val maxAttempts = if (upperMethod == "GET") 2 else 1
+
         return withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("$baseUrl/api/v1/$path")
-                .header("Authorization", "Bearer $token")
-                .method(method, body)
-                .build()
-            NetworkClient.admin.newCall(request).execute().use { res ->
-                val text = res.body?.string().orEmpty()
-                if (!res.isSuccessful) {
-                    val msg = runCatching {
-                        val jsonErr = JSONObject(text)
-                        jsonErr.optJSONObject("error")?.optString("message")
-                            ?.takeIf { it.isNotBlank() }
-                            ?: jsonErr.optString("error")
-                    }.getOrNull().orEmpty()
-                    val fallback = when (res.code) {
-                        401, 403 -> "Unauthorized (${res.code}): Ensure your backend is updated and your account has admin access."
-                        else -> "Error ${res.code}"
+            while (true) {
+                attempt += 1
+                val request = Request.Builder()
+                    .url("$baseUrl/api/v1/$path")
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/json")
+                    .method(upperMethod, body)
+                    .build()
+
+                try {
+                    NetworkClient.admin.newCall(request).execute().use { res ->
+                        val text = res.body?.string().orEmpty()
+                        if (res.code == 401 && !refreshed) {
+                            refreshed = true
+                            val next = runCatching { idToken(true) }.getOrNull()
+                            if (!next.isNullOrBlank()) {
+                                token = next
+                                attempt -= 1
+                                return@use
+                            }
+                        }
+                        if (upperMethod == "GET" && res.code in setOf(408, 502, 503, 504) && attempt < maxAttempts) {
+                            delay(180L)
+                            return@use
+                        }
+                        if (!res.isSuccessful) {
+                            val jsonErr = runCatching { JSONObject(text) }.getOrNull()
+                            val code = jsonErr?.optJSONObject("error")?.optString("code")?.takeIf { it.isNotBlank() }
+                                ?: jsonErr?.optString("code")?.takeIf { it.isNotBlank() }
+                            val msg = jsonErr?.optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() }
+                                ?: jsonErr?.optString("error")?.takeIf { it.isNotBlank() }
+                                .orEmpty()
+                            val fallback = when (res.code) {
+                                401, 403 -> "Unauthorized (${res.code}): Ensure your backend is updated and your account has admin access."
+                                else -> "Error ${res.code}"
+                            }
+                            throw BackendApiException(
+                                if (msg.isNotBlank() && res.code != 401 && res.code != 403) msg else fallback,
+                                code,
+                                res.code
+                            ).sanitizeForBackendFailure()
+                        }
+                        return@withContext text
                     }
-                    throw IOException(
-                        if (msg.isNotBlank() && res.code != 401 && res.code != 403) msg else fallback
-                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: IOException) {
+                    if (e is BackendApiException) throw e
+                    if (upperMethod == "GET" && attempt < maxAttempts) {
+                        delay(180L)
+                        continue
+                    }
+                    throw e.sanitizeForBackendFailure()
                 }
-                text
             }
+            @Suppress("UNREACHABLE_CODE")
+            ""
         }
     }
 

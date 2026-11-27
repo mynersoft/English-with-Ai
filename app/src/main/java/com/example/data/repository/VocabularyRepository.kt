@@ -474,18 +474,7 @@ class VocabularyRepository(context: Context? = null) {
 
     suspend fun checkIsAdmin(): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
-            if (baseUrl.isBlank()) return@runCatching false
-            val token = idToken()
-            val req = Request.Builder()
-                .url("$baseUrl/api/v1/admin/me")
-                .header("Authorization", "Bearer $token")
-                .get()
-                .build()
-            NetworkClient.standard.newCall(req).execute().use { res ->
-                if (!res.isSuccessful) return@use false
-                JSONObject(res.body?.string().orEmpty()).optBoolean("admin", false)
-            }
+            requestJson("GET", "/api/v1/admin/me").optBoolean("admin", false)
         }.getOrDefault(false)
     }
 
@@ -615,47 +604,18 @@ class VocabularyRepository(context: Context? = null) {
         }
     }
 
-    private suspend fun idToken(): String {
-        val user = Firebase.auth.currentUser
-            ?: throw BackendApiException("Please sign in to continue.", "UNAUTHORIZED", 401)
-        return user.getIdToken(false).await().token
-            ?: throw BackendApiException("Could not verify authentication token.", "UNAUTHORIZED", 401)
-    }
-
     private suspend fun requestJson(
         method: String,
         path: String,
         body: JSONObject? = null,
         client: OkHttpClient = NetworkClient.standard
-    ): JSONObject {
-        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
-        if (baseUrl.isBlank()) {
-            throw BackendApiException("Backend URL is not configured.", "CONFIG_MISSING", 500)
-        }
-        val token = idToken()
-        val reqBuilder = Request.Builder()
-            .url("$baseUrl$path")
-            .header("Authorization", "Bearer $token")
-            .header("Accept", "application/json")
-
-        val reqBody = body?.toString()?.toRequestBody(JSON_TYPE)
-            ?: if (method == "POST" || method == "PUT") "{}".toRequestBody(JSON_TYPE) else null
-        reqBuilder.method(method, reqBody)
-
-        client.newCall(reqBuilder.build()).execute().use { res ->
-            val raw = res.body?.string().orEmpty()
-            val json = runCatching { JSONObject(raw) }.getOrNull()
-            if (!res.isSuccessful || json?.optBoolean("success", true) == false) {
-                val errObj = json?.optJSONObject("error")
-                val code = errObj?.optString("code")?.takeIf { it.isNotBlank() }
-                val message = errObj?.optString("message")?.takeIf { it.isNotBlank() }
-                    ?: json?.optString("error")?.takeIf { it.isNotBlank() }
-                    ?: if (raw.trimStart().startsWith("<")) "Server error (${res.code})" else "Request failed (${res.code})"
-                throw BackendApiException(message, code, res.code)
-            }
-            return json?.optJSONObject("data") ?: json ?: JSONObject()
-        }
-    }
+    ): JSONObject = NetworkClient.executeAuthorizedJson(
+        method = method,
+        path = path,
+        body = body,
+        client = client,
+        notFoundHint = "Vocabulary API not found on server (404). Deploy latest backend to Vercel."
+    )
 
     private fun normalizeVocabSettings(settings: VocabSettings): VocabSettings =
         Companion.normalizeVocabSettings(settings)

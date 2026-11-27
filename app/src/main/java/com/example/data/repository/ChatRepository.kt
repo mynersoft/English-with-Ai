@@ -5,8 +5,10 @@ import com.example.core.network.NetworkClient
 import com.example.core.network.sanitizeForBackendFailure
 import com.example.domain.model.ChatAiCorrection
 import com.example.domain.model.ChatCorrectionToken
+import com.example.domain.model.ChatIncomingNotification
 import com.example.domain.model.ChatMemberSummary
 import com.example.domain.model.ChatMessageItem
+import com.example.domain.model.ChatNotificationsBatch
 import com.example.domain.model.ChatReplyQuote
 import com.example.domain.model.ChatRoomSummary
 import com.example.domain.model.ChatRoomsSnapshot
@@ -150,6 +152,56 @@ class ChatRepository {
         text
     }
 
+    suspend fun fetchIncomingNotifications(
+        afterIso: String? = null,
+        limit: Int = 25
+    ): Result<ChatNotificationsBatch> = safeCall {
+        val q = buildString {
+            append("?limit=").append(limit.coerceIn(1, 50))
+            if (!afterIso.isNullOrBlank()) {
+                append("&after=").append(URLEncoder.encode(afterIso, "UTF-8"))
+            }
+        }
+        val data = requestJson("GET", "/api/chat/notifications$q")
+        val arr = data.optJSONArray("notifications") ?: JSONArray()
+        val list = List(arr.length()) { i ->
+            val o = arr.getJSONObject(i)
+            ChatIncomingNotification(
+                messageId = o.optString("messageId"),
+                roomId = o.optString("roomId"),
+                roomName = o.optString("roomName", "Study Room"),
+                roomType = o.optString("roomType", "group"),
+                roomEmoji = o.optString("roomEmoji", "🦁").ifBlank { "🦁" },
+                senderId = o.optString("senderId"),
+                senderName = o.optString("senderName", "Learner"),
+                senderBadge = o.optString("senderBadge"),
+                textPreview = o.optString("textPreview"),
+                createdAt = o.optString("createdAt")
+            )
+        }.filter { it.messageId.isNotBlank() && it.roomId.isNotBlank() }
+
+        ChatNotificationsBatch(
+            serverTime = data.optString("serverTime"),
+            notifications = list
+        )
+    }
+
+    suspend fun registerPushToken(token: String): Result<Unit> = safeCall {
+        val trimmed = token.trim()
+        if (trimmed.isBlank()) return@safeCall Unit
+        val payload = JSONObject().put("token", trimmed)
+        requestJson("POST", "/api/chat/push-token", payload)
+        Unit
+    }
+
+    suspend fun unregisterPushToken(token: String): Result<Unit> = safeCall {
+        val trimmed = token.trim()
+        if (trimmed.isBlank()) return@safeCall Unit
+        val encoded = URLEncoder.encode(trimmed, "UTF-8")
+        requestJson("DELETE", "/api/chat/push-token?token=$encoded")
+        Unit
+    }
+
     // ---------- Helpers ----------
 
     private suspend fun <T> safeCall(
@@ -165,52 +217,18 @@ class ChatRepository {
         }
     }
 
-    private suspend fun idToken(): String {
-        val user = Firebase.auth.currentUser
-            ?: throw BackendApiException("Please sign in to chat.", "UNAUTHORIZED", 401)
-        return user.getIdToken(false).await().token
-            ?: throw BackendApiException("Could not verify authentication token.", "UNAUTHORIZED", 401)
-    }
-
     private suspend fun requestJson(
         method: String,
         path: String,
         body: JSONObject? = null,
         client: OkHttpClient = NetworkClient.standard
-    ): JSONObject {
-        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
-        if (baseUrl.isBlank()) {
-            throw BackendApiException("Backend URL is not configured.", "CONFIG_MISSING", 500)
-        }
-        val token = idToken()
-        val reqBuilder = Request.Builder()
-            .url("$baseUrl$path")
-            .header("Authorization", "Bearer $token")
-            .header("Accept", "application/json")
-
-        val reqBody = body?.toString()?.toRequestBody(JSON_TYPE)
-            ?: if (method == "POST" || method == "PUT") "{}".toRequestBody(JSON_TYPE) else null
-        reqBuilder.method(method, reqBody)
-
-        client.newCall(reqBuilder.build()).execute().use { res ->
-            val raw = res.body?.string().orEmpty()
-            val json = runCatching { JSONObject(raw) }.getOrNull()
-            if (!res.isSuccessful || json?.optBoolean("success", true) == false) {
-                val errObj = json?.optJSONObject("error")
-                val code = errObj?.optString("code")?.takeIf { it.isNotBlank() }
-                val message = errObj?.optString("message")?.takeIf { it.isNotBlank() }
-                    ?: json?.optString("error")?.takeIf { it.isNotBlank() }
-                    ?: when {
-                        res.code == 404 && raw.trimStart().startsWith("<") ->
-                            "Chat API not found on server (404). Deploy the latest backend to Vercel."
-                        raw.trimStart().startsWith("<") -> "Server error (${res.code})"
-                        else -> "Request failed (${res.code})"
-                    }
-                throw BackendApiException(message, code, res.code)
-            }
-            return json?.optJSONObject("data") ?: json ?: JSONObject()
-        }
-    }
+    ): JSONObject = NetworkClient.executeAuthorizedJson(
+        method = method,
+        path = path,
+        body = body,
+        client = client,
+        notFoundHint = "Chat API not found on server (404). Deploy the latest backend to Vercel."
+    )
 
     private fun parseRoom(o: JSONObject): ChatRoomSummary {
         return ChatRoomSummary(

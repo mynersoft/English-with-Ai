@@ -27,4 +27,7 @@ const chatRoomSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+chatRoomSchema.index({ roomType: 1, isDefault: -1, lastMessageAt: -1, createdAt: 1 });
+chatRoomSchema.index({ roomType: 1, memberIds: 1, lastMessageAt: -1 });
+
 export default mongoose.models.ChatRoom || mongoose.model("ChatRoom", chatRoomSchema);

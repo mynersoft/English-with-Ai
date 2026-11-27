@@ -82,8 +82,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.isPermissionPermanentlyDenied
 import com.example.core.ui.openAppPermissionSettings
-import com.example.core.ui.shouldOpenAppSettings
+import com.example.core.ui.requestSystemPermission
 import com.example.data.repository.Correction
 import com.example.ui.theme.SuccessGreen
 
@@ -114,7 +115,6 @@ fun SpeakingScreen(
     val density = LocalDensity.current
     val listState = rememberLazyListState()
     var showMicPermissionDialog by remember { mutableStateOf(false) }
-    var micDeniedOnce by remember { mutableStateOf(false) }
 
     val imeBottom = WindowInsets.ime.getBottom(density)
     val navBottom = WindowInsets.navigationBars.getBottom(density)
@@ -122,17 +122,19 @@ fun SpeakingScreen(
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            micDeniedOnce = false
             vm.onMicTap()
-        } else {
-            micDeniedOnce = true
+        } else if (isPermissionPermanentlyDenied(context, Manifest.permission.RECORD_AUDIO)) {
             showMicPermissionDialog = true
         }
     }
-    val onMic = {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        if (granted) vm.onMicTap() else showMicPermissionDialog = true
+    val onMic: () -> Unit = {
+        requestSystemPermission(
+            context = context,
+            permission = Manifest.permission.RECORD_AUDIO,
+            launcher = permissionLauncher,
+            onAlreadyGranted = { vm.onMicTap() },
+            onPermanentlyDenied = { showMicPermissionDialog = true }
+        )
     }
 
     val extraItems = if (state.phase == SpeakingPhase.THINKING) 1 else 0
@@ -220,15 +222,11 @@ fun SpeakingScreen(
     if (showMicPermissionDialog) {
         PermissionPromptDialog(
             title = "Microphone Permission Required",
-            message = "Allow microphone permission to talk with the AI Speaking Partner.",
+            message = "Microphone permission was denied. Enable it in App Settings to talk with the AI Speaking Partner.",
             icon = Icons.Filled.Mic,
             onAllow = {
                 showMicPermissionDialog = false
-                if (shouldOpenAppSettings(context, Manifest.permission.RECORD_AUDIO, micDeniedOnce)) {
-                    openAppPermissionSettings(context)
-                } else {
-                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
+                openAppPermissionSettings(context)
             },
             onCancel = { showMicPermissionDialog = false }
         )

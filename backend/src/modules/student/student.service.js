@@ -74,8 +74,7 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
 
   const [
     dailyActivities,
-    vocabLearnedCount,
-    vocabMasteredCount,
+    vocabStatsAgg,
     totalPublishedWords,
     totalQuizAttempts,
     vocabSpeakingSessions,
@@ -95,8 +94,18 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
     })
       .select("date newWords reviewedWords quizCount speakingMinutes patternsPracticed practicedPatternIds aiSpeakingTurns isGoalCompleted")
       .lean(),
-    UserVocabularyProgress.countDocuments({ userId, learnedAt: { $ne: null } }),
-    UserVocabularyProgress.countDocuments({ userId, status: "mastered" }),
+    UserVocabularyProgress.aggregate([
+      { $match: { userId } },
+      {
+        $group: {
+          _id: null,
+          learned: {
+            $sum: { $cond: [{ $ne: [{ $ifNull: ["$learnedAt", null] }, null] }, 1, 0] },
+          },
+          mastered: { $sum: { $cond: [{ $eq: ["$status", "mastered"] }, 1, 0] } },
+        },
+      },
+    ]),
     Vocabulary.countDocuments({ isPublished: true }),
     VocabularyQuizAttempt.countDocuments({ userId }),
     VocabularySpeakingSession.find({ userId, createdAt: { $gte: sixtyDaysAgoDate } })
@@ -121,7 +130,6 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       .sort({ createdAt: -1 })
       .limit(50)
       .select("mode scorePercent correctCount totalCount passageId createdAt")
-      .populate("passageId", "title level")
       .lean(),
     ReadingDailyActivity.find({
       userId,
@@ -130,6 +138,10 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       .select("date readingSeconds completedPassageIds")
       .lean(),
   ]);
+
+  const vocabStats = vocabStatsAgg[0] || {};
+  const vocabLearnedCount = Number(vocabStats.learned || 0);
+  const vocabMasteredCount = Number(vocabStats.mastered || 0);
 
   // Index daily activities by YYYY-MM-DD
   const activityByDate = new Map(dailyActivities.map((a) => [a.date, a]));
@@ -260,15 +272,28 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
 
   const levelLabel = formatLevelLabel(userDoc.learningLevel);
 
-  const recentReadingAttempts = readingAttemptsDocs.slice(0, 3).map((att) => ({
-    id: String(att._id),
-    passageId: att.passageId?._id ? String(att.passageId._id) : "",
-    passageTitle: att.passageId?.title || "Reading Passage",
-    level: att.passageId?.level || "A1",
-    mode: att.mode,
-    scorePercent: Number(att.scorePercent || 0),
-    createdAt: att.createdAt ? new Date(att.createdAt).toISOString() : "",
-  }));
+  const top3Attempts = readingAttemptsDocs.slice(0, 3);
+  const topPassageIds = Array.from(
+    new Set(top3Attempts.map((a) => a.passageId).filter(Boolean).map((id) => String(id)))
+  );
+  const topPassages = topPassageIds.length
+    ? await ReadingPassage.find({ _id: { $in: topPassageIds } }).select("title level").lean()
+    : [];
+  const passageMetaMap = new Map(topPassages.map((p) => [String(p._id), p]));
+
+  const recentReadingAttempts = top3Attempts.map((att) => {
+    const pid = att.passageId ? String(att.passageId) : "";
+    const meta = pid ? passageMetaMap.get(pid) : null;
+    return {
+      id: String(att._id),
+      passageId: pid,
+      passageTitle: meta?.title || "Reading Passage",
+      level: meta?.level || "A1",
+      mode: att.mode,
+      scorePercent: Number(att.scorePercent || 0),
+      createdAt: att.createdAt ? new Date(att.createdAt).toISOString() : "",
+    };
+  });
 
   return {
     user: {

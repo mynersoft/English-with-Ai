@@ -15,12 +15,19 @@ const vocabularyDailyActivitySchema = new mongoose.Schema(
     correctAnswers: { type: Number, default: 0, min: 0 },
     wrongAnswers: { type: Number, default: 0, min: 0 },
     speakingMinutes: { type: Number, default: 0, min: 0 },
+    patternsPracticed: { type: Number, default: 0, min: 0 },
+    practicedPatternIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Pattern" }],
+      default: [],
+    },
+    aiSpeakingTurns: { type: Number, default: 0, min: 0 },
     isGoalCompleted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
 vocabularyDailyActivitySchema.index({ userId: 1, date: 1 }, { unique: true });
+vocabularyDailyActivitySchema.index({ date: 1 });
 
 export default mongoose.models.VocabularyDailyActivity ||
   mongoose.model("VocabularyDailyActivity", vocabularyDailyActivitySchema);

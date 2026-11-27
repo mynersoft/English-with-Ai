@@ -1,19 +1,11 @@
 package com.example.feature.admin
 
 import androidx.compose.runtime.Immutable
-import com.example.BuildConfig
 import com.example.core.network.NetworkClient
 import com.example.core.network.sanitizeForBackendFailure
-import com.example.data.repository.BackendApiException
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -98,7 +90,6 @@ data class AdminStudentDetail(
 )
 
 object AdminStudentsApi {
-    private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
 
     suspend fun listStudents(
         page: Int = 1,
@@ -242,44 +233,13 @@ object AdminStudentsApi {
         method: String,
         path: String,
         body: JSONObject? = null
-    ): JSONObject {
-        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
-        if (baseUrl.isBlank()) {
-            throw BackendApiException("Backend URL is not configured.", "CONFIG_MISSING", 500)
-        }
-        val user = Firebase.auth.currentUser
-            ?: throw BackendApiException("Please sign in first.", "UNAUTHORIZED", 401)
-        val token = user.getIdToken(false).await().token
-            ?: throw BackendApiException("Could not verify authentication token.", "UNAUTHORIZED", 401)
-
-        val builder = Request.Builder()
-            .url("$baseUrl$path")
-            .header("Authorization", "Bearer $token")
-            .header("Accept", "application/json")
-
-        val reqBody = body?.toString()?.toRequestBody(JSON_TYPE)
-            ?: if (method == "POST" || method == "PUT" || method == "PATCH") "{}".toRequestBody(JSON_TYPE) else null
-        builder.method(method, reqBody)
-
-        NetworkClient.admin.newCall(builder.build()).execute().use { res ->
-            val raw = res.body?.string().orEmpty()
-            val json = runCatching { JSONObject(raw) }.getOrNull()
-            if (!res.isSuccessful || json?.optBoolean("success", true) == false) {
-                val errObj = json?.optJSONObject("error")
-                val code = errObj?.optString("code")?.takeIf { it.isNotBlank() }
-                val message = errObj?.optString("message")?.takeIf { it.isNotBlank() }
-                    ?: json?.optString("error")?.takeIf { it.isNotBlank() }
-                    ?: when {
-                        res.code == 404 && raw.trimStart().startsWith("<") ->
-                            "Student Management API not found on server (404). Deploy latest backend to Vercel."
-                        raw.trimStart().startsWith("<") -> "Server error (${res.code})"
-                        else -> "Request failed (${res.code})"
-                    }
-                throw BackendApiException(message, code, res.code)
-            }
-            return json?.optJSONObject("data") ?: json ?: JSONObject()
-        }
-    }
+    ): JSONObject = NetworkClient.executeAuthorizedJson(
+        method = method,
+        path = path,
+        body = body,
+        client = NetworkClient.admin,
+        notFoundHint = "Student Management API not found on server (404). Deploy latest backend to Vercel."
+    )
 
     private fun JSONObject.optStringOrNull(key: String): String? {
         if (isNull(key)) return null

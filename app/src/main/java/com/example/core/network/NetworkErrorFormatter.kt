@@ -1,6 +1,8 @@
 package com.example.core.network
 
 import com.example.data.repository.BackendApiException
+import org.json.JSONException
+import java.io.EOFException
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.ConnectException
@@ -25,9 +27,11 @@ private const val MSG_RATE_LIMITED =
     "Too many requests right now. Please wait a moment and try again."
 private const val MSG_NOT_FOUND =
     "The requested content is currently unavailable. Please refresh and try again."
+private const val MSG_BAD_RESPONSE =
+    "Received an unexpected response from the server. Please try again."
 
 private val TECHNICAL_ERROR_REGEX = Regex(
-    pattern = """(\b\d{1,3}(?:\.\d{1,3}){3}\b|\(port\s+\d+\)|after\s+\d+ms|failed to connect|unable to resolve host|econnrefused|connection reset|broken pipe|software caused connection abort|network is unreachable|timed?\s*out|ssl|certpath|mongodb|firebaseadmin|vercel|<html|server error\s*\(|request failed\s*\(|backend url is not configured|java\.[a-z.]+exception|okhttp)""",
+    pattern = """(\b\d{1,3}(?:\.\d{1,3}){3}\b|\(port\s+\d+\)|after\s+\d+ms|failed to connect|unable to resolve host|econnrefused|connection reset|broken pipe|software caused connection abort|network is unreachable|timed?\s*out|ssl|certpath|mongodb|firebaseadmin|vercel|<html|server error\s*\(|request failed\s*\(|backend url is not configured|java\.[a-z.]+exception|okhttp|org\.json)""",
     option = RegexOption.IGNORE_CASE
 )
 
@@ -40,8 +44,14 @@ fun Throwable.toUserFriendlyBackendMessage(fallback: String = MSG_CONNECTION_ERR
     if (chain.any { it is SocketTimeoutException || it is InterruptedIOException }) {
         return MSG_TIMEOUT_ERROR
     }
+    if (chain.any { it is EOFException }) {
+        return MSG_CONNECTION_ERROR
+    }
     if (chain.any { it is SSLException }) {
         return MSG_SSL_ERROR
+    }
+    if (chain.any { it is JSONException }) {
+        return MSG_BAD_RESPONSE
     }
 
     val apiError = chain.filterIsInstance<BackendApiException>().firstOrNull()
@@ -49,9 +59,11 @@ fun Throwable.toUserFriendlyBackendMessage(fallback: String = MSG_CONNECTION_ERR
         val rawMsg = apiError.message.orEmpty().trim()
         val isTechnical = rawMsg.isBlank() || TECHNICAL_ERROR_REGEX.containsMatchIn(rawMsg)
         return when (apiError.httpStatus) {
+            400, 409, 422 -> if (!isTechnical) rawMsg else fallback
             401 -> MSG_SESSION_EXPIRED
             403 -> if (!isTechnical) rawMsg else MSG_PERMISSION_DENIED
             404 -> if (!isTechnical && !rawMsg.contains("404")) rawMsg else MSG_NOT_FOUND
+            408 -> MSG_TIMEOUT_ERROR
             429 -> MSG_RATE_LIMITED
             in 500..599 -> MSG_SERVER_UNAVAILABLE
             else -> if (!isTechnical) rawMsg else fallback

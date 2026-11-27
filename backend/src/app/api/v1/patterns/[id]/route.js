@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import Pattern from "@/models/Pattern";
 import { connectDB } from "@/lib/db";
 import { isAdmin } from "@/lib/adminGuard";
 import { listSlots } from "@/lib/patternSlots";
+import { normalizeApiError } from "@/lib/apiHandler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +19,9 @@ const audioInfo = (a) => ({
 export async function GET(req, { params }) {
   try {
     const { id } = await params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return NextResponse.json({ error: "Invalid pattern ID.", code: "INVALID_ID" }, { status: 400 });
+    }
     await connectDB();
     const p = await Pattern.findById(id).lean();
     if (!p) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -44,9 +49,10 @@ export async function GET(req, { params }) {
     );
   } catch (err) {
     console.error("GET /api/v1/patterns/[id] failed:", err);
+    const mapped = normalizeApiError(err, "Failed to load pattern");
     return NextResponse.json(
-      { error: err?.message || "Failed to load pattern" },
-      { status: err?.status || 500 }
+      { error: mapped.message, code: mapped.code },
+      mapped.headers ? { status: mapped.status, headers: mapped.headers } : { status: mapped.status }
     );
   }
 }
@@ -61,6 +67,9 @@ export async function PUT(req, { params }) {
       req.json().catch(() => null),
     ]);
     if (!adminOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return NextResponse.json({ error: "Invalid pattern ID.", code: "INVALID_ID" }, { status: 400 });
+    }
     if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 
     await connectDB();
@@ -128,9 +137,10 @@ export async function PUT(req, { params }) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("PUT /api/v1/patterns/[id] failed:", err);
+    const mapped = normalizeApiError(err, "Failed to update pattern");
     return NextResponse.json(
-      { error: err?.message || "Failed to update pattern" },
-      { status: err?.status || 500 }
+      { error: mapped.message, code: mapped.code },
+      mapped.headers ? { status: mapped.status, headers: mapped.headers } : { status: mapped.status }
     );
   }
 }
@@ -140,6 +150,9 @@ export async function DELETE(req, { params }) {
   try {
     const [{ id }, adminOk] = await Promise.all([params, isAdmin(req)]);
     if (!adminOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return NextResponse.json({ error: "Invalid pattern ID.", code: "INVALID_ID" }, { status: 400 });
+    }
 
     await connectDB();
     const p = await Pattern.findById(id);
@@ -161,9 +174,10 @@ export async function DELETE(req, { params }) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("DELETE /api/v1/patterns/[id] failed:", err);
+    const mapped = normalizeApiError(err, "Failed to delete pattern");
     return NextResponse.json(
-      { error: err?.message || "Failed to delete pattern" },
-      { status: err?.status || 500 }
+      { error: mapped.message, code: mapped.code },
+      mapped.headers ? { status: mapped.status, headers: mapped.headers } : { status: mapped.status }
     );
   }
 }

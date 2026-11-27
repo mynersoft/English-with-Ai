@@ -305,27 +305,57 @@ export async function getOrAssignDailyWords({ userId, settings, now = new Date()
     }
 
     const capGuardKey = `newWordIds.${cap - 1}`;
+    const existingSet = new Set(assignedIds);
+    const toBatchIds = [];
     for (const c of candidates) {
-      if (assignedIds.length >= cap) break;
-      const updated = await VocabularyDailyActivity.findOneAndUpdate(
+      const cid = String(c._id);
+      if (!existingSet.has(cid)) {
+        existingSet.add(cid);
+        toBatchIds.push(c._id);
+        if (assignedIds.length + toBatchIds.length >= cap) break;
+      }
+    }
+
+    if (toBatchIds.length > 0 && assignedIds.length === 0) {
+      // Fast path: atomically claim the full daily batch in 1 round-trip if still empty.
+      const batchClaimed = await VocabularyDailyActivity.findOneAndUpdate(
         {
           userId,
           date: todayStr,
-          newWordIds: { $ne: c._id },
-          [capGuardKey]: { $exists: false },
+          "newWordIds.0": { $exists: false },
         },
-        { $push: { newWordIds: c._id } },
+        { $set: { newWordIds: toBatchIds } },
         { new: true }
       ).lean();
+      if (batchClaimed) {
+        activity = batchClaimed;
+        assignedIds = (batchClaimed.newWordIds || []).map((id) => String(id));
+      }
+    }
 
-      if (!updated) {
-        // Re-read in case a concurrent request filled the cap
-        activity = await VocabularyDailyActivity.findOne({ userId, date: todayStr }).lean();
-        assignedIds = (activity?.newWordIds || []).map((id) => String(id));
+    if (assignedIds.length < cap) {
+      for (const c of candidates) {
         if (assignedIds.length >= cap) break;
-      } else {
-        activity = updated;
-        assignedIds = (updated.newWordIds || []).map((id) => String(id));
+        if (assignedIds.includes(String(c._id))) continue;
+        const updated = await VocabularyDailyActivity.findOneAndUpdate(
+          {
+            userId,
+            date: todayStr,
+            newWordIds: { $ne: c._id },
+            [capGuardKey]: { $exists: false },
+          },
+          { $push: { newWordIds: c._id } },
+          { new: true }
+        ).lean();
+
+        if (!updated) {
+          activity = await VocabularyDailyActivity.findOne({ userId, date: todayStr }).lean();
+          assignedIds = (activity?.newWordIds || []).map((id) => String(id));
+          if (assignedIds.length >= cap) break;
+        } else {
+          activity = updated;
+          assignedIds = (updated.newWordIds || []).map((id) => String(id));
+        }
       }
     }
   }
@@ -586,7 +616,10 @@ export async function getReviewLists({ userId, tab = "due", page = 1, limit = 30
     sort = { updatedAt: -1 };
   }
 
-  const [rows, total, dueCount, difficultCount, learningCount, masteredCount] = await Promise.all([
+  const isStandardTab =
+    tab === "due" || tab === "difficult" || tab === "learning" || tab === "mastered";
+
+  const [rows, countsAgg, customTotal] = await Promise.all([
     UserVocabularyProgress.find(filter)
       .sort(sort)
       .skip(skip)
@@ -597,20 +630,67 @@ export async function getReviewLists({ userId, tab = "due", page = 1, limit = 30
         populate: { path: "categoryId", select: "name" },
       })
       .lean(),
-    UserVocabularyProgress.countDocuments(filter),
-    UserVocabularyProgress.countDocuments({
-      userId,
-      learnedAt: { $ne: null },
-      status: { $ne: "mastered" },
-      $or: [{ nextReviewAt: { $lte: now } }, { nextReviewAt: null }],
-    }),
-    UserVocabularyProgress.countDocuments({
-      userId,
-      $or: [{ wrongCount: { $gt: 0 } }, { easeFactor: { $lt: 2.1 } }, { lastQuality: { $lte: 2 } }],
-    }),
-    UserVocabularyProgress.countDocuments({ userId, status: "learning" }),
-    UserVocabularyProgress.countDocuments({ userId, status: "mastered" }),
+    UserVocabularyProgress.aggregate([
+      { $match: { userId } },
+      {
+        $group: {
+          _id: null,
+          due: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: [{ $ifNull: ["$learnedAt", null] }, null] },
+                    { $ne: ["$status", "mastered"] },
+                    {
+                      $or: [
+                        { $eq: [{ $ifNull: ["$nextReviewAt", null] }, null] },
+                        { $lte: ["$nextReviewAt", now] },
+                      ],
+                    },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          difficult: {
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $gt: [{ $ifNull: ["$wrongCount", 0] }, 0] },
+                    { $lt: [{ $ifNull: ["$easeFactor", 2.5] }, 2.1] },
+                    {
+                      $and: [
+                        { $ne: [{ $ifNull: ["$lastQuality", null] }, null] },
+                        { $lte: ["$lastQuality", 2] },
+                      ],
+                    },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          learning: { $sum: { $cond: [{ $eq: ["$status", "learning"] }, 1, 0] } },
+          mastered: { $sum: { $cond: [{ $eq: ["$status", "mastered"] }, 1, 0] } },
+        },
+      },
+    ]),
+    isStandardTab ? Promise.resolve(null) : UserVocabularyProgress.countDocuments(filter),
   ]);
+
+  const countsRow = countsAgg[0] || {};
+  const counts = {
+    due: Number(countsRow.due || 0),
+    difficult: Number(countsRow.difficult || 0),
+    learning: Number(countsRow.learning || 0),
+    mastered: Number(countsRow.mastered || 0),
+  };
+  const total = isStandardTab ? counts[tab] : Number(customTotal || 0);
 
   const items = rows
     .filter((r) => Boolean(r.vocabularyId))
@@ -621,12 +701,7 @@ export async function getReviewLists({ userId, tab = "due", page = 1, limit = 30
     page: safePage,
     limit: safeLimit,
     total,
-    counts: {
-      due: dueCount,
-      difficult: difficultCount,
-      learning: learningCount,
-      mastered: masteredCount,
-    },
+    counts,
     items,
   };
 }
@@ -639,9 +714,7 @@ export async function buildDashboardData({ userId, userDoc, settings, now = new 
   const [
     todayActivity,
     recentActivities,
-    totalLearned,
-    masteredCount,
-    dueReviews,
+    vocabStatsAgg,
     categories,
     categoryCounts,
     recentQuizzes,
@@ -654,14 +727,38 @@ export async function buildDashboardData({ userId, userDoc, settings, now = new 
     })
       .sort({ date: -1 })
       .lean(),
-    UserVocabularyProgress.countDocuments({ userId, learnedAt: { $ne: null } }),
-    UserVocabularyProgress.countDocuments({ userId, status: "mastered" }),
-    UserVocabularyProgress.countDocuments({
-      userId,
-      learnedAt: { $ne: null },
-      status: { $ne: "mastered" },
-      $or: [{ nextReviewAt: { $lte: now } }, { nextReviewAt: null }],
-    }),
+    UserVocabularyProgress.aggregate([
+      { $match: { userId } },
+      {
+        $group: {
+          _id: null,
+          totalLearned: {
+            $sum: { $cond: [{ $ne: [{ $ifNull: ["$learnedAt", null] }, null] }, 1, 0] },
+          },
+          masteredCount: { $sum: { $cond: [{ $eq: ["$status", "mastered"] }, 1, 0] } },
+          dueReviews: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: [{ $ifNull: ["$learnedAt", null] }, null] },
+                    { $ne: ["$status", "mastered"] },
+                    {
+                      $or: [
+                        { $eq: [{ $ifNull: ["$nextReviewAt", null] }, null] },
+                        { $lte: ["$nextReviewAt", now] },
+                      ],
+                    },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
     VocabularyCategory.find({ isActive: true, parentId: null })
       .sort({ sortOrder: 1, name: 1 })
       .limit(16)
@@ -673,6 +770,11 @@ export async function buildDashboardData({ userId, userDoc, settings, now = new 
     VocabularyQuizAttempt.find({ userId }).sort({ completedAt: -1 }).limit(3).lean(),
     VocabularySpeakingSession.find({ userId }).sort({ createdAt: -1 }).limit(3).lean(),
   ]);
+
+  const vocabStatsRow = vocabStatsAgg[0] || {};
+  const totalLearned = Number(vocabStatsRow.totalLearned || 0);
+  const masteredCount = Number(vocabStatsRow.masteredCount || 0);
+  const dueReviews = Number(vocabStatsRow.dueReviews || 0);
 
   const countMap = new Map(categoryCounts.map((c) => [String(c._id), c.count]));
   const streak = calculateStreak(recentActivities, todayStr);

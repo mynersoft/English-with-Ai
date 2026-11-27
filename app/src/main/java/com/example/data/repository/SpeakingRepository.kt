@@ -39,7 +39,7 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
         history: List<ChatTurn>
     ): Result<SpeakingReply> = withContext(Dispatchers.IO) {
         try {
-            val token = idToken()
+            var token = idToken()
             val body = JSONObject()
                 .put("message", message)
                 .put("level", level.lowercase())
@@ -49,6 +49,14 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
                 })
 
             var response = post("/api/v1/ai/speaking/turn", token, body)
+
+            if (response.status == 401) {
+                val freshToken = runCatching { idToken(forceRefresh = true) }.getOrNull()
+                if (!freshToken.isNullOrBlank()) {
+                    token = freshToken
+                    response = post("/api/v1/ai/speaking/turn", token, body)
+                }
+            }
 
             if (response.status == 404 && response.errorCode == "USER_NOT_FOUND") {
                 post("/api/v1/auth/sync", token, null)
@@ -106,13 +114,13 @@ class SpeakingRepository(private val auth: FirebaseAuth = FirebaseAuth.getInstan
         }
     }
 
-    private suspend fun idToken(): String = suspendCancellableCoroutine { cont ->
+    private suspend fun idToken(forceRefresh: Boolean = false): String = suspendCancellableCoroutine { cont ->
         val user = auth.currentUser
         if (user == null) {
             cont.resumeWithException(SpeakingException("Please log in again."))
             return@suspendCancellableCoroutine
         }
-        user.getIdToken(false).addOnCompleteListener { task ->
+        user.getIdToken(forceRefresh).addOnCompleteListener { task ->
             val result = task.result
             if (task.isSuccessful && result?.token != null) {
                 cont.resume(result.token!!)

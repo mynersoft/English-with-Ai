@@ -161,20 +161,45 @@ export async function updateUserReadingSettings(userDoc, body = {}) {
   };
 }
 
-function formatPassageSummary(p, progressDoc = null) {
+const PASSAGE_SUMMARY_FIELDS =
+  "title slug level categoryId summary estimatedMinutes audioUrl isPublished sortOrder createdAt updatedAt sentences.sentenceId vocabulary.word questions.questionId";
+
+function formatPassageSummary(p, progressDoc = null, categoryNameMap = null) {
+  const catIdStr = String(p.categoryId?._id || p.categoryId || "");
+  const resolvedCatName =
+    p.categoryName ||
+    p.categoryId?.name ||
+    (categoryNameMap && catIdStr ? categoryNameMap.get(catIdStr) || "" : "");
+
   return {
     id: String(p._id),
     title: p.title,
     slug: p.slug,
     level: p.level,
-    categoryId: String(p.categoryId?._id || p.categoryId || ""),
-    categoryName: p.categoryId?.name || "",
+    categoryId: catIdStr,
+    categoryName: resolvedCatName,
     summary: p.summary || "",
     estimatedMinutes: p.estimatedMinutes || 3,
-    sentenceCount: Array.isArray(p.sentences) ? p.sentences.length : 0,
-    vocabCount: Array.isArray(p.vocabulary) ? p.vocabulary.length : 0,
-    questionCount: Array.isArray(p.questions) ? p.questions.length : 0,
-    hasAudioUrl: Boolean(p.audioUrl),
+    sentenceCount:
+      typeof p.sentenceCount === "number"
+        ? p.sentenceCount
+        : Array.isArray(p.sentences)
+        ? p.sentences.length
+        : 0,
+    vocabCount:
+      typeof p.vocabCount === "number"
+        ? p.vocabCount
+        : Array.isArray(p.vocabulary)
+        ? p.vocabulary.length
+        : 0,
+    questionCount:
+      typeof p.questionCount === "number"
+        ? p.questionCount
+        : Array.isArray(p.questions)
+        ? p.questions.length
+        : 0,
+    hasAudioUrl:
+      typeof p.hasAudioUrl === "boolean" ? p.hasAudioUrl : Boolean(p.audioUrl),
     isPublished: Boolean(p.isPublished),
     status: progressDoc?.status || "not_started",
     lastSentenceIndex: progressDoc?.lastSentenceIndex || 0,
@@ -205,6 +230,7 @@ export async function getReadingDashboard({ userDoc, now = new Date() }) {
       .populate({
         path: "passageId",
         match: { isPublished: true },
+        select: PASSAGE_SUMMARY_FIELDS,
         populate: { path: "categoryId", select: "name" },
       })
       .lean(),
@@ -284,6 +310,7 @@ export async function getReadingDashboard({ userDoc, now = new Date() }) {
     recFilter._id = { $nin: Array.from(completedIds).map((id) => new mongoose.Types.ObjectId(id)) };
   }
   let recommendedDocs = await ReadingPassage.find(recFilter)
+    .select(PASSAGE_SUMMARY_FIELDS)
     .sort({ sortOrder: 1, createdAt: -1 })
     .limit(6)
     .populate("categoryId", "name")
@@ -298,6 +325,7 @@ export async function getReadingDashboard({ userDoc, now = new Date() }) {
       };
     }
     recommendedDocs = await ReadingPassage.find(fallbackFilter)
+      .select(PASSAGE_SUMMARY_FIELDS)
       .sort({ sortOrder: 1, createdAt: -1 })
       .limit(6)
       .populate("categoryId", "name")
@@ -374,16 +402,33 @@ export async function listReadingPassages({
     filter.$or = [{ title: rx }, { summary: rx }];
   }
 
-  const [docs, total] = await Promise.all([
-    ReadingPassage.find(filter)
-      .sort({ sortOrder: 1, createdAt: -1 })
-      .skip(skip)
-      .limit(safeLimit)
-      .populate("categoryId", "name")
-      .lean(),
+  const [docs, total, categories] = await Promise.all([
+    ReadingPassage.aggregate([
+      { $match: filter },
+      { $sort: { sortOrder: 1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: safeLimit },
+      {
+        $project: {
+          title: 1,
+          slug: 1,
+          level: 1,
+          categoryId: 1,
+          summary: 1,
+          estimatedMinutes: 1,
+          isPublished: 1,
+          sentenceCount: { $size: { $ifNull: ["$sentences", []] } },
+          vocabCount: { $size: { $ifNull: ["$vocabulary", []] } },
+          questionCount: { $size: { $ifNull: ["$questions", []] } },
+          hasAudioUrl: { $gt: [{ $strLenCP: { $ifNull: ["$audioUrl", ""] } }, 0] },
+        },
+      },
+    ]),
     ReadingPassage.countDocuments(filter),
+    ReadingCategory.find().select("_id name").lean(),
   ]);
 
+  const categoryNameMap = new Map(categories.map((c) => [String(c._id), c.name]));
   const ids = docs.map((d) => d._id);
   const progressDocs = ids.length
     ? await UserReadingProgress.find({ userId, passageId: { $in: ids } }).lean()
@@ -391,7 +436,9 @@ export async function listReadingPassages({
   const progressMap = new Map(progressDocs.map((pr) => [String(pr.passageId), pr]));
 
   return {
-    items: docs.map((p) => formatPassageSummary(p, progressMap.get(String(p._id)) || null)),
+    items: docs.map((p) =>
+      formatPassageSummary(p, progressMap.get(String(p._id)) || null, categoryNameMap)
+    ),
     page: safePage,
     limit: safeLimit,
     total,
@@ -935,18 +982,36 @@ export async function adminListPassages({
     filter.$or = [{ title: rx }, { summary: rx }];
   }
 
-  const [docs, total] = await Promise.all([
-    ReadingPassage.find(filter)
-      .sort({ updatedAt: -1, sortOrder: 1 })
-      .skip(skip)
-      .limit(safeLimit)
-      .populate("categoryId", "name")
-      .lean(),
+  const [docs, total, categories] = await Promise.all([
+    ReadingPassage.aggregate([
+      { $match: filter },
+      { $sort: { updatedAt: -1, sortOrder: 1 } },
+      { $skip: skip },
+      { $limit: safeLimit },
+      {
+        $project: {
+          title: 1,
+          slug: 1,
+          level: 1,
+          categoryId: 1,
+          summary: 1,
+          estimatedMinutes: 1,
+          isPublished: 1,
+          sentenceCount: { $size: { $ifNull: ["$sentences", []] } },
+          vocabCount: { $size: { $ifNull: ["$vocabulary", []] } },
+          questionCount: { $size: { $ifNull: ["$questions", []] } },
+          hasAudioUrl: { $gt: [{ $strLenCP: { $ifNull: ["$audioUrl", ""] } }, 0] },
+        },
+      },
+    ]),
     ReadingPassage.countDocuments(filter),
+    ReadingCategory.find().select("_id name").lean(),
   ]);
 
+  const categoryNameMap = new Map(categories.map((c) => [String(c._id), c.name]));
+
   return {
-    items: docs.map((p) => formatPassageSummary(p, null)),
+    items: docs.map((p) => formatPassageSummary(p, null, categoryNameMap)),
     page: safePage,
     limit: safeLimit,
     total,

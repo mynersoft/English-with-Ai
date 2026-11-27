@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.core.chat.ActiveChatRoomTracker
+import com.example.core.chat.ChatMessageNotifier
 import com.example.data.repository.ChatRepository
 import com.example.domain.model.ChatMemberSummary
 import com.example.domain.model.ChatMessageItem
@@ -49,6 +51,7 @@ data class ChatThreadUiState(
     val correctingIds: Set<String> = emptySet(),
     val extractingHandwriting: Boolean = false,
     val extractedHandwritingText: String? = null,
+    val highlightedMessageId: String? = null,
     val ocrError: String? = null,
     val error: String? = null
 )
@@ -138,12 +141,14 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun openRoom(room: ChatRoomSummary) {
+    fun openRoom(room: ChatRoomSummary, highlightMessageId: String? = null) {
         pollingJob?.cancel()
+        ActiveChatRoomTracker.setActiveRoom(room.id)
         _thread.value = ChatThreadUiState(
             room = room,
             loading = true,
-            aiConfigured = _lobby.value.aiConfigured == true
+            aiConfigured = _lobby.value.aiConfigured == true,
+            highlightedMessageId = highlightMessageId
         )
         viewModelScope.launch {
             repo.fetchMessages(room.id)
@@ -168,6 +173,28 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    fun openRoomById(
+        roomId: String,
+        highlightMessageId: String? = null,
+        context: Context? = null
+    ) {
+        if (roomId.isBlank()) return
+        context?.let { ChatMessageNotifier.clearRoomNotifications(it, roomId) }
+        val knownRoom = (_lobby.value.directRooms + _lobby.value.groupRooms)
+            .firstOrNull { it.id == roomId }
+            ?: ChatRoomSummary(
+                id = roomId,
+                name = "Loading chat...",
+                avatarEmoji = "💬",
+                roomType = "group"
+            )
+        openRoom(knownRoom, highlightMessageId = highlightMessageId)
+    }
+
+    fun clearHighlightedMessage() {
+        _thread.update { it.copy(highlightedMessageId = null) }
+    }
+
     fun retryThread() {
         _thread.value.room?.let { openRoom(it) }
     }
@@ -175,6 +202,7 @@ class ChatViewModel : ViewModel() {
     fun closeRoom() {
         pollingJob?.cancel()
         pollingJob = null
+        ActiveChatRoomTracker.setActiveRoom(null)
         _thread.value = ChatThreadUiState()
         loadLobby()
     }
@@ -370,6 +398,7 @@ class ChatViewModel : ViewModel() {
 
     override fun onCleared() {
         pollingJob?.cancel()
+        ActiveChatRoomTracker.setActiveRoom(null)
         super.onCleared()
     }
 }

@@ -25,8 +25,13 @@ const userSchema = new mongoose.Schema(
     learningLevel: { type: String, enum: ["beginner", "intermediate", "advanced", null], default: null },
     dailyGoalMinutes: { type: Number, default: 20, min: 5, max: 240 },
     lastLoginAt: { type: Date, default: null },
+    fcmTokens: { type: [String], default: [] },
   },
   { timestamps: true }
 );
+
+userSchema.index({ status: 1, lastLoginAt: -1, createdAt: -1 });
+userSchema.index({ role: 1, status: 1, lastLoginAt: -1, createdAt: -1 });
+userSchema.index({ role: 1, subscriptionStatus: 1 });
 
 export default mongoose.models.User || mongoose.model("User", userSchema);

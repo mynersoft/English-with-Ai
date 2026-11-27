@@ -1,15 +1,12 @@
 package com.example.data.repository
 
-import com.example.BuildConfig
 import com.example.core.network.NetworkClient
 import com.example.core.network.sanitizeForBackendFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 
 data class PatternSummary(
     val id: String,
@@ -48,9 +45,12 @@ data class PatternDetail(
 
 class PatternRepository {
 
-    suspend fun fetchPatterns(): Result<List<PatternSummary>> = withContext(Dispatchers.IO) {
+    suspend fun fetchPatterns(forceRefresh: Boolean = false): Result<List<PatternSummary>> = withContext(Dispatchers.IO) {
         try {
-            val raw = executeGet("/api/v1/patterns")
+            if (!forceRefresh) {
+                getCachedPatterns()?.let { return@withContext Result.success(it) }
+            }
+            val raw = NetworkClient.executePublicGetText("/api/v1/patterns")
             val arr = JSONArray(raw)
             val list = List(arr.length()) { i ->
                 val o = arr.getJSONObject(i)
@@ -68,6 +68,7 @@ class PatternRepository {
                     meaningAudioUrl = o.optStringOrNull("meaningAudioUrl")
                 )
             }
+            putCachedPatterns(list)
             Result.success(list)
         } catch (e: CancellationException) {
             throw e
@@ -76,9 +77,15 @@ class PatternRepository {
         }
     }
 
-    suspend fun fetchPatternDetail(patternId: String): Result<PatternDetail> = withContext(Dispatchers.IO) {
+    suspend fun fetchPatternDetail(
+        patternId: String,
+        forceRefresh: Boolean = false
+    ): Result<PatternDetail> = withContext(Dispatchers.IO) {
         try {
-            val raw = executeGet("/api/v1/patterns/$patternId")
+            if (!forceRefresh) {
+                getCachedDetail(patternId)?.let { return@withContext Result.success(it) }
+            }
+            val raw = NetworkClient.executePublicGetText("/api/v1/patterns/$patternId")
             val o = JSONObject(raw)
             val exArray = o.optJSONArray("examples") ?: JSONArray()
             val examples = List(exArray.length()) { i ->
@@ -103,6 +110,7 @@ class PatternRepository {
                 meaningAudioUrl = o.optJSONObject("meaningAudio")?.optStringOrNull("url"),
                 examples = examples
             )
+            putCachedDetail(patternId, detail)
             Result.success(detail)
         } catch (e: CancellationException) {
             throw e
@@ -111,34 +119,50 @@ class PatternRepository {
         }
     }
 
-    private fun executeGet(path: String): String {
-        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
-        if (baseUrl.isBlank()) {
-            throw IOException("Backend URL is not configured.")
-        }
-        val req = Request.Builder()
-            .url("$baseUrl$path")
-            .get()
-            .header("Accept", "application/json")
-            .build()
-
-        return NetworkClient.standard.newCall(req).execute().use { res ->
-            val body = res.body?.string().orEmpty()
-            if (!res.isSuccessful) {
-                val msg = runCatching {
-                    val j = JSONObject(body)
-                    j.optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() }
-                        ?: j.optString("error").takeIf { it.isNotBlank() }
-                }.getOrNull()
-                    ?: if (body.trimStart().startsWith("<")) "Server error (${res.code})" else body.take(160)
-                throw IOException(msg.ifBlank { "Error ${res.code} while loading patterns." })
-            }
-            body
-        }
-    }
-
     private fun JSONObject.optStringOrNull(key: String): String? {
         if (isNull(key)) return null
         return optString(key).takeIf { it.isNotBlank() }
+    }
+
+    companion object {
+        private const val CACHE_TTL_MS = 120_000L
+        private val cacheLock = Any()
+
+        private var cachedPatterns: List<PatternSummary>? = null
+        private var cachedPatternsAtMs: Long = 0L
+
+        private data class CachedDetailEntry(val detail: PatternDetail, val savedAtMs: Long)
+
+        private val detailCache = object : LinkedHashMap<String, CachedDetailEntry>(32, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedDetailEntry>?): Boolean =
+                size > 40
+        }
+
+        private fun getCachedPatterns(): List<PatternSummary>? = synchronized(cacheLock) {
+            val data = cachedPatterns ?: return null
+            if (System.currentTimeMillis() - cachedPatternsAtMs > CACHE_TTL_MS) {
+                cachedPatterns = null
+                return null
+            }
+            return data
+        }
+
+        private fun putCachedPatterns(list: List<PatternSummary>) = synchronized(cacheLock) {
+            cachedPatterns = list
+            cachedPatternsAtMs = System.currentTimeMillis()
+        }
+
+        private fun getCachedDetail(id: String): PatternDetail? = synchronized(cacheLock) {
+            val entry = detailCache[id] ?: return null
+            if (System.currentTimeMillis() - entry.savedAtMs > CACHE_TTL_MS) {
+                detailCache.remove(id)
+                return null
+            }
+            return entry.detail
+        }
+
+        private fun putCachedDetail(id: String, detail: PatternDetail) = synchronized(cacheLock) {
+            detailCache[id] = CachedDetailEntry(detail, System.currentTimeMillis())
+        }
     }
 }

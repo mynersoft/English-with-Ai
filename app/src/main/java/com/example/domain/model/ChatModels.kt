@@ -72,3 +72,21 @@ data class ChatThreadSnapshot(
     val members: List<ChatMemberSummary> = emptyList(),
     val messages: List<ChatMessageItem> = emptyList()
 )
+
+data class ChatIncomingNotification(
+    val messageId: String,
+    val roomId: String,
+    val roomName: String,
+    val roomType: String = "group",
+    val roomEmoji: String = "🦁",
+    val senderId: String,
+    val senderName: String,
+    val senderBadge: String = "",
+    val textPreview: String,
+    val createdAt: String = ""
+)
+
+data class ChatNotificationsBatch(
+    val serverTime: String,
+    val notifications: List<ChatIncomingNotification>
+)

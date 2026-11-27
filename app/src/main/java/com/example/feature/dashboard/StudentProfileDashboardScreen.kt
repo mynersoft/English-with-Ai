@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -91,6 +92,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.core.common.UiState
+import com.example.core.ui.OfflineStatusCard
 import com.example.domain.model.CourseReportModule
 import com.example.domain.model.StreakCalendarData
 import com.example.domain.model.StudentDashboardData
@@ -118,6 +120,9 @@ fun StudentProfileDashboardScreen(
     fallbackEmail: String,
     isAdmin: Boolean,
     bottomBar: @Composable () -> Unit,
+    isOnline: Boolean = true,
+    showMenuButton: Boolean = true,
+    onOpenMenu: () -> Unit = {},
     onRefresh: () -> Unit,
     onBackToHome: () -> Unit,
     onNavigateRoute: (String) -> Unit,
@@ -154,6 +159,8 @@ fun StudentProfileDashboardScreen(
                             patternsCount = 0,
                             speakingCount = 0,
                             isRefreshing = true,
+                            showMenuButton = showMenuButton,
+                            onOpenMenu = onOpenMenu,
                             onBack = onBackToHome,
                             onOpenSettings = { showSettingsSheet = true },
                             onRefresh = onRefresh,
@@ -187,6 +194,8 @@ fun StudentProfileDashboardScreen(
                                 patternsCount = 0,
                                 speakingCount = 0,
                                 isRefreshing = isRefreshing,
+                                showMenuButton = showMenuButton,
+                                onOpenMenu = onOpenMenu,
                                 onBack = onBackToHome,
                                 onOpenSettings = { showSettingsSheet = true },
                                 onRefresh = onRefresh,
@@ -194,35 +203,43 @@ fun StudentProfileDashboardScreen(
                             )
                         }
                         item {
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 16.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                            if (!isOnline) {
+                                OfflineStatusCard(
+                                    isReconnecting = isRefreshing,
+                                    onRetry = onRefresh,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                                )
+                            } else {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 16.dp)
                                 ) {
-                                    Text(
-                                        text = "Could not load student progress",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Text(
-                                        text = state.message,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    OutlinedButton(
-                                        onClick = onRefresh,
-                                        modifier = Modifier
-                                            .minimumInteractiveComponentSize()
-                                            .testTag("student_dashboard_retry_button")
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        Text("Retry")
+                                        Text(
+                                            text = "Could not load student progress",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = state.message,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        OutlinedButton(
+                                            onClick = onRefresh,
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .testTag("student_dashboard_retry_button")
+                                        ) {
+                                            Text("Retry")
+                                        }
                                     }
                                 }
                             }
@@ -251,6 +268,8 @@ fun StudentProfileDashboardScreen(
                                 readingCount = data.stats.readingPassagesCompleted,
                                 readingMinutes = data.stats.readingMinutes,
                                 isRefreshing = isRefreshing,
+                                showMenuButton = showMenuButton,
+                                onOpenMenu = onOpenMenu,
                                 onBack = onBackToHome,
                                 onOpenSettings = { showSettingsSheet = true },
                                 onRefresh = onRefresh,
@@ -408,6 +427,8 @@ private fun ProfileHeaderSection(
     readingCount: Int = 0,
     readingMinutes: Int = 0,
     isRefreshing: Boolean,
+    showMenuButton: Boolean = true,
+    onOpenMenu: () -> Unit = {},
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
@@ -429,23 +450,46 @@ private fun ProfileHeaderSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = CircleShape,
-                color = Color.White,
-                shadowElevation = 2.dp,
-                modifier = Modifier.size(44.dp)
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .testTag("student_dashboard_back_button")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (showMenuButton) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        IconButton(
+                            onClick = onOpenMenu,
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("student_progress_sidebar_menu_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Menu,
+                                contentDescription = "Open student menu",
+                                tint = TextDark
+                            )
+                        }
+                    }
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.size(44.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back to Home",
-                        tint = TextDark
-                    )
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("student_dashboard_back_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to Home",
+                            tint = TextDark
+                        )
+                    }
                 }
             }
 

@@ -28,5 +28,7 @@
     <string name="daily_reminder_dismiss_cd">Dismiss daily reminder</string>
     <string name="word_of_the_day_channel_name">Word of the Day</string>
     <string name="word_of_the_day_channel_desc">Delivers a new English word with its Bangla meaning and example sentence each morning.</string>
+    <string name="chat_messages_channel_name">Chat Messages</string>
+    <string name="chat_messages_channel_desc">Notifications when a classmate sends you a direct or group message.</string>
 </resources>
 

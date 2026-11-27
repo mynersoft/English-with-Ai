@@ -109,25 +109,37 @@ fun ChatMessageItem.displayTextForViewer(): String {
 fun ChatMessageBubbleRow(
     msg: ChatMessageItem,
     isCorrecting: Boolean,
+    isHighlighted: Boolean = false,
     onReply: () -> Unit,
     onRequestAiCorrection: () -> Unit
 ) {
     val timeLabel = remember(msg.createdAt) { formatMessageTime(msg.createdAt) }
-
-    if (msg.isMine) {
-        OutgoingBubble(
-            msg = msg,
-            timeLabel = timeLabel,
-            isCorrecting = isCorrecting,
-            onReply = onReply,
-            onRequestAiCorrection = onRequestAiCorrection
-        )
+    val rowModifier = if (isHighlighted) {
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFFDDF7E6))
+            .padding(horizontal = 4.dp, vertical = 2.dp)
     } else {
-        IncomingBubble(
-            msg = msg,
-            timeLabel = timeLabel,
-            onReply = onReply
-        )
+        Modifier.fillMaxWidth()
+    }
+
+    Box(modifier = rowModifier) {
+        if (msg.isMine) {
+            OutgoingBubble(
+                msg = msg,
+                timeLabel = timeLabel,
+                isCorrecting = isCorrecting,
+                onReply = onReply,
+                onRequestAiCorrection = onRequestAiCorrection
+            )
+        } else {
+            IncomingBubble(
+                msg = msg,
+                timeLabel = timeLabel,
+                onReply = onReply
+            )
+        }
     }
 }
 

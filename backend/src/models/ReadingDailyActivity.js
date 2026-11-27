@@ -15,6 +15,7 @@ const readingDailyActivitySchema = new mongoose.Schema(
 );
 
 readingDailyActivitySchema.index({ userId: 1, date: 1 }, { unique: true });
+readingDailyActivitySchema.index({ date: 1 });
 
 export default mongoose.models.ReadingDailyActivity ||
   mongoose.model("ReadingDailyActivity", readingDailyActivitySchema);

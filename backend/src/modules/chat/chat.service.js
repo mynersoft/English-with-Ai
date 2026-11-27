@@ -1,5 +1,13 @@
 import mongoose from "mongoose";
 import { AppError } from "@/lib/errors";
+import { adminMessaging } from "@/lib/firebaseAdmin";
+import {
+  buildChatPushDataPayload,
+  extractInvalidFcmTokens,
+  mergeUserFcmTokens,
+  removeUserFcmToken,
+  sanitizeFcmToken,
+} from "@/lib/chatNotifications";
 import { slugify } from "@/lib/vocabSrs";
 import { correctEnglishChatMessage } from "@/lib/chatCorrection";
 import User from "@/models/User";
@@ -9,6 +17,7 @@ import ChatMessage from "@/models/ChatMessage";
 import ChatPresence from "@/models/ChatPresence";
 
 const ONLINE_WINDOW_MS = 120_000;
+let starterRoomsEnsured = false;
 
 const DEFAULT_ROOMS = [
   {
@@ -107,22 +116,29 @@ function serializeMessage(m, currentUserIdStr) {
 }
 
 export async function ensureStarterRooms(userDoc) {
+  if (starterRoomsEnsured) return;
   const count = await ChatRoom.countDocuments({ roomType: "group" });
-  if (count > 0) return;
-  for (const r of DEFAULT_ROOMS) {
-    await ChatRoom.findOneAndUpdate(
-      { slug: r.slug },
-      {
-        $setOnInsert: {
-          ...r,
-          roomType: "group",
-          createdBy: userDoc?._id || null,
-          memberIds: userDoc?._id ? [userDoc._id] : [],
-        },
-      },
-      { upsert: true }
-    );
+  if (count > 0) {
+    starterRoomsEnsured = true;
+    return;
   }
+  await Promise.all(
+    DEFAULT_ROOMS.map((r) =>
+      ChatRoom.findOneAndUpdate(
+        { slug: r.slug },
+        {
+          $setOnInsert: {
+            ...r,
+            roomType: "group",
+            createdBy: userDoc?._id || null,
+            memberIds: userDoc?._id ? [userDoc._id] : [],
+          },
+        },
+        { upsert: true }
+      )
+    )
+  );
+  starterRoomsEnsured = true;
 }
 
 async function getOnlineCountMap(roomIds) {
@@ -370,13 +386,6 @@ export async function getRoomMessages(userDoc, roomIdRaw, { afterIso, limit = 50
   const uid = String(userDoc._id);
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
 
-  // Upsert live presence so online count reflects active learners
-  await ChatPresence.findOneAndUpdate(
-    { roomId: room._id, userId: userDoc._id },
-    { $set: { lastSeenAt: new Date() } },
-    { upsert: true }
-  );
-
   const msgFilter = { roomId: room._id };
   if (afterIso) {
     const dt = new Date(afterIso);
@@ -393,6 +402,11 @@ export async function getRoomMessages(userDoc, roomIdRaw, { afterIso, limit = 50
     User.find({ _id: { $in: (room.memberIds || []).slice(0, 50) } })
       .select("_id name learningLevel role")
       .lean(),
+    ChatPresence.findOneAndUpdate(
+      { roomId: room._id, userId: userDoc._id },
+      { $set: { lastSeenAt: new Date() } },
+      { upsert: true }
+    ),
   ]);
 
   const ordered = afterIso ? messagesRaw : messagesRaw.reverse();
@@ -505,9 +519,142 @@ export async function sendChatMessage(userDoc, roomIdRaw, body = {}) {
     ),
   ]);
 
+  await dispatchChatPushNotifications({
+    room,
+    senderId: userDoc._id,
+    senderName: userDoc.name || "Learner",
+    message: {
+      id: String(created._id),
+      roomId: String(room._id),
+      senderId: String(userDoc._id),
+      senderName: userDoc.name || "Learner",
+      senderBadge: userBadgeLabel(userDoc),
+      text: publicRoomPreview,
+      createdAt: created.createdAt ? new Date(created.createdAt).toISOString() : new Date().toISOString(),
+    },
+  });
+
   return {
     message: serializeMessage(created.toObject(), uid),
   };
+}
+
+async function dispatchChatPushNotifications({ room, senderId, senderName, message }) {
+  try {
+    const recipientIds = (room.memberIds || []).filter((id) => String(id) !== String(senderId));
+    if (!recipientIds.length) return;
+
+    const recipients = await User.find({
+      _id: { $in: recipientIds },
+      status: "active",
+      "fcmTokens.0": { $exists: true },
+    })
+      .select("_id fcmTokens")
+      .lean();
+
+    const tokens = Array.from(
+      new Set(
+        recipients.flatMap((u) => (Array.isArray(u.fcmTokens) ? u.fcmTokens.filter(Boolean) : []))
+      )
+    );
+    if (!tokens.length) return;
+
+    const messaging = adminMessaging();
+    const dataPayload = buildChatPushDataPayload({ message, room, senderName });
+
+    const invalidTokens = [];
+    for (let i = 0; i < tokens.length; i += 500) {
+      const chunk = tokens.slice(i, i + 500);
+      const batchRes = await messaging.sendEachForMulticast({
+        tokens: chunk,
+        data: dataPayload,
+        android: {
+          priority: "high",
+        },
+      });
+      invalidTokens.push(...extractInvalidFcmTokens(chunk, batchRes));
+    }
+
+    if (invalidTokens.length) {
+      await User.updateMany(
+        { fcmTokens: { $in: invalidTokens } },
+        { $pullAll: { fcmTokens: invalidTokens } }
+      );
+    }
+  } catch (err) {
+    // Non-fatal: chat delivery in MongoDB succeeded even if FCM credentials are unavailable locally.
+    console.warn("FCM chat push skipped:", err?.message || err);
+  }
+}
+
+export async function registerPushToken(userDoc, tokenRaw) {
+  const token = sanitizeFcmToken(tokenRaw);
+  if (!token) {
+    throw new AppError(400, "INVALID_PUSH_TOKEN", "Valid FCM device token is required.");
+  }
+  const current = await User.findById(userDoc._id).select("fcmTokens").lean();
+  const nextTokens = mergeUserFcmTokens(current?.fcmTokens, token);
+  await User.updateOne({ _id: userDoc._id }, { $set: { fcmTokens: nextTokens } });
+  return { registered: true, tokenCount: nextTokens.length };
+}
+
+export async function unregisterPushToken(userDoc, tokenRaw) {
+  const token = sanitizeFcmToken(tokenRaw);
+  if (!token) {
+    return { unregistered: false };
+  }
+  const current = await User.findById(userDoc._id).select("fcmTokens").lean();
+  const nextTokens = removeUserFcmToken(current?.fcmTokens, token);
+  await User.updateOne({ _id: userDoc._id }, { $set: { fcmTokens: nextTokens } });
+  return { unregistered: true, tokenCount: nextTokens.length };
+}
+
+export async function getRecentIncomingMessages(userDoc, { afterIso, limit = 25 } = {}) {
+  const rooms = await ChatRoom.find({ memberIds: userDoc._id })
+    .select("_id name roomType avatarEmoji")
+    .lean();
+
+  const serverTime = new Date().toISOString();
+  if (!rooms.length) {
+    return { serverTime, notifications: [] };
+  }
+
+  const roomMap = new Map(rooms.map((r) => [String(r._id), r]));
+  const roomIds = rooms.map((r) => r._id);
+
+  let afterDate = new Date(Date.now() - 10 * 60_000);
+  if (afterIso) {
+    const parsed = new Date(afterIso);
+    if (!Number.isNaN(parsed.getTime())) {
+      afterDate = parsed;
+    }
+  }
+
+  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 25));
+  const messages = await ChatMessage.find({
+    roomId: { $in: roomIds },
+    senderId: { $ne: userDoc._id },
+    createdAt: { $gt: afterDate },
+  })
+    .sort({ createdAt: 1 })
+    .limit(safeLimit)
+    .lean();
+
+  const uid = String(userDoc._id);
+  const notifications = messages
+    .map((m) => {
+      const room = roomMap.get(String(m.roomId));
+      if (!room) return null;
+      const serialized = serializeMessage(m, uid);
+      return buildChatPushDataPayload({
+        message: serialized,
+        room,
+        senderName: serialized.senderName,
+      });
+    })
+    .filter(Boolean);
+
+  return { serverTime, notifications };
 }
 
 export async function correctExistingMessage(userDoc, messageIdRaw) {

@@ -48,7 +48,7 @@ export function withAuth(handler, { roles, limit, checkRevoked = false } = {}) {
       verifyRequestToken(request, { checkRevoked }),
       connectDB(),
     ]);
-    let user = await User.findOne({ firebaseUid: decoded.uid }).lean();
+    let user = await User.findOne({ firebaseUid: decoded.uid }).select("-fcmTokens").lean();
     if (!user) {
       ({ user } = await upsertUserFromToken(decoded));
     }

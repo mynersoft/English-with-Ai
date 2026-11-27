@@ -68,7 +68,9 @@ const readingPassageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+readingPassageSchema.index({ isPublished: 1, sortOrder: 1, createdAt: -1 });
 readingPassageSchema.index({ isPublished: 1, level: 1, categoryId: 1, sortOrder: 1, _id: -1 });
+readingPassageSchema.index({ updatedAt: -1, sortOrder: 1 });
 readingPassageSchema.index({ title: "text", summary: "text" });
 
 export default mongoose.models.ReadingPassage ||

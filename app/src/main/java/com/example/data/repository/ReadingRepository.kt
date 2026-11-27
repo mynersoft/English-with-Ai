@@ -1,6 +1,5 @@
 package com.example.data.repository
 
-import com.example.BuildConfig
 import com.example.core.network.NetworkClient
 import com.example.core.network.sanitizeForBackendFailure
 import com.example.domain.model.PaginatedReadingPassages
@@ -26,25 +25,24 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 import java.net.URLEncoder
 
 class ReadingRepository {
 
-    suspend fun fetchDashboard(): Result<ReadingDashboardData> = safeCall {
+    suspend fun fetchDashboard(forceRefresh: Boolean = false): Result<ReadingDashboardData> = safeCall {
+        val uid = Firebase.auth.currentUser?.uid.orEmpty()
+        if (!forceRefresh) {
+            getCachedDashboard(uid)?.let { return@safeCall it }
+        }
         val data = requestJson("GET", "/api/v1/reading/dashboard")
         val statsObj = data.optJSONObject("stats") ?: JSONObject()
         val weekArr = data.optJSONArray("weeklyActivity") ?: JSONArray()
         val catsArr = data.optJSONArray("categories") ?: JSONArray()
 
-        ReadingDashboardData(
+        val dashboard = ReadingDashboardData(
             stats = ReadingDashboardStats(
                 dailyGoalMinutes = statsObj.optInt("dailyGoalMinutes", 15),
                 todayMinutes = statsObj.optInt("todayMinutes", 0),
@@ -74,6 +72,8 @@ class ReadingRepository {
             categories = parseCategoryList(catsArr),
             settings = parseSettings(data.optJSONObject("settings"))
         )
+        putCachedDashboard(uid, dashboard)
+        dashboard
     }
 
     suspend fun fetchPassages(
@@ -122,6 +122,7 @@ class ReadingRepository {
             .put("clientSequence", clientSequence)
             .put("markCompleted", markCompleted)
         val data = requestJson("POST", "/api/v1/reading/passages/$passageId/progress", payload)
+        invalidateDashboardCache()
         parseUserProgress(data)
     }
 
@@ -137,6 +138,7 @@ class ReadingRepository {
             .put("mode", "comprehension")
             .put("answers", arr)
         val data = requestJson("POST", "/api/v1/reading/passages/$passageId/attempt", payload)
+        invalidateDashboardCache()
         parseAttempt(data.getJSONObject("attempt"))
     }
 
@@ -154,10 +156,14 @@ class ReadingRepository {
             .put("extraWords", extraWords)
             .put("mismatchedWords", mismatchedWords)
         val data = requestJson("POST", "/api/v1/reading/passages/$passageId/attempt", payload)
+        invalidateDashboardCache()
         parseAttempt(data.getJSONObject("attempt"))
     }
 
     suspend fun lookupWord(word: String, passageId: String?): Result<ReadingWordLookup> = safeCall {
+        val cacheKey = "${passageId.orEmpty()}:${word.trim().lowercase()}"
+        getCachedWordLookup(cacheKey)?.let { return@safeCall it }
+
         val candidates = WordLookupCandidates.build(word)
         val primary = candidates.firstOrNull() ?: word.trim()
         val q = buildString {
@@ -184,24 +190,26 @@ class ReadingRepository {
         }
 
         if (direct != null && direct.found && !direct.meaningBn.isNullOrBlank()) {
+            putCachedWordLookup(cacheKey, direct)
             return@safeCall direct
         }
 
-        // Fall back to /api/vocabulary/words across exact & base-word candidates so clicking any
-        // word still shows its Bangla meaning from the Vocabulary database.
+        // Fall back to /api/vocabulary/words across exact & primary base candidate.
         val vocabHit = lookupFromVocabularyCatalog(candidates)
         if (vocabHit != null) {
+            putCachedWordLookup(cacheKey, vocabHit)
             return@safeCall vocabHit
         }
 
         if (direct != null) {
+            putCachedWordLookup(cacheKey, direct)
             return@safeCall direct
         }
         throw lastError ?: BackendApiException("Could not look up word.", "LOOKUP_FAILED", 500)
     }
 
     private suspend fun lookupFromVocabularyCatalog(candidates: List<String>): ReadingWordLookup? {
-        for (candidate in candidates.take(4)) {
+        for (candidate in candidates.take(2)) {
             val res = runCatching {
                 requestJson("GET", "/api/vocabulary/words?search=${urlEnc(candidate)}&limit=15")
             }.getOrNull() ?: continue
@@ -257,6 +265,7 @@ class ReadingRepository {
             .put("example", example)
             .put("level", level)
         val data = requestJson("POST", "/api/v1/reading/vocabulary/save", payload)
+        invalidateWordLookup("${passageId.orEmpty()}:${word.trim().lowercase()}")
         ReadingSaveWordResult(
             saved = data.optBoolean("saved", true),
             alreadyExisted = data.optBoolean("alreadyExisted", false),
@@ -281,6 +290,7 @@ class ReadingRepository {
             .put("reminderEnabled", settings.reminderEnabled)
             .put("reminderTime", settings.reminderTime)
         val data = requestJson("PUT", "/api/v1/reading/settings", payload)
+        invalidateDashboardCache()
         parseSettings(data.optJSONObject("settings"))
     }
 
@@ -289,6 +299,7 @@ class ReadingRepository {
             .put("accent", accent)
             .put("voiceName", voiceName)
         val data = requestJson("PUT", "/api/v1/reading/settings", payload)
+        invalidateDashboardCache()
         parseSettings(data.optJSONObject("settings"))
     }
 
@@ -597,45 +608,13 @@ class ReadingRepository {
         path: String,
         body: JSONObject? = null,
         useAdminClient: Boolean = false
-    ): JSONObject {
-        val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
-        if (baseUrl.isBlank()) {
-            throw BackendApiException("Backend URL is not configured.", "CONFIG_MISSING", 500)
-        }
-        val user = Firebase.auth.currentUser
-            ?: throw BackendApiException("Please sign in first.", "UNAUTHORIZED", 401)
-        val token = user.getIdToken(false).await().token
-            ?: throw BackendApiException("Could not verify authentication token.", "UNAUTHORIZED", 401)
-
-        val builder = Request.Builder()
-            .url("$baseUrl$path")
-            .header("Authorization", "Bearer $token")
-            .header("Accept", "application/json")
-
-        val reqBody = body?.toString()?.toRequestBody(JSON_TYPE)
-            ?: if (method == "POST" || method == "PUT") "{}".toRequestBody(JSON_TYPE) else null
-        builder.method(method, reqBody)
-
-        val client = if (useAdminClient) NetworkClient.admin else NetworkClient.standard
-        client.newCall(builder.build()).execute().use { res ->
-            val raw = res.body?.string().orEmpty()
-            val json = runCatching { JSONObject(raw) }.getOrNull()
-            if (!res.isSuccessful || json?.optBoolean("success", true) == false) {
-                val errObj = json?.optJSONObject("error")
-                val code = errObj?.optString("code")?.takeIf { it.isNotBlank() }
-                val message = errObj?.optString("message")?.takeIf { it.isNotBlank() }
-                    ?: json?.optString("error")?.takeIf { it.isNotBlank() }
-                    ?: when {
-                        res.code == 404 && raw.trimStart().startsWith("<") ->
-                            "Reading API not found on server (404). Deploy latest backend to Vercel."
-                        raw.trimStart().startsWith("<") -> "Server error (${res.code})"
-                        else -> "Request failed (${res.code})"
-                    }
-                throw BackendApiException(message, code, res.code)
-            }
-            return json?.optJSONObject("data") ?: json ?: JSONObject()
-        }
-    }
+    ): JSONObject = NetworkClient.executeAuthorizedJson(
+        method = method,
+        path = path,
+        body = body,
+        client = if (useAdminClient) NetworkClient.admin else NetworkClient.standard,
+        notFoundHint = "Reading API not found on server (404). Deploy latest backend to Vercel."
+    )
 
     private fun JSONObject.optStringOrNull(key: String): String? {
         if (isNull(key)) return null
@@ -645,7 +624,58 @@ class ReadingRepository {
     private fun urlEnc(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     private companion object {
-        val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
+        private const val DASHBOARD_TTL_MS = 45_000L
+        private const val LOOKUP_TTL_MS = 600_000L
+        private val cacheLock = Any()
+
+        private var cachedDashboard: ReadingDashboardData? = null
+        private var cachedDashboardUid: String = ""
+        private var cachedDashboardAtMs: Long = 0L
+
+        private data class CachedLookupEntry(val result: ReadingWordLookup, val savedAtMs: Long)
+
+        private val wordLookupCache =
+            object : LinkedHashMap<String, CachedLookupEntry>(64, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedLookupEntry>?): Boolean =
+                    size > 160
+            }
+
+        fun getCachedDashboard(uid: String): ReadingDashboardData? = synchronized(cacheLock) {
+            val data = cachedDashboard ?: return null
+            if (uid != cachedDashboardUid || System.currentTimeMillis() - cachedDashboardAtMs > DASHBOARD_TTL_MS) {
+                cachedDashboard = null
+                return null
+            }
+            return data
+        }
+
+        fun putCachedDashboard(uid: String, data: ReadingDashboardData) = synchronized(cacheLock) {
+            cachedDashboard = data
+            cachedDashboardUid = uid
+            cachedDashboardAtMs = System.currentTimeMillis()
+        }
+
+        fun invalidateDashboardCache() = synchronized(cacheLock) {
+            cachedDashboard = null
+            cachedDashboardAtMs = 0L
+        }
+
+        fun getCachedWordLookup(key: String): ReadingWordLookup? = synchronized(cacheLock) {
+            val entry = wordLookupCache[key] ?: return null
+            if (System.currentTimeMillis() - entry.savedAtMs > LOOKUP_TTL_MS) {
+                wordLookupCache.remove(key)
+                return null
+            }
+            return entry.result
+        }
+
+        fun putCachedWordLookup(key: String, result: ReadingWordLookup) = synchronized(cacheLock) {
+            wordLookupCache[key] = CachedLookupEntry(result, System.currentTimeMillis())
+        }
+
+        fun invalidateWordLookup(key: String) = synchronized(cacheLock) {
+            wordLookupCache.remove(key)
+        }
     }
 }
 

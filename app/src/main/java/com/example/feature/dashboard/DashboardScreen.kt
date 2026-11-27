@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
@@ -44,6 +45,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -72,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.core.common.UiState
 import com.example.core.ui.BannerTone
+import com.example.core.ui.OfflineStatusCard
 import com.example.core.ui.StatusBanner
 import com.example.domain.model.UserProfile
 import com.example.domain.model.UserSession
@@ -92,6 +96,9 @@ fun DashboardScreen(
     isEmailVerified: Boolean,
     actionState: DashboardActionState,
     bottomBar: @Composable () -> Unit = {},
+    isOnline: Boolean = true,
+    showMenuButton: Boolean = true,
+    onOpenMenu: () -> Unit = {},
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
@@ -123,6 +130,8 @@ fun DashboardScreen(
             HomeTopHeader(
                 streakDays = streakDays,
                 displayName = displayName,
+                showMenuButton = showMenuButton,
+                onOpenMenu = onOpenMenu,
                 onStreakClick = onOpenProgress,
                 onAvatarClick = onOpenProgress
             )
@@ -152,16 +161,25 @@ fun DashboardScreen(
                         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        item {
-                            StatusBanner(message = profileState.message, tone = BannerTone.ERROR)
-                        }
-                        if (!actionState.backendSyncError.isNullOrBlank()) {
+                        if (!isOnline) {
                             item {
-                                BackendSyncWarningCard(
-                                    error = actionState.backendSyncError,
-                                    isSyncing = actionState.isSyncingBackend,
+                                OfflineStatusCard(
+                                    isReconnecting = actionState.isSyncingBackend,
                                     onRetry = onRetryBackendSync
                                 )
+                            }
+                        } else {
+                            item {
+                                StatusBanner(message = profileState.message, tone = BannerTone.ERROR)
+                            }
+                            if (!actionState.backendSyncError.isNullOrBlank()) {
+                                item {
+                                    BackendSyncWarningCard(
+                                        error = actionState.backendSyncError,
+                                        isSyncing = actionState.isSyncingBackend,
+                                        onRetry = onRetryBackendSync
+                                    )
+                                }
                             }
                         }
                         item {
@@ -208,7 +226,14 @@ fun DashboardScreen(
                             }
                         }
 
-                        if (!actionState.backendSyncError.isNullOrBlank()) {
+                        if (!isOnline) {
+                            item {
+                                OfflineStatusCard(
+                                    isReconnecting = actionState.isSyncingBackend,
+                                    onRetry = onRetryBackendSync
+                                )
+                            }
+                        } else if (!actionState.backendSyncError.isNullOrBlank()) {
                             item {
                                 BackendSyncWarningCard(
                                     error = actionState.backendSyncError,
@@ -269,6 +294,8 @@ fun DashboardScreen(
 private fun HomeTopHeader(
     streakDays: Int,
     displayName: String,
+    showMenuButton: Boolean,
+    onOpenMenu: () -> Unit,
     onStreakClick: () -> Unit,
     onAvatarClick: () -> Unit
 ) {
@@ -280,81 +307,105 @@ private fun HomeTopHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left: Streak pill matching reference image
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xFFF3F4F6),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(onClick = onStreakClick)
-                    .minimumInteractiveComponentSize()
-                    .testTag("home_streak_pill")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.LocalFireDepartment,
-                        contentDescription = "Streak days",
-                        tint = HomeFlameOrange,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "$streakDays",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = HomeTextDark
-                    )
+                if (showMenuButton) {
+                    IconButton(
+                        onClick = onOpenMenu,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("student_sidebar_menu_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = "Open student menu",
+                            tint = HomeTextDark
+                        )
+                    }
                 }
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(color = HomeEmerald, fontWeight = FontWeight.ExtraBold)) {
+                            append("English")
+                        }
+                        withStyle(SpanStyle(color = HomeTextDark, fontWeight = FontWeight.ExtraBold)) {
+                            append(" AI")
+                        }
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                    letterSpacing = (-0.3).sp,
+                    modifier = if (!showMenuButton) Modifier.padding(start = 4.dp) else Modifier
+                )
             }
 
-            // Center: Brand logo
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = HomeEmerald, fontWeight = FontWeight.ExtraBold)) {
-                        append("English")
-                    }
-                    withStyle(SpanStyle(color = HomeTextDark, fontWeight = FontWeight.ExtraBold)) {
-                        append(" AI")
-                    }
-                },
-                style = MaterialTheme.typography.titleLarge,
-                letterSpacing = (-0.3).sp
-            )
-
-            // Right: Student avatar -> Student Profile / Progress Dashboard
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onAvatarClick)
-                    .testTag("home_student_avatar_button"),
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.img_student_avatar),
-                    contentDescription = "$displayName student dashboard",
-                    contentScale = ContentScale.Crop,
+                // Streak pill
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFFF3F4F6),
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .border(1.5.dp, Color(0xFFD1FAE5), CircleShape)
-                )
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClick = onStreakClick)
+                        .minimumInteractiveComponentSize()
+                        .testTag("home_streak_pill")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocalFireDepartment,
+                            contentDescription = "Streak days",
+                            tint = HomeFlameOrange,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "$streakDays",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = HomeTextDark
+                        )
+                    }
+                }
+
+                // Right: Student avatar -> Student Profile / Progress Dashboard
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(2.dp)
-                        .size(11.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF16A34A))
-                        .border(1.5.dp, Color.White, CircleShape)
-                )
+                        .clickable(onClick = onAvatarClick)
+                        .testTag("home_student_avatar_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_student_avatar),
+                        contentDescription = "$displayName student dashboard",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .border(1.5.dp, Color(0xFFD1FAE5), CircleShape)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(2.dp)
+                            .size(11.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF16A34A))
+                            .border(1.5.dp, Color.White, CircleShape)
+                    )
+                }
             }
         }
     }
@@ -1079,34 +1130,47 @@ private fun BackendSyncWarningCard(
     onRetry: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFFFFFBEB),
+        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Backend Account Sync Failed",
+                text = if (isSyncing) "Syncing Your Account..." else "Connection Taking Longer",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onErrorContainer
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF92400E)
             )
             Text(
-                text = error,
+                text = if (isSyncing) "Connecting to the server. Please hold on a moment." else error,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer
+                color = Color(0xFF78350F)
             )
+            if (isSyncing) {
+                LinearProgressIndicator(
+                    color = HomeEmerald,
+                    trackColor = Color(0xFFFEF3C7),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                )
+            }
             OutlinedButton(
                 onClick = onRetry,
                 enabled = !isSyncing,
                 shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFFD97706).copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF92400E)),
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .testTag("retry_backend_sync_button")
             ) {
-                Text(if (isSyncing) "Syncing..." else "Retry Sync")
+                Text(if (isSyncing) "Syncing..." else "Retry Sync", fontWeight = FontWeight.SemiBold)
             }
         }
     }

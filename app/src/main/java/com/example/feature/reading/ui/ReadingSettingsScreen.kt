@@ -63,8 +63,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.isPermissionPermanentlyDenied
 import com.example.core.ui.openAppPermissionSettings
-import com.example.core.ui.shouldOpenAppSettings
+import com.example.core.ui.requestSystemPermission
 import com.example.domain.model.ReadingAccent
 import com.example.domain.model.ReadingCefrLevel
 import com.example.feature.reading.ReadingSettingsViewModel
@@ -81,16 +82,14 @@ fun ReadingSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showNotifPermissionDialog by remember { mutableStateOf(false) }
-    var notifDeniedOnce by remember { mutableStateOf(false) }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         viewModel.updateDraft { it.copy(reminderEnabled = granted) }
-        if (granted) {
-            notifDeniedOnce = false
-        } else {
-            notifDeniedOnce = true
+        if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            isPermissionPermanentlyDenied(context, Manifest.permission.POST_NOTIFICATIONS)
+        ) {
             showNotifPermissionDialog = true
         }
     }
@@ -316,15 +315,17 @@ fun ReadingSettingsScreen(
                                     checked = s.reminderEnabled,
                                     onCheckedChange = { enable ->
                                         if (enable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                            val granted = ContextCompat.checkSelfPermission(
-                                                context,
-                                                Manifest.permission.POST_NOTIFICATIONS
-                                            ) == PackageManager.PERMISSION_GRANTED
-                                            if (!granted) {
-                                                showNotifPermissionDialog = true
-                                            } else {
-                                                viewModel.updateDraft { it.copy(reminderEnabled = true) }
-                                            }
+                                            requestSystemPermission(
+                                                context = context,
+                                                permission = Manifest.permission.POST_NOTIFICATIONS,
+                                                launcher = notifPermissionLauncher,
+                                                onAlreadyGranted = {
+                                                    viewModel.updateDraft { it.copy(reminderEnabled = true) }
+                                                },
+                                                onPermanentlyDenied = {
+                                                    showNotifPermissionDialog = true
+                                                }
+                                            )
                                         } else {
                                             viewModel.updateDraft { it.copy(reminderEnabled = enable) }
                                         }
@@ -381,15 +382,11 @@ fun ReadingSettingsScreen(
     if (showNotifPermissionDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         PermissionPromptDialog(
             title = "Notification Permission Required",
-            message = "Allow notifications so we can send your daily reading reminder.",
+            message = "Notifications are disabled for this app. Enable them in App Settings to receive your daily reading reminder.",
             icon = Icons.Filled.NotificationsActive,
             onAllow = {
                 showNotifPermissionDialog = false
-                if (shouldOpenAppSettings(context, Manifest.permission.POST_NOTIFICATIONS, notifDeniedOnce)) {
-                    openAppPermissionSettings(context)
-                } else {
-                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
+                openAppPermissionSettings(context)
             },
             onCancel = { showNotifPermissionDialog = false }
         )

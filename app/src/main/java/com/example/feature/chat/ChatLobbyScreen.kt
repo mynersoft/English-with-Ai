@@ -51,7 +51,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import com.example.core.chat.ActiveChatRoomTracker
+import com.example.core.chat.ChatMessageNotifier
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +90,21 @@ fun ChatRoute(
     }
 
     val activeRoom = threadState.room
+    DisposableEffect(activeRoom?.id) {
+        val roomId = activeRoom?.id
+        if (!roomId.isNullOrBlank()) {
+            ActiveChatRoomTracker.setActiveRoom(roomId)
+            ChatMessageNotifier.clearRoomNotifications(context, roomId)
+        } else {
+            ActiveChatRoomTracker.setActiveRoom(null)
+        }
+        onDispose {
+            if (!roomId.isNullOrBlank() && ActiveChatRoomTracker.activeRoomId == roomId) {
+                ActiveChatRoomTracker.setActiveRoom(null)
+            }
+        }
+    }
+
     if (activeRoom != null) {
         BackHandler { vm.closeRoom() }
         ChatThreadScreen(
@@ -105,6 +123,7 @@ fun ChatRoute(
             onDismissExtractedText = { vm.dismissExtractedHandwriting() },
             onOcrError = { msg -> vm.reportOcrError(msg) },
             onClearOcrError = { vm.clearOcrError() },
+            onClearHighlight = { vm.clearHighlightedMessage() },
             onClearError = { vm.clearThreadError() }
         )
     } else {

@@ -2,33 +2,46 @@ package com.example.feature.admin
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Translate
@@ -37,12 +50,20 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
@@ -53,12 +74,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,7 +92,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.feature.reading.ReadingAdminListState
@@ -82,12 +109,17 @@ import com.example.feature.vocabulary.VocabAdminViewModel
 @Composable
 fun AdminRoute(
     onBack: () -> Unit,
+    onLogout: () -> Unit = { Firebase.auth.signOut() },
+    adminEmail: String = Firebase.auth.currentUser?.email.orEmpty(),
+    adminName: String = Firebase.auth.currentUser?.displayName.orEmpty(),
     vm: AdminViewModel = viewModel(),
+    dashboardVm: AdminDashboardViewModel = viewModel(),
     vocabAdminVm: VocabAdminViewModel = viewModel(),
     readingAdminVm: ReadingAdminViewModel = viewModel(),
     studentsAdminVm: AdminStudentsViewModel = viewModel()
 ) {
     val access by vm.access.collectAsStateWithLifecycle()
+    val dashboardState by dashboardVm.state.collectAsStateWithLifecycle()
     val patternListState by vm.list.collectAsStateWithLifecycle()
     val vocabAdminState by vocabAdminVm.state.collectAsStateWithLifecycle()
     val readingListState by readingAdminVm.listState.collectAsStateWithLifecycle()
@@ -105,6 +137,7 @@ fun AdminRoute(
 
     LaunchedEffect(access) {
         if (access is AdminAccessState.Allowed) {
+            dashboardVm.loadDashboard()
             vocabAdminVm.loadInitial()
             readingAdminVm.loadInitial()
             studentsAdminVm.loadInitial()
@@ -175,6 +208,9 @@ fun AdminRoute(
                     AdminDashboardHub(
                         activeTab = activeSectionTab,
                         onSelectTab = { activeSectionTab = it },
+                        adminName = adminName.ifBlank { "Administrator" },
+                        adminEmail = adminEmail,
+                        dashboardState = dashboardState,
                         patternState = patternListState,
                         vocabState = vocabAdminState,
                         readingState = readingListState,
@@ -182,7 +218,10 @@ fun AdminRoute(
                         vocabSubTab = vocabSubTab,
                         openAddWordTrigger = openAddWordTrigger,
                         onBack = onBack,
+                        onLogout = onLogout,
+                        onRefreshDashboard = { dashboardVm.loadDashboard(forceRefresh = true) },
                         onRefreshAll = {
+                            dashboardVm.loadDashboard(forceRefresh = true)
                             vm.loadList()
                             vocabAdminVm.loadInitial()
                             readingAdminVm.loadInitial()
@@ -310,6 +349,9 @@ private fun AdminAccessGateScreen(
 private fun AdminDashboardHub(
     activeTab: Int,
     onSelectTab: (Int) -> Unit,
+    adminName: String,
+    adminEmail: String,
+    dashboardState: AdminDashboardUiState,
     patternState: AdminListState,
     vocabState: VocabAdminUiState,
     readingState: ReadingAdminListState,
@@ -317,6 +359,8 @@ private fun AdminDashboardHub(
     vocabSubTab: Int,
     openAddWordTrigger: Int,
     onBack: () -> Unit,
+    onLogout: () -> Unit,
+    onRefreshDashboard: () -> Unit,
     onRefreshAll: () -> Unit,
     onNewPattern: () -> Unit,
     onEditPattern: (String) -> Unit,
@@ -334,7 +378,14 @@ private fun AdminDashboardHub(
     studentsAdminVm: AdminStudentsViewModel
 ) {
     val snackbar = remember { SnackbarHostState() }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     var confirmDeletePattern by remember { mutableStateOf<AdminPatternSummary?>(null) }
+    var confirmLogout by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = drawerState.isOpen) {
+        scope.launch { drawerState.close() }
+    }
 
     LaunchedEffect(patternState.message) {
         patternState.message?.let {
@@ -359,164 +410,269 @@ private fun AdminDashboardHub(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Admin Dashboard", fontWeight = FontWeight.Bold)
-                        Text(
-                            text = "Manage Patterns, Vocabulary, Reading & Students",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWideScreen = maxWidth >= 840.dp
+
+        val drawerContent: @Composable () -> Unit = {
+            AdminSidebarDrawerContent(
+                activeTab = activeTab,
+                adminName = adminName,
+                adminEmail = adminEmail,
+                patternCount = patternState.patterns.size,
+                vocabCount = vocabState.total,
+                readingCount = readingState.total,
+                studentCount = studentsState.counts.totalStudents,
+                onSelectTab = { idx ->
+                    onSelectTab(idx)
+                    if (!isWideScreen) {
+                        scope.launch { drawerState.close() }
                     }
                 },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("admin_dashboard_back_button")
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                onRefreshAll = {
+                    onRefreshAll()
+                    if (!isWideScreen) {
+                        scope.launch { drawerState.close() }
                     }
                 },
-                actions = {
-                    IconButton(
-                        onClick = onRefreshAll,
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("admin_dashboard_refresh_button")
-                    ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh admin data")
+                onBackToApp = {
+                    if (!isWideScreen) {
+                        scope.launch {
+                            drawerState.close()
+                            onBack()
+                        }
+                    } else {
+                        onBack()
                     }
+                },
+                onRequestLogout = {
+                    confirmLogout = true
                 }
             )
-        },
-        floatingActionButton = {
-            if (activeTab == 1) {
-                FloatingActionButton(
-                    onClick = onNewPattern,
-                    modifier = Modifier.testTag("admin_fab_new_pattern")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Post new pattern")
-                }
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbar) }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            ScrollableTabRow(
-                selectedTabIndex = activeTab,
-                edgePadding = 12.dp,
-                modifier = Modifier.widthIn(max = 600.dp)
-            ) {
-                Tab(
-                    selected = activeTab == 0,
-                    onClick = { onSelectTab(0) },
-                    text = { Text("Overview") },
-                    modifier = Modifier.testTag("admin_tab_overview")
-                )
-                Tab(
-                    selected = activeTab == 1,
-                    onClick = { onSelectTab(1) },
-                    text = { Text("Patterns (${patternState.patterns.size})") },
-                    modifier = Modifier.testTag("admin_tab_patterns")
-                )
-                Tab(
-                    selected = activeTab == 2,
-                    onClick = { onSelectTab(2) },
-                    text = { Text("Vocabulary (${vocabState.total})") },
-                    modifier = Modifier.testTag("admin_tab_vocabulary")
-                )
-                Tab(
-                    selected = activeTab == 3,
-                    onClick = { onSelectTab(3) },
-                    text = { Text("Reading (${readingState.total})") },
-                    modifier = Modifier.testTag("admin_tab_reading")
-                )
-                Tab(
-                    selected = activeTab == 4,
-                    onClick = { onSelectTab(4) },
-                    text = { Text("Students (${studentsState.counts.totalStudents})") },
-                    modifier = Modifier.testTag("admin_tab_students")
-                )
-            }
+        }
 
-            when (activeTab) {
-                0 -> AdminOverviewTab(
-                    patternCount = patternState.patterns.size,
-                    vocabCount = vocabState.total,
-                    categoryCount = vocabState.categories.size,
-                    readingCount = readingState.total,
-                    studentCount = studentsState.counts.totalStudents,
-                    onPostNewPattern = onNewPattern,
-                    onOpenPatterns = { onSelectTab(1) },
-                    onPostNewVocabulary = onQuickAddVocabulary,
-                    onManageCategories = onQuickManageCategories,
-                    onCsvImport = onQuickCsvImport,
-                    onCreateReading = onQuickCreateReading,
-                    onManageReading = onQuickManageReading,
-                    onManageStudents = onQuickManageStudents
-                )
-                1 -> AdminPatternsListTab(
-                    state = patternState,
-                    onNewPattern = onNewPattern,
-                    onEditPattern = onEditPattern,
-                    onRequestDelete = { confirmDeletePattern = it }
-                )
-                2 -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    VocabAdminPanel(
-                        state = vocabState,
-                        requestedSubTab = vocabSubTab,
-                        openAddWordTrigger = openAddWordTrigger,
-                        onClearMessage = { vocabAdminVm.clearMessage() },
-                        onFilterChange = { s, l, c -> vocabAdminVm.updateFilters(s, l, c) },
-                        onPageChange = { p -> vocabAdminVm.loadWords(p) },
-                        onSaveWord = { w, done -> vocabAdminVm.saveWord(w, done) },
-                        onTogglePublish = { id, pub -> vocabAdminVm.togglePublish(id, pub) },
-                        onDeleteWord = { id -> vocabAdminVm.deleteWord(id) },
-                        onSaveCategory = { id, name, desc, parent, active ->
-                            vocabAdminVm.saveCategory(id, name, desc, parent, active)
+        val hubScaffold: @Composable () -> Unit = {
+            Scaffold(
+                contentWindowInsets = WindowInsets.safeDrawing,
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text("Admin Dashboard", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = when (activeTab) {
+                                        1 -> "Sentence Patterns"
+                                        2 -> "Vocabulary Catalog"
+                                        3 -> "Reading Passages"
+                                        4 -> "Student Management"
+                                        else -> "Overview & Quick Actions"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         },
-                        onDeleteCategory = { id -> vocabAdminVm.deleteCategory(id) },
-                        onImportCsv = { csv -> vocabAdminVm.importCsv(csv) }
-                    )
-                }
-                3 -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    ReadingAdminPanel(vm = readingAdminVm)
-                }
-                4 -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    AdminStudentsPanel(
-                        state = studentsState,
-                        onSearchQueryChange = { studentsAdminVm.onSearchQueryChange(it) },
-                        onAccountFilterChange = { studentsAdminVm.setAccountStatusFilter(it) },
-                        onSubscriptionFilterChange = { studentsAdminVm.setSubscriptionFilter(it) },
-                        onPageChange = { studentsAdminVm.loadStudents(it) },
-                        onSelectStudent = { studentsAdminVm.openStudentDetail(it) },
-                        onCloseDetail = { studentsAdminVm.closeStudentDetail() },
-                        onUpdateAccountStatus = { id, st -> studentsAdminVm.updateAccountStatus(id, st) },
-                        onUpdateSubscription = { id, st, pl, exp ->
-                            studentsAdminVm.updateSubscription(id, st, pl, exp)
+                        navigationIcon = {
+                            if (!isWideScreen) {
+                                IconButton(
+                                    onClick = { scope.launch { drawerState.open() } },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("admin_sidebar_menu_button")
+                                ) {
+                                    Icon(Icons.Filled.Menu, contentDescription = "Open admin menu")
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = onBack,
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("admin_dashboard_back_button")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to app")
+                                }
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = onRefreshAll,
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("admin_dashboard_refresh_button")
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh admin data")
+                            }
+                            if (!isWideScreen) {
+                                IconButton(
+                                    onClick = { confirmLogout = true },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("admin_topbar_logout_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                                        contentDescription = "Log out",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                         }
                     )
+                },
+                floatingActionButton = {
+                    if (activeTab == 1) {
+                        FloatingActionButton(
+                            onClick = onNewPattern,
+                            modifier = Modifier.testTag("admin_fab_new_pattern")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Post new pattern")
+                        }
+                    }
+                },
+                snackbarHost = { SnackbarHost(snackbar) }
+            ) { padding ->
+                Column(
+                    modifier = Modifier
+                        .padding(padding)
+                        .fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (!isWideScreen) {
+                        ScrollableTabRow(
+                            selectedTabIndex = activeTab,
+                            edgePadding = 12.dp,
+                            modifier = Modifier.widthIn(max = 600.dp)
+                        ) {
+                            Tab(
+                                selected = activeTab == 0,
+                                onClick = { onSelectTab(0) },
+                                text = { Text("Overview") },
+                                modifier = Modifier.testTag("admin_tab_overview")
+                            )
+                            Tab(
+                                selected = activeTab == 1,
+                                onClick = { onSelectTab(1) },
+                                text = { Text("Patterns (${patternState.patterns.size})") },
+                                modifier = Modifier.testTag("admin_tab_patterns")
+                            )
+                            Tab(
+                                selected = activeTab == 2,
+                                onClick = { onSelectTab(2) },
+                                text = { Text("Vocabulary (${vocabState.total})") },
+                                modifier = Modifier.testTag("admin_tab_vocabulary")
+                            )
+                            Tab(
+                                selected = activeTab == 3,
+                                onClick = { onSelectTab(3) },
+                                text = { Text("Reading (${readingState.total})") },
+                                modifier = Modifier.testTag("admin_tab_reading")
+                            )
+                            Tab(
+                                selected = activeTab == 4,
+                                onClick = { onSelectTab(4) },
+                                text = { Text("Students (${studentsState.counts.totalStudents})") },
+                                modifier = Modifier.testTag("admin_tab_students")
+                            )
+                        }
+                    }
+
+                    when (activeTab) {
+                        0 -> AdminOverviewTab(
+                            dashboardState = dashboardState,
+                            patternCount = patternState.patterns.size,
+                            vocabCount = vocabState.total,
+                            categoryCount = vocabState.categories.size,
+                            readingCount = readingState.total,
+                            studentCount = studentsState.counts.totalStudents,
+                            onRefreshDashboard = onRefreshDashboard,
+                            onPostNewPattern = onNewPattern,
+                            onOpenPatterns = { onSelectTab(1) },
+                            onPostNewVocabulary = onQuickAddVocabulary,
+                            onManageCategories = onQuickManageCategories,
+                            onCsvImport = onQuickCsvImport,
+                            onCreateReading = onQuickCreateReading,
+                            onManageReading = onQuickManageReading,
+                            onManageStudents = onQuickManageStudents
+                        )
+                        1 -> AdminPatternsListTab(
+                            state = patternState,
+                            onNewPattern = onNewPattern,
+                            onEditPattern = onEditPattern,
+                            onRequestDelete = { confirmDeletePattern = it }
+                        )
+                        2 -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            VocabAdminPanel(
+                                state = vocabState,
+                                requestedSubTab = vocabSubTab,
+                                openAddWordTrigger = openAddWordTrigger,
+                                onClearMessage = { vocabAdminVm.clearMessage() },
+                                onFilterChange = { s, l, c -> vocabAdminVm.updateFilters(s, l, c) },
+                                onPageChange = { p -> vocabAdminVm.loadWords(p) },
+                                onSaveWord = { w, done -> vocabAdminVm.saveWord(w, done) },
+                                onTogglePublish = { id, pub -> vocabAdminVm.togglePublish(id, pub) },
+                                onDeleteWord = { id -> vocabAdminVm.deleteWord(id) },
+                                onSaveCategory = { id, name, desc, parent, active ->
+                                    vocabAdminVm.saveCategory(id, name, desc, parent, active)
+                                },
+                                onDeleteCategory = { id -> vocabAdminVm.deleteCategory(id) },
+                                onImportCsv = { csv -> vocabAdminVm.importCsv(csv) }
+                            )
+                        }
+                        3 -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            ReadingAdminPanel(vm = readingAdminVm)
+                        }
+                        4 -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            AdminStudentsPanel(
+                                state = studentsState,
+                                onSearchQueryChange = { studentsAdminVm.onSearchQueryChange(it) },
+                                onAccountFilterChange = { studentsAdminVm.setAccountStatusFilter(it) },
+                                onSubscriptionFilterChange = { studentsAdminVm.setSubscriptionFilter(it) },
+                                onPageChange = { studentsAdminVm.loadStudents(it) },
+                                onSelectStudent = { studentsAdminVm.openStudentDetail(it) },
+                                onCloseDetail = { studentsAdminVm.closeStudentDetail() },
+                                onUpdateAccountStatus = { id, st -> studentsAdminVm.updateAccountStatus(id, st) },
+                                onUpdateSubscription = { id, st, pl, exp ->
+                                    studentsAdminVm.updateSubscription(id, st, pl, exp)
+                                }
+                            )
+                        }
+                    }
                 }
+            }
+        }
+
+        if (isWideScreen) {
+            PermanentNavigationDrawer(
+                drawerContent = {
+                    PermanentDrawerSheet(
+                        modifier = Modifier.width(280.dp)
+                    ) {
+                        drawerContent()
+                    }
+                }
+            ) {
+                hubScaffold()
+            }
+        } else {
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    ModalDrawerSheet(
+                        modifier = Modifier.width(300.dp)
+                    ) {
+                        drawerContent()
+                    }
+                }
+            ) {
+                hubScaffold()
             }
         }
     }
@@ -535,15 +691,249 @@ private fun AdminDashboardHub(
             dismissButton = { TextButton(onClick = { confirmDeletePattern = null }) { Text("Cancel") } }
         )
     }
+
+    if (confirmLogout) {
+        AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text("Log out?") },
+            text = { Text("You will be signed out of your administrator account.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmLogout = false
+                        onLogout()
+                    },
+                    modifier = Modifier.testTag("admin_confirm_logout_button")
+                ) {
+                    Text("Log Out", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmLogout = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AdminSidebarDrawerContent(
+    activeTab: Int,
+    adminName: String,
+    adminEmail: String,
+    patternCount: Int,
+    vocabCount: Int,
+    readingCount: Int,
+    studentCount: Int,
+    onSelectTab: (Int) -> Unit,
+    onRefreshAll: () -> Unit,
+    onBackToApp: () -> Unit,
+    onRequestLogout: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        // Branded Admin Header
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AdminPanelSettings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Admin Console",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = adminName.ifBlank { "Administrator" },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (adminEmail.isNotBlank()) {
+                        Text(
+                            text = adminEmail,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "MANAGEMENT",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+
+            data class NavEntry(
+                val tabIndex: Int,
+                val label: String,
+                val icon: ImageVector,
+                val badge: String? = null,
+                val tag: String
+            )
+
+            val entries = listOf(
+                NavEntry(0, "Overview", Icons.Filled.Dashboard, null, "admin_drawer_overview"),
+                NavEntry(1, "Sentence Patterns", Icons.AutoMirrored.Filled.MenuBook, "$patternCount", "admin_drawer_patterns"),
+                NavEntry(2, "Vocabulary", Icons.Filled.Translate, "$vocabCount", "admin_drawer_vocabulary"),
+                NavEntry(3, "Reading Practice", Icons.Filled.AutoStories, "$readingCount", "admin_drawer_reading"),
+                NavEntry(4, "Students", Icons.Filled.People, "$studentCount", "admin_drawer_students")
+            )
+
+            entries.forEach { item ->
+                NavigationDrawerItem(
+                    label = { Text(item.label, fontWeight = if (activeTab == item.tabIndex) FontWeight.SemiBold else FontWeight.Normal) },
+                    selected = activeTab == item.tabIndex,
+                    onClick = { onSelectTab(item.tabIndex) },
+                    icon = { Icon(item.icon, contentDescription = null) },
+                    badge = item.badge?.let { count ->
+                        {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (activeTab == item.tabIndex) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            ) {
+                                Text(
+                                    text = count,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (activeTab == item.tabIndex) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag(item.tag)
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Text(
+                text = "SYSTEM",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Refresh All Data") },
+                selected = false,
+                onClick = onRefreshAll,
+                icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("admin_drawer_refresh")
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Return to Learner App") },
+                selected = false,
+                onClick = onBackToApp,
+                icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) },
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("admin_drawer_back_to_app")
+            )
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+
+        // Pinned Logout Button
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+        ) {
+            NavigationDrawerItem(
+                label = {
+                    Text(
+                        text = "Log Out",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                },
+                selected = false,
+                onClick = onRequestLogout,
+                icon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                ),
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("admin_drawer_logout_button")
+            )
+        }
+    }
 }
 
 @Composable
 private fun AdminOverviewTab(
+    dashboardState: AdminDashboardUiState,
     patternCount: Int,
     vocabCount: Int,
     categoryCount: Int,
     readingCount: Int,
     studentCount: Int,
+    onRefreshDashboard: () -> Unit,
     onPostNewPattern: () -> Unit,
     onOpenPatterns: () -> Unit,
     onPostNewVocabulary: () -> Unit,
@@ -561,23 +951,23 @@ private fun AdminOverviewTab(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                AdminStatTile("Students", studentCount.toString(), Modifier.weight(1f))
-                AdminStatTile("Patterns", patternCount.toString(), Modifier.weight(1f))
-                AdminStatTile("Words", vocabCount.toString(), Modifier.weight(1f))
-                AdminStatTile("Reading", readingCount.toString(), Modifier.weight(1f))
-            }
+            AdminDashboardAnalyticsSection(
+                state = dashboardState,
+                fallbackStudentCount = studentCount,
+                fallbackPatternCount = patternCount,
+                fallbackVocabCount = vocabCount,
+                fallbackReadingCount = readingCount,
+                onRetry = onRefreshDashboard,
+                onOpenStudents = onManageStudents
+            )
         }
 
         item {
             Text(
-                text = "Student & Content Management (Admin Only)",
+                text = "Quick Management Actions",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier.padding(top = 6.dp)
             )
         }
 

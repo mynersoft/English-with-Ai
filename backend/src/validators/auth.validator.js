@@ -1,10 +1,22 @@
 import { AppError } from "@/lib/errors";
 
 export async function readJson(request) {
+  let raw;
   try {
-    return await request.json();
+    raw = await request.text();
   } catch {
-    return {};
+    throw new AppError(400, "INVALID_BODY", "Could not read request body.");
+  }
+  if (!raw || !raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new AppError(400, "INVALID_JSON", "Request body must be a JSON object.");
+    }
+    return parsed;
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    throw new AppError(400, "INVALID_JSON", "Invalid JSON request body.");
   }
 }
 

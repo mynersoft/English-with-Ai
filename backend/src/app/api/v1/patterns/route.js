@@ -3,6 +3,7 @@ import Pattern from "@/models/Pattern";
 import { connectDB } from "@/lib/db";
 import { isAdmin } from "@/lib/adminGuard";
 import { listSlots } from "@/lib/patternSlots";
+import { normalizeApiError } from "@/lib/apiHandler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,9 +44,10 @@ export async function GET() {
     );
   } catch (err) {
     console.error("GET /api/v1/patterns failed:", err);
+    const mapped = normalizeApiError(err, "Failed to load patterns");
     return NextResponse.json(
-      { error: err?.message || "Failed to load patterns" },
-      { status: err?.status || 500 }
+      { error: mapped.message, code: mapped.code },
+      mapped.headers ? { status: mapped.status, headers: mapped.headers } : { status: mapped.status }
     );
   }
 }
@@ -75,9 +77,10 @@ export async function POST(req) {
     return NextResponse.json(pattern, { status: 201 });
   } catch (err) {
     console.error("POST /api/v1/patterns failed:", err);
+    const mapped = normalizeApiError(err, "Failed to create pattern");
     return NextResponse.json(
-      { error: err?.message || "Failed to create pattern" },
-      { status: err?.status || 500 }
+      { error: mapped.message, code: mapped.code },
+      mapped.headers ? { status: mapped.status, headers: mapped.headers } : { status: mapped.status }
     );
   }
 }

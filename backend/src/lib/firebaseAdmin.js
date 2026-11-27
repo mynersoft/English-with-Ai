@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
 
 function getPrivateKey() {
   const raw = process.env.FIREBASE_PRIVATE_KEY;
@@ -24,4 +25,8 @@ function getAdminApp() {
 
 export function adminAuth() {
   return getAuth(getAdminApp());
+}
+
+export function adminMessaging() {
+  return getMessaging(getAdminApp());
 }

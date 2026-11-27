@@ -68,8 +68,9 @@ import androidx.core.content.ContextCompat
 import com.example.core.audio.VocabAudioPlayer
 import com.example.core.common.UiState
 import com.example.core.ui.PermissionPromptDialog
+import com.example.core.ui.isPermissionPermanentlyDenied
 import com.example.core.ui.openAppPermissionSettings
-import com.example.core.ui.shouldOpenAppSettings
+import com.example.core.ui.requestSystemPermission
 import com.example.domain.model.ReviewTabData
 import com.example.feature.speaking.SpeechHelper
 
@@ -314,7 +315,9 @@ fun VocabSpeakingPracticeScreen(
             beginRecording()
         } else {
             permissionDenied = true
-            showMicPermissionDialog = true
+            if (isPermissionPermanentlyDenied(context, Manifest.permission.RECORD_AUDIO)) {
+                showMicPermissionDialog = true
+            }
         }
     }
 
@@ -427,15 +430,13 @@ fun VocabSpeakingPracticeScreen(
                                                     speechHelper.stopListening()
                                                     isListening = false
                                                 } else {
-                                                    val granted = ContextCompat.checkSelfPermission(
-                                                        context,
-                                                        Manifest.permission.RECORD_AUDIO
-                                                    ) == PackageManager.PERMISSION_GRANTED
-                                                    if (granted) {
-                                                        beginRecording()
-                                                    } else {
-                                                        showMicPermissionDialog = true
-                                                    }
+                                                    requestSystemPermission(
+                                                        context = context,
+                                                        permission = Manifest.permission.RECORD_AUDIO,
+                                                        launcher = micPermissionLauncher,
+                                                        onAlreadyGranted = { beginRecording() },
+                                                        onPermanentlyDenied = { showMicPermissionDialog = true }
+                                                    )
                                                 }
                                             },
                                             colors = ButtonDefaults.buttonColors(
@@ -545,15 +546,11 @@ fun VocabSpeakingPracticeScreen(
     if (showMicPermissionDialog) {
         PermissionPromptDialog(
             title = "Microphone Permission Required",
-            message = "Allow microphone permission to record your speaking practice.",
+            message = "Microphone permission was denied. Enable it in App Settings to record your speaking practice.",
             icon = Icons.Filled.Mic,
             onAllow = {
                 showMicPermissionDialog = false
-                if (shouldOpenAppSettings(context, Manifest.permission.RECORD_AUDIO, permissionDenied)) {
-                    openAppPermissionSettings(context)
-                } else {
-                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
+                openAppPermissionSettings(context)
             },
             onCancel = { showMicPermissionDialog = false }
         )
