@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { AppError } from "@/lib/errors";
 
-// Reuse one connection across hot reloads and warm serverless invocations.
+// Reuse one connection acrosshot reloads and warm serverless invocations.
 const cached = global._mongoose || (global._mongoose = { conn: null, promise: null });
 
 function sanitizeMongoMessage(msg) {
