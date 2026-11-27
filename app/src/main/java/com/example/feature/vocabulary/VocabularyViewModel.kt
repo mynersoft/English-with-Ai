@@ -204,11 +204,19 @@ class VocabularyViewModel(
     fun loadDailyWords(openDeck: Boolean = false) {
         viewModelScope.launch {
             _dailyState.value = UiState.Loading
+            if (openDeck) {
+                _wordDeck.update { list ->
+                    list.filterNot { it.progress.status.equals("learning", ignoreCase = true) }
+                }
+            }
             repo.fetchDailyWords()
                 .onSuccess { data ->
-                    _dailyState.value = UiState.Success(data)
+                    val filteredWords = data.words.filterNot {
+                        it.progress.status.equals("learning", ignoreCase = true)
+                    }
+                    _dailyState.value = UiState.Success(data.copy(words = filteredWords))
                     if (openDeck || _wordDeck.value.isEmpty()) {
-                        _wordDeck.value = data.words
+                        _wordDeck.value = filteredWords
                         _currentDeckIndex.value = 0
                     }
                 }
@@ -271,15 +279,29 @@ class VocabularyViewModel(
                             )
                         } else this
 
-                    _wordDeck.update { list -> list.map { it.withUpdatedProgress() } }
+                    if (!knowsWord) {
+                        val updatedDeck = _wordDeck.value.filterNot { it.id == wordId }
+                        _wordDeck.value = updatedDeck
+                        _currentDeckIndex.value = _currentDeckIndex.value.coerceIn(
+                            0,
+                            (updatedDeck.size - 1).coerceAtLeast(0)
+                        )
+                    } else {
+                        _wordDeck.update { list -> list.map { it.withUpdatedProgress() } }
+                    }
                     _dailyState.update { state ->
                         if (state is UiState.Success) {
+                            val updatedDailyWords = if (!knowsWord) {
+                                state.data.words.filterNot { it.id == wordId }
+                            } else {
+                                state.data.words.map { it.withUpdatedProgress() }
+                            }
                             UiState.Success(
                                 state.data.copy(
                                     newWordsDone = updatedDaily.newWordsDone,
                                     dailyGoal = updatedDaily.dailyGoal,
                                     isGoalCompleted = updatedDaily.isGoalCompleted,
-                                    words = state.data.words.map { it.withUpdatedProgress() }
+                                    words = updatedDailyWords
                                 )
                             )
                         } else state
@@ -334,7 +356,7 @@ class VocabularyViewModel(
                         )
                     }
 
-                    if (advanceOnSuccess && _currentDeckIndex.value < _wordDeck.value.lastIndex) {
+                    if (knowsWord && advanceOnSuccess && _currentDeckIndex.value < _wordDeck.value.lastIndex) {
                         _currentDeckIndex.value += 1
                     }
                     loadDashboard()

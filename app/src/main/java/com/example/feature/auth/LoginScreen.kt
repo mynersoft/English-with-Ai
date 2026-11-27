@@ -1,10 +1,5 @@
 package com.example.feature.auth
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,16 +38,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -63,9 +55,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.R
-import com.example.core.reminder.DailySessionReminderBanner
-import com.example.core.reminder.DailySessionReminderPrefs
-import com.example.core.reminder.DailySessionReminderScheduler
 import com.example.core.ui.BrandHeader
 import com.example.core.ui.EmailProviderSetupCard
 import com.example.core.ui.GoogleSignInButton
@@ -85,38 +74,8 @@ fun LoginScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
-    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val busy = uiState.isLoading || uiState.isGoogleLoading
-
-    var showDailyReminder by remember {
-        mutableStateOf(DailySessionReminderPrefs.shouldShowLoginBanner(context))
-    }
-    var hasNotificationPermission by remember {
-        mutableStateOf(DailySessionReminderPrefs.hasNotificationPermission(context))
-    }
-
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasNotificationPermission = granted || DailySessionReminderPrefs.hasNotificationPermission(context)
-        if (hasNotificationPermission) {
-            DailySessionReminderScheduler.scheduleDailyReminder(context)
-            DailySessionReminderScheduler.postNotificationIfEligible(context)
-        }
-    }
-
-    LaunchedEffect(showDailyReminder) {
-        if (
-            showDailyReminder &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !hasNotificationPermission &&
-            !DailySessionReminderPrefs.hasPromptedNotificationPermission(context)
-        ) {
-            DailySessionReminderPrefs.markNotificationPermissionPrompted(context)
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -151,23 +110,6 @@ fun LoginScreen(
                 message = uiState.bannerMessage,
                 tone = uiState.bannerTone
             )
-
-            AnimatedVisibility(visible = showDailyReminder) {
-                DailySessionReminderBanner(
-                    visible = showDailyReminder,
-                    hasNotificationPermission = hasNotificationPermission,
-                    onEnableNotifications = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            DailySessionReminderPrefs.markNotificationPermissionPrompted(context)
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    },
-                    onDismiss = {
-                        DailySessionReminderPrefs.dismissLoginBannerForToday(context)
-                        showDailyReminder = false
-                    }
-                )
-            }
 
             EmailProviderSetupCard(visible = uiState.isEmailProviderDisabled)
 

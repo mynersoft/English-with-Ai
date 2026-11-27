@@ -139,9 +139,11 @@ class VocabularyRepository(context: Context? = null) {
         val timezone = data.optString("timezone", "Asia/Dhaka")
         val dateKey = resolveTodayDateKey(data.optString("date"), timezone)
         val newWordsDone = mergeTodayDoneCount(dateKey, data.optInt("newWordsDone", 0), effectiveGoal)
+        val remoteLearningIds = fetchAllLearningWordIds()
         val assignedWords = parseWordArray(data.optJSONArray("words"))
         val unlearnedAssigned = assignedWords.filter { word ->
             word.id.isNotBlank() &&
+                word.id !in remoteLearningIds &&
                 !isWordKnownOrLearned(word) &&
                 !isMarkedDailyLocally(word.id, dateKey)
         }
@@ -150,7 +152,7 @@ class VocabularyRepository(context: Context? = null) {
             initialUnlearned = unlearnedAssigned,
             targetCount = targetUnlearnedCount,
             dateKey = dateKey,
-            initialExcludedIds = assignedWords.map { it.id }.toSet()
+            initialExcludedIds = assignedWords.map { it.id }.toSet() + remoteLearningIds
         )
         DailyWordsData(
             date = dateKey,
@@ -226,7 +228,13 @@ class VocabularyRepository(context: Context? = null) {
             .put("vocabularyId", vocabularyId)
             .put("quality", quality)
         val data = requestJson("POST", "/api/vocabulary/review", payload)
-        parseProgress(data.optJSONObject("progress"))
+        val progress = parseProgress(data.optJSONObject("progress"), wordId = vocabularyId)
+        if (progress.status.equals("mastered", ignoreCase = true) || progress.isKnown) {
+            saveKnownWordLocally(vocabularyId, true)
+        } else if (progress.status.equals("learning", ignoreCase = true) || quality < 3) {
+            saveKnownWordLocally(vocabularyId, false)
+        }
+        progress
     }
 
     suspend fun fetchReviewTab(tab: String = "due", page: Int = 1): Result<ReviewTabData> = safeCall {
@@ -779,6 +787,35 @@ class VocabularyRepository(context: Context? = null) {
         return remoteGoal.coerceIn(MIN_DAILY_GOAL, MAX_DAILY_GOAL)
     }
 
+    private suspend fun fetchAllLearningWordIds(): Set<String> {
+        val collected = mutableSetOf<String>()
+        var page = 1
+        var succeeded = false
+        while (page <= 4) {
+            val res = try {
+                requestJson("GET", "/api/vocabulary/review/due?tab=learning&page=$page&limit=50")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                break
+            }
+            succeeded = true
+            val arr = res.optJSONArray("items") ?: break
+            if (arr.length() == 0) break
+            for (i in 0 until arr.length()) {
+                val id = arr.optJSONObject(i)?.optString("id").orEmpty()
+                if (id.isNotBlank()) collected.add(id)
+            }
+            val total = res.optInt("total", collected.size)
+            if (collected.size >= total || arr.length() < 50) break
+            page += 1
+        }
+        if (succeeded && prefs != null) {
+            prefs.edit().putStringSet("${KEY_LEARNING_WORD_IDS_PREFIX}${currentUidOrDefault()}", collected).apply()
+        }
+        return collected
+    }
+
     private suspend fun supplementDailyWordsIfNeeded(
         initialUnlearned: List<VocabWord>,
         targetCount: Int,
@@ -964,14 +1001,33 @@ class VocabularyRepository(context: Context? = null) {
 
     private fun saveKnownWordLocally(wordId: String, knowsWord: Boolean) {
         if (prefs == null || wordId.isBlank()) return
-        val updated = prefs.getStringSet(KEY_KNOWN_WORD_IDS, emptySet()).orEmpty().toMutableSet()
-        if (knowsWord) updated.add(wordId) else updated.remove(wordId)
-        prefs.edit().putStringSet(KEY_KNOWN_WORD_IDS, updated).apply()
+        val uid = currentUidOrDefault()
+        val knownSet = prefs.getStringSet(KEY_KNOWN_WORD_IDS, emptySet()).orEmpty().toMutableSet()
+        val learningKey = "${KEY_LEARNING_WORD_IDS_PREFIX}$uid"
+        val learningSet = prefs.getStringSet(learningKey, emptySet()).orEmpty().toMutableSet()
+        if (knowsWord) {
+            knownSet.add(wordId)
+            learningSet.remove(wordId)
+        } else {
+            knownSet.remove(wordId)
+            learningSet.add(wordId)
+        }
+        prefs.edit()
+            .putStringSet(KEY_KNOWN_WORD_IDS, knownSet)
+            .putStringSet(learningKey, learningSet)
+            .apply()
     }
 
     private fun isLocallyMarkedKnown(wordId: String): Boolean {
         if (prefs == null || wordId.isBlank()) return false
         return prefs.getStringSet(KEY_KNOWN_WORD_IDS, emptySet()).orEmpty().contains(wordId)
+    }
+
+    private fun isLocallyMarkedLearning(wordId: String): Boolean {
+        if (prefs == null || wordId.isBlank()) return false
+        return prefs.getStringSet("${KEY_LEARNING_WORD_IDS_PREFIX}${currentUidOrDefault()}", emptySet())
+            .orEmpty()
+            .contains(wordId)
     }
 
     private fun isMarkedDailyLocally(wordId: String, dateKey: String): Boolean {
@@ -1067,9 +1123,14 @@ class VocabularyRepository(context: Context? = null) {
 
     private fun parseProgress(p: JSONObject?, wordId: String = ""): VocabWordProgress {
         val localKnown = isLocallyMarkedKnown(wordId)
+        val localLearning = isLocallyMarkedLearning(wordId)
         if (p == null) {
             return VocabWordProgress(
-                status = if (localKnown) "mastered" else "new",
+                status = when {
+                    localKnown -> "mastered"
+                    localLearning -> "learning"
+                    else -> "new"
+                },
                 isKnown = localKnown
             )
         }
@@ -1079,8 +1140,13 @@ class VocabularyRepository(context: Context? = null) {
             rawStatus.equals("mastered", ignoreCase = true) ||
             rawStatus.equals("known", ignoreCase = true)
         val known = remoteKnown || localKnown
+        val resolvedStatus = when {
+            known && rawStatus.equals("new", ignoreCase = true) -> "mastered"
+            !known && localLearning && rawStatus.equals("new", ignoreCase = true) -> "learning"
+            else -> rawStatus
+        }
         return VocabWordProgress(
-            status = if (known && rawStatus.equals("new", ignoreCase = true)) "mastered" else rawStatus,
+            status = resolvedStatus,
             isFavorite = p.optBoolean("isFavorite", false),
             correctCount = p.optInt("correctCount", 0),
             wrongCount = p.optInt("wrongCount", 0),
@@ -1139,6 +1205,7 @@ class VocabularyRepository(context: Context? = null) {
         private const val PREFS_NAME = "english_ai_vocab_cache"
         private const val KEY_DASHBOARD_CACHE = "last_dashboard_json"
         private const val KEY_KNOWN_WORD_IDS = "known_word_ids"
+        private const val KEY_LEARNING_WORD_IDS_PREFIX = "learning_word_ids_"
         private const val KEY_SETTINGS_PREFIX = "vocab_settings_"
         private const val KEY_LAST_DATE_PREFIX = "vocab_last_date_"
         private const val KEY_DAILY_LEARNED_PREFIX = "vocab_daily_learned_"

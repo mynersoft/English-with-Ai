@@ -1,11 +1,15 @@
 package com.example
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -168,11 +172,29 @@ fun EnglishAIApp() {
         user != null && !authRepository.requiresEmailVerification(user)
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted || DailySessionReminderPrefs.hasNotificationPermission(context)) {
+            DailySessionReminderScheduler.scheduleDailyReminder(context)
+            DailySessionReminderScheduler.postNotificationIfEligible(context)
+        }
+    }
+
     LaunchedEffect(user?.uid) {
         if (user != null) {
             DailySessionReminderPrefs.markLoggedInToday(context)
         } else {
-            DailySessionReminderScheduler.postNotificationIfEligible(context)
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !DailySessionReminderPrefs.hasNotificationPermission(context) &&
+                !DailySessionReminderPrefs.hasPromptedNotificationPermission(context)
+            ) {
+                DailySessionReminderPrefs.markNotificationPermissionPrompted(context)
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                DailySessionReminderScheduler.postNotificationIfEligible(context)
+            }
         }
     }
 
