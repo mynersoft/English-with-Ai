@@ -1,8 +1,13 @@
+
 import mongoose from "mongoose";
 import { AppError } from "@/lib/errors";
 
-// Reuse one connection across hot reloads and warm serverless invocations.
-const cached = global._mongoose || (global._mongoose = { conn: null, promise: null });
+const cached =
+  global._mongoose ||
+  (global._mongoose = {
+    conn: null,
+    promise: null,
+  });
 
 function sanitizeMongoMessage(msg) {
   return String(msg || "Unknown database error")
@@ -12,6 +17,7 @@ function sanitizeMongoMessage(msg) {
 
 function attachConnectionListeners() {
   if (global._mongooseListenersAttached) return;
+
   global._mongooseListenersAttached = true;
 
   mongoose.connection.on("disconnected", () => {
@@ -20,7 +26,11 @@ function attachConnectionListeners() {
   });
 
   mongoose.connection.on("error", (err) => {
-    console.error("MongoDB runtime error:", sanitizeMongoMessage(err?.message));
+    console.error(
+      "MongoDB runtime error:",
+      sanitizeMongoMessage(err?.message)
+    );
+
     if (mongoose.connection.readyState !== 1) {
       cached.conn = null;
       cached.promise = null;
@@ -29,32 +39,53 @@ function attachConnectionListeners() {
 }
 
 export async function connectDB() {
-  const uri = process.env.MONGODB_URI?.trim()?.replace(/^["']|["']$/g, "");
+  const uri = process.env.MONGODB_URI
+    ?.trim()
+    ?.replace(/^["']|["']$/g, "");
+
   if (!uri) {
-    throw new AppError(500, "DB_NOT_CONFIGURED", "Database connection is not configured on the server.");
+    throw new AppError(
+      500,
+      "DB_NOT_CONFIGURED",
+      "Database connection is not configured."
+    );
   }
-  if (cached.conn && mongoose.connection.readyState === 1) return cached.conn;
+
+  if (
+    cached.conn &&
+    mongoose.connection.readyState === 1
+  ) {
+    return cached.conn;
+  }
 
   attachConnectionListeners();
 
   if (!cached.promise) {
     cached.promise = mongoose.connect(uri, {
       bufferCommands: false,
-      maxPoolSize: 15,
-      minPoolSize: 2,
-      maxIdleTimeMS: 60_000,
+
+      maxPoolSize: 10,
+      minPoolSize: 0,
+
+      maxIdleTimeMS: 60000,
+
       serverSelectionTimeoutMS: 6000,
       connectTimeoutMS: 6000,
-      socketTimeoutMS: 20_000,
-      heartbeatFrequencyMS: 10_000,
     });
   }
+
   try {
     cached.conn = await cached.promise;
+    return cached.conn;
   } catch (err) {
     cached.promise = null;
     cached.conn = null;
-    console.error("MongoDB connection error:", sanitizeMongoMessage(err?.message));
+
+    console.error(
+      "MongoDB connection error:",
+      sanitizeMongoMessage(err?.message)
+    );
+
     throw new AppError(
       503,
       "DB_UNAVAILABLE",
@@ -62,5 +93,4 @@ export async function connectDB() {
       { "Retry-After": "3" }
     );
   }
-  return cached.conn;
 }
