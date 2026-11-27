@@ -59,6 +59,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.englishai.feature.speaking.SentenceLearningScreen
 import com.example.core.common.UiState
+import com.example.core.reminder.DailySessionReminderPrefs
+import com.example.core.reminder.DailySessionReminderScheduler
 import com.example.core.ui.SystemBarsAppearance
 import com.example.core.ui.attemptSilentGoogleAutoSignIn
 import com.example.data.repository.AuthRepository
@@ -111,6 +113,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        DailySessionReminderScheduler.scheduleDailyReminder(this)
         setContent {
             EnglishAITheme {
                 EnglishAIApp()
@@ -163,6 +166,14 @@ fun EnglishAIApp() {
     val user = currentUser
     val isVerifiedCheck = remember(user, verificationRefreshTick) {
         user != null && !authRepository.requiresEmailVerification(user)
+    }
+
+    LaunchedEffect(user?.uid) {
+        if (user != null) {
+            DailySessionReminderPrefs.markLoggedInToday(context)
+        } else {
+            DailySessionReminderScheduler.postNotificationIfEligible(context)
+        }
     }
 
     val systemDark = isSystemInDarkTheme()

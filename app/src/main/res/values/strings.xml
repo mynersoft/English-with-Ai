@@ -18,4 +18,12 @@
     <string name="sign_out_cta">Sign Out</string>
     <string name="nav_home">Home</string>
     <string name="nav_pattern">Pattern</string>
+    <string name="daily_reminder_channel_name">Daily Session Reminders</string>
+    <string name="daily_reminder_channel_desc">Reminds you daily if you have not logged in to complete your session.</string>
+    <string name="daily_reminder_notif_title">Complete Today\'s English Session</string>
+    <string name="daily_reminder_notif_body">You haven\'t logged in today yet. Sign in to complete your practice session and keep your streak going!</string>
+    <string name="daily_reminder_alert_title">Daily Session Reminder</string>
+    <string name="daily_reminder_alert_body">You haven\'t logged in today yet. Sign in to complete today\'s English practice session.</string>
+    <string name="daily_reminder_enable_cta">Enable Phone Reminders</string>
+    <string name="daily_reminder_dismiss_cd">Dismiss daily reminder</string>
 </resources>
