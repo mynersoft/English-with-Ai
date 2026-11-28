@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   build-apk:
+    name: Build Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -31,27 +32,33 @@ jobs:
       release_built: ${{ steps.release_build.outputs.built }}
 
     steps:
+      # 1. Checkout
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # 2. Java
       - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
+      # 3. Android SDK
       - name: Accept Android SDK Licenses
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
+      # 4. Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
+      # 5. Gradle command
       - name: Choose Gradle Command
+        shell: bash
         run: |
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
@@ -60,8 +67,10 @@ jobs:
             echo "GRADLE_CMD=gradle" >> "$GITHUB_ENV"
           fi
 
+      # 6. Automatic versioning
       - name: Generate Automatic App Version
         id: version
+        shell: bash
         run: |
           git fetch --tags --force
 
@@ -75,7 +84,7 @@ jobs:
             VERSION=${LATEST_TAG#v}
 
             if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Invalid version tag: $LATEST_TAG"
+              echo "::error::Invalid version tag: $LATEST_TAG"
               exit 1
             fi
 
@@ -98,24 +107,29 @@ jobs:
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
-          echo "Generated Version: $VERSION_NAME"
+          echo "Version: $VERSION_NAME"
           echo "Version Code: $VERSION_CODE"
 
+      # 7. Firebase configuration
       - name: Restore google-services.json
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        shell: bash
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" |
+              base64 --decode > app/google-services.json
           fi
 
-          if [ -f app/google-services.json ] && ! grep -q '"project_info"' app/google-services.json; then
+          if [ -f app/google-services.json ] &&
+             ! grep -q '"project_info"' app/google-services.json; then
             echo "::warning::Invalid Firebase configuration."
             rm -f app/google-services.json
           fi
 
           if [ ! -f app/google-services.json ]; then
             echo "::warning::Firebase configuration missing. Using placeholder."
+
             cat > app/google-services.json <<'JSON'
           {
             "project_info": {
@@ -149,10 +163,12 @@ jobs:
           JSON
           fi
 
+      # 8. Debug keystore
       - name: Prepare Debug Keystore
+        shell: bash
         run: |
           if [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
+            base64 --decode debug.keystore.base64 > debug.keystore
           fi
 
           if [ ! -f debug.keystore ]; then
@@ -167,63 +183,131 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+      # 9. Backend URL
       - name: Configure Backend URL
         env:
           BACKEND_BASE_URL_SECRET: ${{ secrets.BACKEND_BASE_URL }}
+        shell: bash
         run: |
           if [ -n "$BACKEND_BASE_URL_SECRET" ]; then
-            echo "BACKEND_BASE_URL=$BACKEND_BASE_URL_SECRET" > .env
+            printf 'BACKEND_BASE_URL=%s\n' \
+              "$BACKEND_BASE_URL_SECRET" > .env
           fi
 
+      # 10. Debug build
       - name: Build Debug APK
         run: |
           $GRADLE_CMD assembleDebug --no-daemon --stacktrace
 
-      - name: Rename Debug APK
+      # 11. Rename debug APK
+      - name: Prepare Debug APK
+        shell: bash
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/*.apk \
+
+          APK_FILE=$(find app/build/outputs/apk/debug \
+            -maxdepth 1 -type f -name '*.apk' | head -n 1)
+
+          if [ -z "$APK_FILE" ]; then
+            echo "::error::Debug APK not found."
+            exit 1
+          fi
+
+          cp "$APK_FILE" \
             "output/EnglishAI-v${VERSION_NAME}-debug.apk"
 
-      - name: Upload Debug APK
+      # 12. Upload debug artifact
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: EnglishAI-Debug-APK
-          path: output/EnglishAI-v${{ env.VERSION_NAME }}-debug.apk
+          path: output/*.apk
           if-no-files-found: error
           retention-days: 30
 
+      # 13. Signed release build
       - name: Build Signed Release APK
         id: release_build
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        shell: bash
         run: |
-          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && \
-             [ -n "$STORE_PASSWORD" ] && \
-             [ -n "$KEY_PASSWORD" ]; then
+          set -euo pipefail
 
-            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d \
-              > "${GITHUB_WORKSPACE}/my-upload-key.jks"
-
-            export KEYSTORE_PATH="${GITHUB_WORKSPACE}/my-upload-key.jks"
-            export STORE_PASSWORD
-            export KEY_PASSWORD
-
-            $GRADLE_CMD assembleRelease --no-daemon --stacktrace
-
-            mkdir -p output-release
-
-            cp app/build/outputs/apk/release/*.apk \
-              "output-release/EnglishAI-v${VERSION_NAME}-release.apk"
-
-            echo "built=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::Release signing secrets missing. Signed APK skipped."
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "Release signing skipped for pull requests."
             echo "built=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          if [[ -z "$RELEASE_KEYSTORE_BASE64" ||
+                -z "$STORE_PASSWORD" ||
+                -z "$KEY_PASSWORD" ||
+                -z "$KEY_ALIAS" ]]; then
+            echo "::error::Release signing secrets are missing."
+            exit 1
+          fi
+
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/my-upload-key.jks"
+
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" |
+            base64 --decode > "$KEYSTORE_PATH"
+
+          if [[ ! -s "$KEYSTORE_PATH" ]]; then
+            echo "::error::Keystore is empty."
+            exit 1
+          fi
+
+          export KEYSTORE_PATH
+          export STORE_PASSWORD
+          export KEY_PASSWORD
+          export KEY_ALIAS
+
+          # Verify keystore and alias
+          keytool -list \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS"
+
+          # Build release
+          $GRADLE_CMD assembleRelease --no-daemon --stacktrace
+
+          mkdir -p output-release
+
+          APK_FILE=$(find app/build/outputs/apk/release \
+            -maxdepth 1 -type f -name '*.apk' | head -n 1)
+
+          if [[ -z "$APK_FILE" ]]; then
+            echo "::error::Release APK not found."
+            exit 1
+          fi
+
+          RELEASE_APK="output-release/EnglishAI-v${VERSION_NAME}-release.apk"
+
+          cp "$APK_FILE" "$RELEASE_APK"
+
+          # Verify APK signature
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" \
+            -mindepth 1 -maxdepth 1 -type d |
+            sort -V | tail -n 1)
+
+          if [[ -z "$BUILD_TOOLS" ||
+                ! -x "$BUILD_TOOLS/apksigner" ]]; then
+            echo "::error::Android apksigner not found."
+            exit 1
+          fi
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$RELEASE_APK"
+
+          echo "built=true" >> "$GITHUB_OUTPUT"
+
+          # Remove temporary keystore
+          rm -f "$KEYSTORE_PATH"
+
+      # 14. Upload signed release artifact
       - name: Upload Release APK Artifact
         if: steps.release_build.outputs.built == 'true'
         uses: actions/upload-artifact@v4
@@ -233,10 +317,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # 15. Publish public GitHub release
   publish-release:
+    name: Publish Signed APK
     needs: build-apk
 
-    if: github.event_name != 'pull_request'
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.build-apk.outputs.release_built == 'true'
 
     runs-on: ubuntu-latest
 
@@ -244,31 +332,25 @@ jobs:
       contents: write
 
     steps:
-      - name: Download Debug APK
-        uses: actions/download-artifact@v4
-        with:
-          name: EnglishAI-Debug-APK
-          path: apks
-
+      # Download signed APK
       - name: Download Release APK
-        if: needs.build-apk.outputs.release_built == 'true'
         uses: actions/download-artifact@v4
         with:
           name: EnglishAI-Release-APK
-          path: apks
+          path: release-files
 
+      # Verify release files exist
       - name: Prepare Release Files
+        shell: bash
         run: |
-          mkdir -p release-files
-          find apks -type f -name '*.apk' -exec cp {} release-files/ \;
-
-          if [ -z "$(ls -A release-files)" ]; then
-            echo "No APK files found!"
+          if [ -z "$(find release-files -type f -name '*.apk' -print -quit)" ]; then
+            echo "::error::No signed APK found."
             exit 1
           fi
 
           ls -lh release-files
 
+      # Publish GitHub release
       - name: Publish Public GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -277,4 +359,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           make_latest: true
+          fail_on_unmatched_files: true
           files: release-files/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
