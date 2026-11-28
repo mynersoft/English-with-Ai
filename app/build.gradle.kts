@@ -1,3 +1,4 @@
+
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
@@ -8,12 +9,25 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
-// Automatic versioning from GitHub Actions
+// GitHub Actions automatic versioning
 val autoVersionCode = System.getenv("VERSION_CODE")
     ?.toIntOrNull() ?: 1
 
 val autoVersionName = System.getenv("VERSION_NAME")
     ?.takeIf { it.isNotBlank() } ?: "1.0.0"
+
+// Release signing environment
+val releaseKeystorePath = System.getenv("KEYSTORE_PATH")
+val releaseStorePassword = System.getenv("STORE_PASSWORD")
+val releaseKeyPassword = System.getenv("KEY_PASSWORD")
+val releaseKeyAlias = System.getenv("KEY_ALIAS")
+
+val releaseSigningAvailable =
+    !releaseKeystorePath.isNullOrBlank() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    file(releaseKeystorePath).exists()
 
 android {
     namespace = "com.example"
@@ -38,8 +52,7 @@ android {
 
         // Backend URL configuration
         val backendBaseUrl = run {
-            val vercelDefaultUrl =
-                "https://engwithai.vercel.app"
+            val defaultUrl = "https://engwithai.vercel.app"
 
             fun readKey(file: java.io.File): String? {
                 if (!file.exists()) return null
@@ -55,7 +68,8 @@ android {
             }
 
             val fromEnv = readKey(rootProject.file(".env"))
-            val fromSys =
+
+            val fromSystem =
                 System.getenv("BACKEND_BASE_URL")?.trim()
 
             val fromExample =
@@ -63,9 +77,9 @@ android {
 
             listOfNotNull(
                 fromEnv,
-                fromSys,
+                fromSystem,
                 fromExample,
-                vercelDefaultUrl
+                defaultUrl
             )
                 .map { it.trim().trimEnd('/') }
                 .firstOrNull { it.isNotBlank() }
@@ -84,26 +98,19 @@ android {
     }
 
     // Signing configurations
-    // Keep these configurations for Android Studio / AI Studio compatibility.
     signingConfigs {
+
         create("release") {
-            val keystorePath =
-                System.getenv("KEYSTORE_PATH")
-                    ?: "${rootDir}/my-upload-key.jks"
-
-            storeFile = file(keystorePath)
-
-            storePassword =
-                System.getenv("STORE_PASSWORD")
-
-            keyAlias = "upload"
-
-            keyPassword =
-                System.getenv("KEY_PASSWORD")
+            if (releaseSigningAvailable) {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
 
         create("debugConfig") {
-            storeFile = file("${rootDir}/debug.keystore")
+            storeFile = file("${rootProject.projectDir}/debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
@@ -111,6 +118,7 @@ android {
     }
 
     buildTypes {
+
         release {
             isCrunchPngs = false
             isMinifyEnabled = false
@@ -122,8 +130,10 @@ android {
                 "proguard-rules.pro"
             )
 
-            signingConfig =
-                signingConfigs.getByName("release")
+            if (releaseSigningAvailable) {
+                signingConfig =
+                    signingConfigs.getByName("release")
+            }
         }
 
         debug {
@@ -159,35 +169,39 @@ secrets {
     propertiesFileName = ".env"
     defaultPropertiesFileName = ".env.example"
 
-    ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
-    ignoreList.add("FIREBASE_PRIVATE_KEY")
-    ignoreList.add("FIREBASE_CLIENT_EMAIL")
-    ignoreList.add("FIREBASE_PROJECT_ID")
-    ignoreList.add("MONGODB_URI")
-    ignoreList.add("AI_PROVIDER")
-    ignoreList.add("AI_API_KEY")
-    ignoreList.add("API_BASE_URL")
-    ignoreList.add("BACKEND_BASE_URL")
-    ignoreList.add("CLOUDINARY_API_KEY")
-    ignoreList.add("CLOUDINARY_API_SECRET")
-    ignoreList.add("CLOUDINARY_CLOUD_NAME")
-    ignoreList.add("CALL_PROVIDER")
-    ignoreList.add("CALL_P2P_MAX_PARTICIPANTS")
-    ignoreList.add("CALL_SFU_MAX_PARTICIPANTS")
-    ignoreList.add("TURN_SERVER_URL")
-    ignoreList.add("TURN_USERNAME")
-    ignoreList.add("TURN_CREDENTIAL")
-    ignoreList.add("LIVEKIT_URL")
-    ignoreList.add("LIVEKIT_API_KEY")
-    ignoreList.add("LIVEKIT_API_SECRET")
-    ignoreList.add("AGORA_APP_ID")
-    ignoreList.add("DAILY_API_KEY")
-    ignoreList.add("DAILY_DOMAIN")
-    ignoreList.add("SSLCOMMERZ_STORE_ID")
-    ignoreList.add("SSLCOMMERZ_STORE_PASSWORD")
-    ignoreList.add("SSLCOMMERZ_SANDBOX")
-    ignoreList.add("SSLCOMMERZ_CURRENCY")
-    ignoreList.add("SSLCOMMERZ_DEFAULT_PRICE")
+    ignoreList.addAll(
+        listOf(
+            "FIREBASE_APPCHECK_DEBUG_TOKEN",
+            "FIREBASE_PRIVATE_KEY",
+            "FIREBASE_CLIENT_EMAIL",
+            "FIREBASE_PROJECT_ID",
+            "MONGODB_URI",
+            "AI_PROVIDER",
+            "AI_API_KEY",
+            "API_BASE_URL",
+            "BACKEND_BASE_URL",
+            "CLOUDINARY_API_KEY",
+            "CLOUDINARY_API_SECRET",
+            "CLOUDINARY_CLOUD_NAME",
+            "CALL_PROVIDER",
+            "CALL_P2P_MAX_PARTICIPANTS",
+            "CALL_SFU_MAX_PARTICIPANTS",
+            "TURN_SERVER_URL",
+            "TURN_USERNAME",
+            "TURN_CREDENTIAL",
+            "LIVEKIT_URL",
+            "LIVEKIT_API_KEY",
+            "LIVEKIT_API_SECRET",
+            "AGORA_APP_ID",
+            "DAILY_API_KEY",
+            "DAILY_DOMAIN",
+            "SSLCOMMERZ_STORE_ID",
+            "SSLCOMMERZ_STORE_PASSWORD",
+            "SSLCOMMERZ_SANDBOX",
+            "SSLCOMMERZ_CURRENCY",
+            "SSLCOMMERZ_DEFAULT_PRICE"
+        )
+    )
 }
 
 // Firebase Google Services
@@ -198,6 +212,7 @@ googleServices {
 
 // Dependencies
 dependencies {
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(platform(libs.firebase.bom))
 
@@ -238,7 +253,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.stream.webrtc.android)
 
-    // Local Offline Persistence (Room)
+    // Room Offline Storage
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
