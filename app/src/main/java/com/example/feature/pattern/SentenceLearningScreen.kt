@@ -82,11 +82,31 @@ import com.example.feature.pattern.PatternDetailUiState
 import com.example.feature.pattern.PatternListUiState
 import com.example.feature.pattern.PatternViewModel
 import com.example.feature.speaking.SpeechHelper
+import com.example.ui.theme.LocalIsDarkTheme
 
-private val Green = Color(0xFF087F50)
-private val AppBackground = Color(0xFFF7F9F7)
-private val DarkText = Color(0xFF202820)
-private val GrayText = Color(0xFF777777)
+@Composable
+private fun patternBrandBg(): Color =
+    if (LocalIsDarkTheme.current) Color(0xFF0E7A4D) else Color(0xFF087F50)
+
+@Composable
+private fun patternAccent(): Color =
+    if (LocalIsDarkTheme.current) Color(0xFF34D399) else Color(0xFF087F50)
+
+@Composable
+private fun patternAppBg(): Color =
+    if (LocalIsDarkTheme.current) Color(0xFF0B1310) else Color(0xFFF7F9F7)
+
+@Composable
+private fun patternCardBg(): Color =
+    if (LocalIsDarkTheme.current) Color(0xFF14201B) else Color.White
+
+@Composable
+private fun patternDarkText(): Color =
+    if (LocalIsDarkTheme.current) Color(0xFFECFDF5) else Color(0xFF202820)
+
+@Composable
+private fun patternGrayText(): Color =
+    if (LocalIsDarkTheme.current) Color(0xFFA7B8B0) else Color(0xFF777777)
 
 private enum class LearningPage {
     LIST, EXPLANATION, PRACTICE
@@ -200,9 +220,15 @@ private fun PatternListScreen(
             }
         }
     }
+    val appBackground = patternAppBg()
+    val brandBg = patternBrandBg()
+    val accentGreen = patternAccent()
+    val darkText = patternDarkText()
+    val grayText = patternGrayText()
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        containerColor = AppBackground,
+        containerColor = appBackground,
         bottomBar = bottomBar,
         topBar = {
             TopAppBar(
@@ -242,7 +268,7 @@ private fun PatternListScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground
+                    containerColor = appBackground
                 )
             )
         }
@@ -255,7 +281,7 @@ private fun PatternListScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Green)
+                    .background(brandBg)
                     .padding(16.dp)
             ) {
                 Text(
@@ -280,13 +306,13 @@ private fun PatternListScreen(
                 ),
                 fontSize = 23.sp,
                 fontWeight = FontWeight.Bold,
-                color = DarkText
+                color = darkText
             )
 
             Text(
                 "বাক্য গঠনের প্যাটার্ন (${filteredPatterns.size})",
                 modifier = Modifier.padding(horizontal = 20.dp),
-                color = GrayText,
+                color = grayText,
                 fontSize = 14.sp
             )
 
@@ -300,8 +326,8 @@ private fun PatternListScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            CircularProgressIndicator(color = Green)
-                            Text("Loading patterns from database...", color = GrayText)
+                            CircularProgressIndicator(color = accentGreen)
+                            Text("Loading patterns from database...", color = grayText)
                         }
                     }
                 }
@@ -325,12 +351,15 @@ private fun PatternListScreen(
                             )
                             Text(
                                 text = state.errorMessage,
-                                color = DarkText,
+                                color = darkText,
                                 textAlign = TextAlign.Center
                             )
                             Button(
                                 onClick = onRefresh,
-                                colors = ButtonDefaults.buttonColors(containerColor = Green),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = brandBg,
+                                    contentColor = Color.White
+                                ),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
                                     .testTag("retry_patterns_button")
@@ -355,19 +384,19 @@ private fun PatternListScreen(
                             Icon(
                                 Icons.AutoMirrored.Filled.MenuBook,
                                 contentDescription = null,
-                                tint = GrayText,
+                                tint = grayText,
                                 modifier = Modifier.size(44.dp)
                             )
                             Text(
                                 text = "No patterns found in the database yet.",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = DarkText,
+                                color = darkText,
                                 textAlign = TextAlign.Center
                             )
                             Text(
                                 text = "Add patterns from the Admin screen, then tap Refresh.",
-                                color = GrayText,
+                                color = grayText,
                                 textAlign = TextAlign.Center
                             )
                             OutlinedButton(
@@ -386,7 +415,7 @@ private fun PatternListScreen(
                     Column(modifier = Modifier.fillMaxSize()) {
                         if (state.isLoading) {
                             LinearProgressIndicator(
-                                color = Green,
+                                color = accentGreen,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 8.dp)
@@ -435,8 +464,8 @@ private fun PatternListScreen(
                                     onClick = { onSelectCategory(category) },
                                     label = { Text("$category ($count)") },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Green.copy(alpha = 0.14f),
-                                        selectedLabelColor = Green
+                                        selectedContainerColor = accentGreen.copy(alpha = 0.16f),
+                                        selectedLabelColor = accentGreen
                                     ),
                                     modifier = Modifier.testTag("pattern_category_chip_$category")
                                 )
@@ -470,6 +499,12 @@ private fun PatternCard(
     pattern: PatternSummary,
     onClick: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val accentGreen = patternAccent()
+    val cardBg = patternCardBg()
+    val darkText = patternDarkText()
+    val grayText = patternGrayText()
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -478,10 +513,10 @@ private fun PatternCard(
             .testTag("pattern_card_${pattern.id}"),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = cardBg
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            defaultElevation = if (isDark) 0.dp else 2.dp
         )
     ) {
         Column(
@@ -495,12 +530,12 @@ private fun PatternCard(
                     modifier = Modifier.weight(1f),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = DarkText
+                    color = darkText
                 )
 
                 if (!pattern.categoryName.equals("All", ignoreCase = true)) {
                     Surface(
-                        color = Green.copy(alpha = 0.10f),
+                        color = accentGreen.copy(alpha = 0.14f),
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.padding(start = 6.dp)
                     ) {
@@ -510,7 +545,7 @@ private fun PatternCard(
                                 horizontal = 10.dp,
                                 vertical = 5.dp
                             ),
-                            color = Green,
+                            color = accentGreen,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -519,7 +554,7 @@ private fun PatternCard(
 
                 if (pattern.isPremium) {
                     Surface(
-                        color = Color(0xFFFFF2DE),
+                        color = if (isDark) Color(0xFF3D2A0C) else Color(0xFFFFF2DE),
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.padding(start = 6.dp)
                     ) {
@@ -529,7 +564,7 @@ private fun PatternCard(
                                 horizontal = 10.dp,
                                 vertical = 5.dp
                             ),
-                            color = Color(0xFFC17B20),
+                            color = if (isDark) Color(0xFFFBBF24) else Color(0xFFC17B20),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -541,7 +576,7 @@ private fun PatternCard(
 
             Text(
                 pattern.meaning,
-                color = GrayText,
+                color = grayText,
                 fontSize = 15.sp
             )
 
@@ -553,13 +588,13 @@ private fun PatternCard(
                 Icon(
                     Icons.Default.Layers,
                     contentDescription = null,
-                    tint = GrayText,
+                    tint = grayText,
                     modifier = Modifier.size(17.dp)
                 )
 
                 Text(
                     "  ${pattern.sentenceCount}টি Example",
-                    color = GrayText,
+                    color = grayText,
                     fontSize = 12.sp
                 )
 
@@ -568,12 +603,12 @@ private fun PatternCard(
                     Icon(
                         Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = null,
-                        tint = Green,
+                        tint = accentGreen,
                         modifier = Modifier.size(17.dp)
                     )
                     Text(
                         "  Audio ${pattern.audioReady}/${pattern.audioTotal}",
-                        color = GrayText,
+                        color = grayText,
                         fontSize = 12.sp
                     )
                 }
@@ -597,10 +632,17 @@ private fun PatternExplanationScreen(
     val context = LocalContext.current
     val audioPlayer = rememberPatternAudioPlayer(context)
     val pattern = state.pattern
+    val isDark = LocalIsDarkTheme.current
+    val appBackground = patternAppBg()
+    val brandBg = patternBrandBg()
+    val accentGreen = patternAccent()
+    val cardBg = patternCardBg()
+    val darkText = patternDarkText()
+    val grayText = patternGrayText()
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        containerColor = AppBackground,
+        containerColor = appBackground,
         topBar = {
             TopAppBar(
                 title = { Text("Pattern Explanation") },
@@ -618,14 +660,14 @@ private fun PatternExplanationScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground
+                    containerColor = appBackground
                 )
             )
         },
         bottomBar = {
             if (pattern != null) {
                 Surface(
-                    color = Color.White,
+                    color = if (isDark) Color(0xFF111B17) else Color.White,
                     shadowElevation = 8.dp
                 ) {
                     Button(
@@ -642,7 +684,8 @@ private fun PatternExplanationScreen(
                             .testTag("start_speaking_practice_button"),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Green
+                            containerColor = brandBg,
+                            contentColor = Color.White
                         )
                     ) {
                         Text(
@@ -674,7 +717,7 @@ private fun PatternExplanationScreen(
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Green)
+                    CircularProgressIndicator(color = accentGreen)
                 }
             }
 
@@ -699,11 +742,14 @@ private fun PatternExplanationScreen(
                         Text(
                             text = state.errorMessage ?: "Pattern not found.",
                             textAlign = TextAlign.Center,
-                            color = DarkText
+                            color = darkText
                         )
                         Button(
                             onClick = onRetry,
-                            colors = ButtonDefaults.buttonColors(containerColor = Green),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = brandBg,
+                                contentColor = Color.White
+                            ),
                             modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Text("Retry")
@@ -722,7 +768,7 @@ private fun PatternExplanationScreen(
                 ) {
                     item {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(containerColor = cardBg),
                             shape = RoundedCornerShape(22.dp)
                         ) {
                             Column(
@@ -734,7 +780,7 @@ private fun PatternExplanationScreen(
                                 Icon(
                                     Icons.Default.Lightbulb,
                                     contentDescription = null,
-                                    tint = Green,
+                                    tint = accentGreen,
                                     modifier = Modifier.size(48.dp)
                                 )
 
@@ -748,7 +794,7 @@ private fun PatternExplanationScreen(
                                         pattern.title,
                                         fontSize = 24.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = DarkText,
+                                        color = darkText,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.weight(1f, fill = false)
                                     )
@@ -760,7 +806,7 @@ private fun PatternExplanationScreen(
                                         Icon(
                                             Icons.AutoMirrored.Filled.VolumeUp,
                                             contentDescription = "Listen to pattern title",
-                                            tint = Green
+                                            tint = accentGreen
                                         )
                                     }
                                 }
@@ -774,7 +820,7 @@ private fun PatternExplanationScreen(
                                     Text(
                                         pattern.meaning,
                                         fontSize = 19.sp,
-                                        color = GrayText,
+                                        color = grayText,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.weight(1f, fill = false)
                                     )
@@ -786,7 +832,7 @@ private fun PatternExplanationScreen(
                                             Icon(
                                                 Icons.AutoMirrored.Filled.VolumeUp,
                                                 contentDescription = "Listen to Bangla meaning",
-                                                tint = Green
+                                                tint = accentGreen
                                             )
                                         }
                                     }
@@ -798,7 +844,7 @@ private fun PatternExplanationScreen(
                                         pattern.explanation,
                                         fontSize = 16.sp,
                                         lineHeight = 27.sp,
-                                        color = DarkText,
+                                        color = darkText,
                                         textAlign = TextAlign.Center
                                     )
                                 }
@@ -811,7 +857,7 @@ private fun PatternExplanationScreen(
                             "Example Sentences (${pattern.examples.size})",
                             fontSize = 21.sp,
                             fontWeight = FontWeight.Bold,
-                            color = DarkText
+                            color = darkText
                         )
                     }
 
@@ -819,7 +865,7 @@ private fun PatternExplanationScreen(
                         item {
                             Text(
                                 "No example sentences have been added for this pattern yet.",
-                                color = GrayText
+                                color = grayText
                             )
                         }
                     } else {
@@ -838,7 +884,7 @@ private fun PatternExplanationScreen(
                     item {
                         Text(
                             "মনে রাখুন: এই Pattern দিয়ে নিজের জীবনের বাক্য তৈরি করে অনুশীলন করুন।",
-                            color = Green,
+                            color = accentGreen,
                             fontSize = 14.sp,
                             lineHeight = 23.sp
                         )
@@ -856,15 +902,20 @@ private fun ExampleSentenceCard(
     onPlayEn: () -> Unit,
     onPlayBn: (() -> Unit)?
 ) {
+    val accentGreen = patternAccent()
+    val cardBg = patternCardBg()
+    val darkText = patternDarkText()
+    val grayText = patternGrayText()
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 "Example ${index + 1}",
-                color = Green,
+                color = accentGreen,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -879,7 +930,7 @@ private fun ExampleSentenceCard(
                     example.en,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = DarkText,
+                    color = darkText,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(
@@ -889,7 +940,7 @@ private fun ExampleSentenceCard(
                     Icon(
                         Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = "Listen to English sentence",
-                        tint = Green
+                        tint = accentGreen
                     )
                 }
             }
@@ -903,7 +954,7 @@ private fun ExampleSentenceCard(
                 Text(
                     example.bn,
                     fontSize = 15.sp,
-                    color = GrayText,
+                    color = grayText,
                     modifier = Modifier.weight(1f)
                 )
                 if (onPlayBn != null) {
@@ -914,7 +965,7 @@ private fun ExampleSentenceCard(
                         Icon(
                             Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = "Listen to Bangla translation",
-                            tint = GrayText
+                            tint = grayText
                         )
                     }
                 }
@@ -944,9 +995,16 @@ private fun SpeakingPracticeScreen(
     val safeIndex = currentIndex.coerceIn(0, (examples.size - 1).coerceAtLeast(0))
     val currentExample = examples[safeIndex]
 
+    val isDark = LocalIsDarkTheme.current
+    val appBackground = patternAppBg()
+    val brandBg = patternBrandBg()
+    val accentGreen = patternAccent()
+    val darkText = patternDarkText()
+    val grayText = patternGrayText()
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        containerColor = AppBackground,
+        containerColor = appBackground,
         topBar = {
             TopAppBar(
                 title = {
@@ -984,7 +1042,7 @@ private fun SpeakingPracticeScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground
+                    containerColor = appBackground
                 )
             )
         }
@@ -1000,8 +1058,8 @@ private fun SpeakingPracticeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(7.dp),
-                color = Green,
-                trackColor = Color.LightGray
+                color = accentGreen,
+                trackColor = if (isDark) Color(0xFF273931) else Color.LightGray
             )
 
             Text(
@@ -1010,7 +1068,7 @@ private fun SpeakingPracticeScreen(
                     .fillMaxWidth()
                     .padding(vertical = 18.dp),
                 textAlign = TextAlign.Center,
-                color = GrayText
+                color = grayText
             )
 
             Card(
@@ -1019,7 +1077,7 @@ private fun SpeakingPracticeScreen(
                     .weight(1f),
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFE8E8E8)
+                    containerColor = if (isDark) Color(0xFF192620) else Color(0xFFE8E8E8)
                 )
             ) {
                 Column(
@@ -1030,7 +1088,7 @@ private fun SpeakingPracticeScreen(
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     Surface(
-                        color = Green,
+                        color = brandBg,
                         shape = RoundedCornerShape(30.dp)
                     ) {
                         Text(
@@ -1053,7 +1111,7 @@ private fun SpeakingPracticeScreen(
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             lineHeight = 36.sp,
-                            color = DarkText,
+                            color = darkText,
                             textAlign = TextAlign.Center
                         )
 
@@ -1062,7 +1120,7 @@ private fun SpeakingPracticeScreen(
                                 currentExample.en,
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Green,
+                                color = accentGreen,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -1086,7 +1144,7 @@ private fun SpeakingPracticeScreen(
                                 Icon(
                                     Icons.AutoMirrored.Filled.VolumeUp,
                                     contentDescription = "Listen",
-                                    tint = Green
+                                    tint = accentGreen
                                 )
                             }
 
@@ -1099,7 +1157,7 @@ private fun SpeakingPracticeScreen(
                                 Icon(
                                     Icons.Default.Refresh,
                                     contentDescription = "Show answer",
-                                    tint = Green
+                                    tint = accentGreen
                                 )
                             }
                         }
@@ -1108,7 +1166,7 @@ private fun SpeakingPracticeScreen(
 
                         Text(
                             text = "শুনুন  •  উত্তর দেখুন",
-                            color = GrayText,
+                            color = grayText,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
                         )
@@ -1135,7 +1193,8 @@ private fun SpeakingPracticeScreen(
                     .testTag("practice_next_button"),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Green
+                    containerColor = brandBg,
+                    contentColor = Color.White
                 )
             ) {
                 Text(

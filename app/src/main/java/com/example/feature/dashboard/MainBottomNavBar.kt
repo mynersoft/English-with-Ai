@@ -49,6 +49,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import com.example.ui.theme.LocalIsDarkTheme
+
 enum class AppMainTab(
     val label: String,
     val selectedIcon: ImageVector,
@@ -62,9 +64,6 @@ enum class AppMainTab(
     PROGRESS("Progress", Icons.AutoMirrored.Filled.TrendingUp, Icons.AutoMirrored.Outlined.TrendingUp)
 }
 
-private val NavActiveGreen = Color(0xFF0E6B3B)
-private val NavActivePill = Color(0xFFD1FAE5)
-private val NavInactiveColor = Color(0xFF525E66)
 private val NavBadgeRed = Color(0xFFDC2626)
 
 @Composable
@@ -73,13 +72,20 @@ fun MainBottomNavBar(
     chatBadgeCount: Int = 0,
     onSelectTab: (AppMainTab) -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val barBg = if (isDark) Color(0xFF111827) else Color.White
+    val dividerColor = if (isDark) Color(0xFF1E293B) else Color(0xFFE5E7EB)
+    val activeGreen = if (isDark) Color(0xFF34D399) else Color(0xFF0E6B3B)
+    val activePill = if (isDark) Color(0xFF133A29) else Color(0xFFD1FAE5)
+    val inactiveColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF525E66)
+
     Surface(
-        color = Color.White,
+        color = barBg,
         tonalElevation = 0.dp,
         shadowElevation = 6.dp
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            HorizontalDivider(thickness = 1.dp, color = Color(0xFFE5E7EB))
+            HorizontalDivider(thickness = 1.dp, color = dividerColor)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,12 +118,12 @@ fun MainBottomNavBar(
                                 .width(46.dp)
                                 .height(30.dp)
                                 .clip(RoundedCornerShape(15.dp))
-                                .background(if (isSelected) NavActivePill else Color.Transparent)
+                                .background(if (isSelected) activePill else Color.Transparent)
                         ) {
                             Icon(
                                 imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
                                 contentDescription = tab.label,
-                                tint = if (isSelected) NavActiveGreen else NavInactiveColor,
+                                tint = if (isSelected) activeGreen else inactiveColor,
                                 modifier = Modifier.size(21.dp)
                             )
                             if (tab == AppMainTab.CHAT && chatBadgeCount > 0) {
@@ -147,7 +153,7 @@ fun MainBottomNavBar(
                                 lineHeight = 12.sp
                             ),
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) NavActiveGreen else NavInactiveColor,
+                            color = if (isSelected) activeGreen else inactiveColor,
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Ellipsis

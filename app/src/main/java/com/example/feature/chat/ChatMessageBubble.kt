@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import com.example.domain.model.ChatAiCorrection
 import com.example.domain.model.ChatMessageItem
 import com.example.domain.model.ChatReplyQuote
+import com.example.ui.theme.LocalIsDarkTheme
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -75,8 +76,17 @@ private val AvatarPalette = listOf(
     Color(0xFFB45309)
 )
 
+private val AvatarNamePaletteDark = listOf(
+    Color(0xFF34D399),
+    Color(0xFF2DD4BF),
+    Color(0xFFA78BFA),
+    Color(0xFF38BDF8),
+    Color(0xFFFBBF24)
+)
+
 @Composable
 fun ChatDateDivider(label: String) {
+    val isDark = LocalIsDarkTheme.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -85,12 +95,12 @@ fun ChatDateDivider(label: String) {
     ) {
         Surface(
             shape = RoundedCornerShape(14.dp),
-            color = Color(0xFFE7EAE7)
+            color = if (isDark) Color(0xFF1F2B25) else Color(0xFFE7EAE7)
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF4B5563),
+                color = if (isDark) Color(0xFFC5D0CA) else Color(0xFF4B5563),
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
             )
@@ -113,12 +123,13 @@ fun ChatMessageBubbleRow(
     onReply: () -> Unit,
     onRequestAiCorrection: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
     val timeLabel = remember(msg.createdAt) { formatMessageTime(msg.createdAt) }
     val rowModifier = if (isHighlighted) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFDDF7E6))
+            .background(if (isDark) Color(0xFF163828) else Color(0xFFDDF7E6))
             .padding(horizontal = 4.dp, vertical = 2.dp)
     } else {
         Modifier.fillMaxWidth()
@@ -149,9 +160,13 @@ private fun IncomingBubble(
     timeLabel: String,
     onReply: () -> Unit
 ) {
-    val accent = remember(msg.senderId) {
-        AvatarPalette[abs(msg.senderId.hashCode()) % AvatarPalette.size]
+    val isDark = LocalIsDarkTheme.current
+    val paletteIdx = remember(msg.senderId) {
+        abs(msg.senderId.hashCode()) % AvatarPalette.size
     }
+    val accent = AvatarPalette[paletteIdx]
+    val senderNameColor = if (isDark) AvatarNamePaletteDark[paletteIdx] else accent
+    val mutedColor = if (isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280)
     val initials = remember(msg.senderName) {
         msg.senderName
             .trim()
@@ -196,18 +211,26 @@ private fun IncomingBubble(
                     text = msg.senderName,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
-                    color = accent
+                    color = senderNameColor
                 )
                 if (msg.senderBadge.isNotBlank()) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (msg.senderBadge == "Admin") Color(0xFFF6C644) else Color(0xFFE8F3EC)
+                        color = when {
+                            msg.senderBadge == "Admin" -> Color(0xFFF6C644)
+                            isDark -> Color(0xFF173827)
+                            else -> Color(0xFFE8F3EC)
+                        }
                     ) {
                         Text(
                             text = msg.senderBadge,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (msg.senderBadge == "Admin") Color(0xFF451A03) else OutgoingGreen,
+                            color = when {
+                                msg.senderBadge == "Admin" -> Color(0xFF451A03)
+                                isDark -> Color(0xFF34D399)
+                                else -> OutgoingGreen
+                            },
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                         )
                     }
@@ -222,9 +245,12 @@ private fun IncomingBubble(
                         bottomEnd = 18.dp,
                         bottomStart = 6.dp
                     ),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, Color(0xFFE6EBE6)),
-                    shadowElevation = 0.5.dp,
+                    color = if (isDark) Color(0xFF17221D) else Color.White,
+                    border = BorderStroke(
+                        1.dp,
+                        if (isDark) Color(0xFF273931) else Color(0xFFE6EBE6)
+                    ),
+                    shadowElevation = if (isDark) 0.dp else 0.5.dp,
                     modifier = Modifier
                         .widthIn(max = 285.dp)
                         .clip(RoundedCornerShape(18.dp))
@@ -240,7 +266,7 @@ private fun IncomingBubble(
                         Text(
                             text = msg.displayTextForViewer(),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Color(0xFF111827)
+                            color = if (isDark) Color(0xFFF1F5F3) else Color(0xFF111827)
                         )
                     }
                 }
@@ -253,7 +279,7 @@ private fun IncomingBubble(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Reply,
                         contentDescription = "Reply to ${msg.senderName}",
-                        tint = Color(0xFF6B7280),
+                        tint = mutedColor,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -263,7 +289,7 @@ private fun IncomingBubble(
                 Text(
                     text = timeLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF6B7280),
+                    color = mutedColor,
                     modifier = Modifier.padding(start = 4.dp)
                 )
             }
@@ -325,7 +351,7 @@ private fun OutgoingBubble(
             Text(
                 text = timeLabel,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF6B7280),
+                color = if (LocalIsDarkTheme.current) Color(0xFF9CA3AF) else Color(0xFF6B7280),
                 modifier = Modifier.padding(top = 3.dp, end = 4.dp)
             )
         }
@@ -495,10 +521,27 @@ private fun ReplyQuoteCard(
     quote: ChatReplyQuote,
     isOutgoingBubble: Boolean
 ) {
-    val bg = if (isOutgoingBubble) Color.White.copy(alpha = 0.16f) else Color(0xFFF2F4F2)
-    val barColor = if (isOutgoingBubble) Color(0xFFA7F3D0) else OutgoingGreen
-    val nameColor = if (isOutgoingBubble) Color(0xFFD1FAE5) else OutgoingGreen
-    val previewColor = if (isOutgoingBubble) Color.White.copy(alpha = 0.9f) else Color(0xFF374151)
+    val isDark = LocalIsDarkTheme.current
+    val bg = when {
+        isOutgoingBubble -> Color.White.copy(alpha = 0.16f)
+        isDark -> Color(0xFF202F28)
+        else -> Color(0xFFF2F4F2)
+    }
+    val barColor = when {
+        isOutgoingBubble -> Color(0xFFA7F3D0)
+        isDark -> Color(0xFF34D399)
+        else -> OutgoingGreen
+    }
+    val nameColor = when {
+        isOutgoingBubble -> Color(0xFFD1FAE5)
+        isDark -> Color(0xFF34D399)
+        else -> OutgoingGreen
+    }
+    val previewColor = when {
+        isOutgoingBubble -> Color.White.copy(alpha = 0.9f)
+        isDark -> Color(0xFFD1DBD5)
+        else -> Color(0xFF374151)
+    }
 
     Surface(
         shape = RoundedCornerShape(10.dp),

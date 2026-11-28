@@ -1,34 +1,6 @@
 import { generateText } from "@/lib/aiProvider";
-
-const LEVEL_RULES = {
-  beginner: "Use very simple words and short sentences (max 12 words). Speak slowly and clearly.",
-  intermediate: "Use everyday English with natural sentences. Introduce one useful new word or phrase sometimes.",
-  advanced: "Use natural, rich English with idioms and longer sentences. Challenge the student a little.",
-};
-
-function buildSystemPrompt({ level, topic }) {
-  return `You are "English AI", a friendly English speaking partner for Bangla-speaking learners.
-Topic: ${topic}. Student level: ${level}.
-${LEVEL_RULES[level]}
-
-Each turn, do two jobs:
-1. Reply naturally to the student in 1-3 short sentences and end with ONE easy question to keep the conversation going.
-2. Check the student's LAST message for grammar, tense, article, preposition or word-order mistakes.
-   The message comes from speech-to-text, so IGNORE capitalization and punctuation. Do not mark a sentence wrong for style only.
-
-Return ONLY valid JSON in exactly this shape:
-{
-  "reply": "your spoken reply in English",
-  "correction": {
-    "hasMistake": true or false,
-    "original": "the student's sentence",
-    "corrected": "the corrected sentence (empty string if no mistake)",
-    "explanationBn": "short, simple explanation in Bangla (empty string if no mistake)"
-  }
-}
-If the student's message is correct, set hasMistake to false and keep the other correction fields empty.
-Never add text outside the JSON.`;
-}
+import { buildSpeakingSystemPrompt } from "@/lib/aiConfigUtils";
+import { getEffectiveAiConfig } from "@/modules/ai/aiConfig.service";
 
 function parseModelJson(raw) {
   const cleaned = String(raw || "").replace(/```json|```/gi, "").trim();
@@ -43,27 +15,43 @@ function parseModelJson(raw) {
 }
 
 /** One conversation turn: AI reply + grammar correction of the student's message. */
-export async function speakingTurn({ message, level, topic, history }) {
+export async function speakingTurn({
+  message,
+  level,
+  topic,
+  history = [],
+  userId = "system",
+  isPremium = false,
+}) {
+  const config = await getEffectiveAiConfig();
+  const maxTurns = Math.max(1, Number(config?.conversation?.maxHistoryTurns || 10));
+  const trimmedHistory = Array.isArray(history) ? history.slice(-maxTurns) : [];
+  const resolvedLevel = level || config?.conversation?.defaultLevel || "beginner";
+  const resolvedTopic = topic || config?.conversation?.defaultTopic || "Daily Life";
+
   const raw = await generateText({
-    system: buildSystemPrompt({ level, topic }),
-    messages: [...history, { role: "user", content: message }],
+    system: buildSpeakingSystemPrompt(config, { level: resolvedLevel, topic: resolvedTopic }),
+    messages: [...trimmedHistory, { role: "user", content: message }],
     json: true,
-    maxTokens: 500,
-    temperature: 0.6,
+    maxTokens: config?.maxOutputTokens ?? 500,
+    temperature: config?.temperature ?? 0.6,
+    feature: "speaking_turn",
+    userId,
+    isPremium,
   });
 
   const parsed = parseModelJson(raw);
   if (!parsed || typeof parsed.reply !== "string") {
-    // Model did not return JSON: still give the student a usable reply.
     return {
       reply: String(raw || "").trim() || "Sorry, I did not understand. Can you say that again?",
       correction: { hasMistake: false, original: message, corrected: "", explanationBn: "" },
     };
   }
 
+  const allowCorrection = config?.conversation?.autoCorrectGrammar !== false;
   const c = parsed.correction || {};
   const corrected = typeof c.corrected === "string" ? c.corrected.trim() : "";
-  const hasMistake = c.hasMistake === true && corrected !== "" && corrected !== message;
+  const hasMistake = allowCorrection && c.hasMistake === true && corrected !== "" && corrected !== message;
   return {
     reply: parsed.reply.trim(),
     correction: {

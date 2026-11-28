@@ -11,11 +11,15 @@ export const maxDuration = 30;
 // POST /api/chat/ocr -> body: { imageBase64, mimeType? }
 // Extracts handwritten text from the photo without storing the image.
 export const POST = withAuth(
-  async (request) => {
+  async (request, { user }) => {
     const body = await readJson(request);
+    const isPremium =
+      user?.subscriptionStatus === "active" || user?.subscriptionStatus === "trial";
     const result = await extractHandwritingTextFromImage({
       imageBase64: body?.imageBase64,
       mimeType: body?.mimeType || "image/jpeg",
+      userId: user?.firebaseUid || "system",
+      isPremium,
     });
 
     if (result.errorCode === "AI_NOT_CONFIGURED") {

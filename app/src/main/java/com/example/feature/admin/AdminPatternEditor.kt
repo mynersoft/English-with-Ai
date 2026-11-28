@@ -134,14 +134,14 @@ fun AdminEditScreen(vm: AdminViewModel, onClose: () -> Unit) {
             if (state.audioLocked) {
                 item {
                     Surface(
-                        color = Color(0xFFFFF3CD),
+                        color = Color(0xFF3E2B0D),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             if (state.isNew) "Save the pattern first, then you can generate or upload audio."
                             else "Unsaved changes. Save before generating or uploading audio.",
-                            color = Color(0xFF8A6D00),
+                            color = Color(0xFFFDE68A),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(10.dp)
                         )
@@ -336,10 +336,10 @@ private fun AudioRow(label: String, audio: AdminAudio, target: AudioTarget, a: A
 @Composable
 private fun StatusTag(audio: AdminAudio) {
     when {
-        audio.url == null -> Tag("No audio", Color(0xFFE5E7EB), Color(0xFF6B7280))
-        audio.stale -> Tag("Outdated", Color(0xFFFFF3CD), Color(0xFF8A6D00))
-        audio.source == "manual" -> Tag("Manual", Color(0xFFDCFCE7), Color(0xFF166534))
-        else -> Tag("TTS", Color(0xFFDCFCE7), Color(0xFF166534))
+        audio.url == null -> Tag("No audio", Color(0xFF272D38), Color(0xFFCBD5E1))
+        audio.stale -> Tag("Outdated", Color(0xFF3E2B0D), Color(0xFFFBBF24))
+        audio.source == "manual" -> Tag("Manual", Color(0xFF133A29), Color(0xFF34D399))
+        else -> Tag("TTS", Color(0xFF133A29), Color(0xFF34D399))
     }
 }
 

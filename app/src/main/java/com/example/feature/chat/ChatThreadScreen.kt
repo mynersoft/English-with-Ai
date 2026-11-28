@@ -86,9 +86,9 @@ import com.example.core.ui.openAppPermissionSettings
 import com.example.core.ui.requestSystemPermission
 import com.example.domain.model.ChatMessageItem
 import com.example.domain.model.ChatRoomSummary
+import com.example.ui.theme.LocalIsDarkTheme
 import java.io.File
 
-private val ChatCanvasBg = Color(0xFFF6F7F6)
 private val ChatPrimaryGreen = Color(0xFF0E7A3E)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -185,9 +185,13 @@ fun ChatThreadScreen(
         }
     }
 
+    val isDark = LocalIsDarkTheme.current
+    val canvasBg = if (isDark) Color(0xFF0B120F) else Color(0xFFF6F7F6)
+    val accentGreen = if (isDark) Color(0xFF34D399) else ChatPrimaryGreen
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        containerColor = ChatCanvasBg,
+        containerColor = canvasBg,
         topBar = {
             ChatRoomTopBar(
                 room = room,
@@ -281,7 +285,7 @@ fun ChatThreadScreen(
 
                 if (state.extractingHandwriting) {
                     Surface(
-                        color = Color(0xFFFFF8EC),
+                        color = if (isDark) Color(0xFF2D210B) else Color(0xFFFFF8EC),
                         border = BorderStroke(1.dp, Color(0xFFE5A446)),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
@@ -296,12 +300,12 @@ fun ChatThreadScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
-                                color = Color(0xFFD97706)
+                                color = if (isDark) Color(0xFFFBBF24) else Color(0xFFD97706)
                             )
                             Text(
                                 text = "Reading handwritten text from your photo...",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF78350F),
+                                color = if (isDark) Color(0xFFFDE68A) else Color(0xFF78350F),
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -311,7 +315,7 @@ fun ChatThreadScreen(
                 when {
                     state.loading && state.messages.isEmpty() -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = ChatPrimaryGreen)
+                            CircularProgressIndicator(color = accentGreen)
                         }
                     }
 
@@ -324,8 +328,11 @@ fun ChatThreadScreen(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
-                                color = Color.White,
-                                border = BorderStroke(1.dp, Color(0xFFE5ECE5))
+                                color = if (isDark) Color(0xFF141E1A) else Color.White,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isDark) Color(0xFF24352E) else Color(0xFFE5ECE5)
+                                )
                             ) {
                                 Column(
                                     modifier = Modifier.padding(22.dp),
@@ -552,12 +559,12 @@ fun ChatThreadScreen(
                                 Text("• ${m.name}", style = MaterialTheme.typography.bodyMedium)
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFE8F5EC)
+                                    color = if (isDark) Color(0xFF173827) else Color(0xFFE8F5EC)
                                 ) {
                                     Text(
                                         text = m.badge,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = ChatPrimaryGreen,
+                                        color = accentGreen,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
@@ -590,12 +597,17 @@ private fun ChatRoomTopBar(
     onBack: () -> Unit,
     onOpenRoomInfo: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val topBarBg = if (isDark) Color(0xFF101915) else Color.White
+    val mutedText = if (isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280)
+    val onlineText = if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)
+
     Surface(
-        color = Color.White,
+        color = topBarBg,
         shadowElevation = 1.dp
     ) {
         TopAppBar(
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White),
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = topBarBg),
             navigationIcon = {
                 IconButton(
                     onClick = onBack,
@@ -616,7 +628,7 @@ private fun ChatRoomTopBar(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFEAF2EA)),
+                            .background(if (isDark) Color(0xFF1B2B23) else Color(0xFFEAF2EA)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(room.avatarEmoji, fontSize = 20.sp)
@@ -636,9 +648,9 @@ private fun ChatRoomTopBar(
                             Text(
                                 text = "${room.memberCount}/${room.maxMembers}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF6B7280)
+                                color = mutedText
                             )
-                            Text("·", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9CA3AF))
+                            Text("·", style = MaterialTheme.typography.labelSmall, color = mutedText)
                             Box(
                                 modifier = Modifier
                                     .size(7.dp)
@@ -648,17 +660,17 @@ private fun ChatRoomTopBar(
                             Text(
                                 text = "${room.onlineCount} online",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF4B5563)
+                                color = onlineText
                             )
                             if (room.isMember) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFFEDEDED)
+                                    color = if (isDark) Color(0xFF1F2B25) else Color(0xFFEDEDED)
                                 ) {
                                     Text(
                                         text = "Member",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF374151),
+                                        color = if (isDark) Color(0xFFD1D5DB) else Color(0xFF374151),
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                 }
@@ -670,8 +682,11 @@ private fun ChatRoomTopBar(
             actions = {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
-                    color = Color.White,
+                    border = BorderStroke(
+                        1.dp,
+                        if (isDark) Color(0xFF2A3B33) else Color(0xFFE5E7EB)
+                    ),
+                    color = if (isDark) Color(0xFF18241F) else Color.White,
                     modifier = Modifier.padding(end = 8.dp)
                 ) {
                     IconButton(
@@ -683,7 +698,7 @@ private fun ChatRoomTopBar(
                         Icon(
                             imageVector = Icons.Filled.Groups,
                             contentDescription = "Room members & AI settings",
-                            tint = Color(0xFF111827)
+                            tint = if (isDark) Color(0xFFE5E7EB) else Color(0xFF111827)
                         )
                     }
                 }
@@ -708,8 +723,14 @@ private fun ChatComposerBar(
     onChipClick: (String) -> Unit,
     onSend: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val barBg = if (isDark) Color(0xFF101915) else Color.White
+    val accentGreen = if (isDark) Color(0xFF34D399) else ChatPrimaryGreen
+    val inputBg = if (isDark) Color(0xFF17221D) else Color.White
+    val inputBorder = if (isDark) Color(0xFF2E4037) else Color(0xFFD1D5DB)
+
     Surface(
-        color = Color.White,
+        color = barBg,
         shadowElevation = 6.dp,
         modifier = Modifier
             .fillMaxWidth()
@@ -726,7 +747,7 @@ private fun ChatComposerBar(
             replyingTo?.let { target ->
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF3F6F3),
+                    color = if (isDark) Color(0xFF1A2620) else Color(0xFFF3F6F3),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp)
@@ -740,12 +761,12 @@ private fun ChatComposerBar(
                                 text = "Replying to ${target.senderName}",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = ChatPrimaryGreen
+                                color = accentGreen
                             )
                             Text(
                                 text = target.displayTextForViewer(),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF4B5563),
+                                color = if (isDark) Color(0xFFD1D5DB) else Color(0xFF4B5563),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -767,8 +788,11 @@ private fun ChatComposerBar(
                 items(starterChips) { chip ->
                     Surface(
                         shape = RoundedCornerShape(20.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.dp, Color(0xFFD6DDD6)),
+                        color = if (isDark) Color(0xFF18241F) else Color.White,
+                        border = BorderStroke(
+                            1.dp,
+                            if (isDark) Color(0xFF2B3D34) else Color(0xFFD6DDD6)
+                        ),
                         modifier = Modifier
                             .height(38.dp)
                             .clip(RoundedCornerShape(20.dp))
@@ -782,7 +806,7 @@ private fun ChatComposerBar(
                             Text(
                                 text = chip,
                                 style = MaterialTheme.typography.labelLarge,
-                                color = ChatPrimaryGreen,
+                                color = accentGreen,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -799,8 +823,8 @@ private fun ChatComposerBar(
             ) {
                 Surface(
                     shape = RoundedCornerShape(26.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, Color(0xFFD1D5DB)),
+                    color = inputBg,
+                    border = BorderStroke(1.dp, inputBorder),
                     modifier = Modifier
                         .weight(1f)
                         .height(50.dp)
@@ -819,7 +843,7 @@ private fun ChatComposerBar(
                                 Text(
                                     text = "Write in English...",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = Color(0xFF9CA3AF)
+                                    color = if (isDark) Color(0xFF6B7280) else Color(0xFF9CA3AF)
                                 )
                             }
                             BasicTextField(
@@ -828,10 +852,10 @@ private fun ChatComposerBar(
                                 singleLine = false,
                                 maxLines = 3,
                                 textStyle = TextStyle(
-                                    color = Color(0xFF111827),
+                                    color = if (isDark) Color(0xFFF3F4F6) else Color(0xFF111827),
                                     fontSize = 15.sp
                                 ),
-                                cursorBrush = SolidColor(ChatPrimaryGreen),
+                                cursorBrush = SolidColor(accentGreen),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("chat_message_input")
@@ -848,7 +872,7 @@ private fun ChatComposerBar(
                             Icon(
                                 imageVector = Icons.Filled.PhotoCamera,
                                 contentDescription = "Scan handwritten text from photo",
-                                tint = ChatPrimaryGreen,
+                                tint = accentGreen,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -863,9 +887,9 @@ private fun ChatComposerBar(
                                 imageVector = Icons.Filled.AutoAwesome,
                                 contentDescription = if (autoCorrectEnabled) "AI auto-correct on" else "AI auto-correct off",
                                 tint = when {
-                                    !aiConfigured -> Color(0xFFCBD5E1)
+                                    !aiConfigured -> if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
                                     autoCorrectEnabled -> Color(0xFFEA8C1E)
-                                    else -> Color(0xFF9CA3AF)
+                                    else -> if (isDark) Color(0xFF6B7280) else Color(0xFF9CA3AF)
                                 },
                                 modifier = Modifier.size(18.dp)
                             )
@@ -876,7 +900,11 @@ private fun ChatComposerBar(
                 val canSend = draft.isNotBlank() && !sending
                 Surface(
                     shape = CircleShape,
-                    color = if (canSend) ChatPrimaryGreen else Color(0xFFF3F4F6),
+                    color = when {
+                        canSend -> ChatPrimaryGreen
+                        isDark -> Color(0xFF1F2B25)
+                        else -> Color(0xFFF3F4F6)
+                    },
                     modifier = Modifier
                         .size(48.dp)
                         .minimumInteractiveComponentSize()
@@ -895,7 +923,7 @@ private fun ChatComposerBar(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Send message",
-                                tint = if (canSend) Color.White else Color(0xFF9CA3AF),
+                                tint = if (canSend) Color.White else if (isDark) Color(0xFF6B7280) else Color(0xFF9CA3AF),
                                 modifier = Modifier.size(20.dp)
                             )
                         }

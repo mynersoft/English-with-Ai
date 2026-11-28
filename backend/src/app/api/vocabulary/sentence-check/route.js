@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 // POST /api/vocabulary/sentence-check -> body: { vocabularyId, sentence }
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, { user }) => {
   const body = await readJson(request);
   const sentence = String(body?.sentence || "").trim();
   if (!sentence) {
@@ -25,6 +25,13 @@ export const POST = withAuth(async (request) => {
     throw new AppError(404, "WORD_NOT_FOUND", "Vocabulary word not found.");
   }
 
-  const evaluation = await evaluateSentenceWithAi({ wordObj, sentence });
+  const isPremium =
+    user?.subscriptionStatus === "active" || user?.subscriptionStatus === "trial";
+  const evaluation = await evaluateSentenceWithAi({
+    wordObj,
+    sentence,
+    userId: user?.firebaseUid || "system",
+    isPremium,
+  });
   return ok(evaluation);
 }, { limit: 20 });

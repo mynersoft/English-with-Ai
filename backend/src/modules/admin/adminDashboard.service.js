@@ -22,6 +22,7 @@ import VocabularySpeakingSession from "@/models/VocabularySpeakingSession";
 import VocabularyQuizAttempt from "@/models/VocabularyQuizAttempt";
 import ReadingAttempt from "@/models/ReadingAttempt";
 import ChatMessage from "@/models/ChatMessage";
+import { getEffectiveAiConfig } from "@/modules/ai/aiConfig.service";
 
 function getStartOfUtcDay(date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -70,7 +71,13 @@ export async function getAdminDashboardOverview(now = new Date()) {
     fcmReady = false;
   }
 
-  const aiDescriptor = resolveSafeAiDescriptor(process.env);
+  const envAiDescriptor = resolveSafeAiDescriptor(process.env);
+  const liveAiConfig = mongoConnected ? await getEffectiveAiConfig() : null;
+  const aiDescriptor = {
+    provider: liveAiConfig?.provider || envAiDescriptor.provider,
+    model: liveAiConfig?.model || envAiDescriptor.model,
+    configured: envAiDescriptor.configured && (liveAiConfig?.isEnabled !== false),
+  };
   const mem = process.memoryUsage();
   const memoryUsedMb = mem.heapUsed / (1024 * 1024);
   const memoryRssMb = mem.rss / (1024 * 1024);

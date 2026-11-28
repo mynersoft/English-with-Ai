@@ -483,8 +483,13 @@ export async function sendChatMessage(userDoc, roomIdRaw, body = {}) {
   }
 
   const autoCorrect = body?.autoCorrect !== false;
+  const isPremium =
+    userDoc?.subscriptionStatus === "active" || userDoc?.subscriptionStatus === "trial";
   const aiCorrection = autoCorrect
-    ? await correctEnglishChatMessage(text)
+    ? await correctEnglishChatMessage(text, {
+        userId: userDoc?.firebaseUid || "system",
+        isPremium,
+      })
     : { status: "none", hasMistake: false, correctedText: "", tokens: [], explanationBn: "" };
 
   const created = await ChatMessage.create({
@@ -664,7 +669,12 @@ export async function correctExistingMessage(userDoc, messageIdRaw) {
 
   await loadRoomAndAssertAccess(userDoc, msg.roomId);
 
-  const aiCorrection = await correctEnglishChatMessage(msg.text);
+  const isPremium =
+    userDoc?.subscriptionStatus === "active" || userDoc?.subscriptionStatus === "trial";
+  const aiCorrection = await correctEnglishChatMessage(msg.text, {
+    userId: userDoc?.firebaseUid || "system",
+    isPremium,
+  });
   msg.aiCorrection = aiCorrection;
   await msg.save();
 

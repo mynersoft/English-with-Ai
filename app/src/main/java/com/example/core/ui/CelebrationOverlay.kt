@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.LocalIsDarkTheme
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -392,9 +393,15 @@ fun CelebrationOverlay(
                 )
             }
 
+            val isDark = LocalIsDarkTheme.current
             val isGoalBurst = event.style == CelebrationStyle.GOAL_BURST
             val accentColor = if (isGoalBurst) Color(0xFFD97706) else Color(0xFF0E7A3E)
-            val surfaceBg = if (isGoalBurst) Color(0xFFFFFBEB) else Color(0xFFECFDF5)
+            val surfaceBg = when {
+                isGoalBurst && isDark -> Color(0xFF2B210B)
+                isGoalBurst -> Color(0xFFFFFBEB)
+                isDark -> Color(0xFF11291E)
+                else -> Color(0xFFECFDF5)
+            }
             val borderColor = if (isGoalBurst) Color(0xFFF59E0B) else Color(0xFF10B981)
             val interactionSource = remember { MutableInteractionSource() }
 
@@ -455,7 +462,7 @@ fun CelebrationOverlay(
                                     text = event.title,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF111827),
+                                    color = if (isDark) Color(0xFFF9FAFB) else Color(0xFF111827),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -463,7 +470,7 @@ fun CelebrationOverlay(
                                     Text(
                                         text = event.subtitle,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF374151),
+                                        color = if (isDark) Color(0xFFD1D5DB) else Color(0xFF374151),
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )

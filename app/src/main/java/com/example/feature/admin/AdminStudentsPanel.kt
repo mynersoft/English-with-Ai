@@ -120,8 +120,8 @@ private fun AdminStudentsListView(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StudentStatBox("Total", state.counts.totalStudents.toString(), MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                StudentStatBox("Active", state.counts.activeCount.toString(), Color(0xFF15803D), Modifier.weight(1f))
-                StudentStatBox("Premium", state.counts.premiumActiveCount.toString(), Color(0xFFB45309), Modifier.weight(1f))
+                StudentStatBox("Active", state.counts.activeCount.toString(), Color(0xFF34D399), Modifier.weight(1f))
+                StudentStatBox("Premium", state.counts.premiumActiveCount.toString(), Color(0xFFFBBF24), Modifier.weight(1f))
                 StudentStatBox(
                     "Restricted",
                     (state.counts.suspendedCount + state.counts.deactivatedCount).toString(),
@@ -579,8 +579,8 @@ private fun AdminStudentDetailView(
                             AdminStudentRules.ACCOUNT_STATUS_OPTIONS.forEach { target ->
                                 val isCurrent = s.status == target
                                 val btnColor = when (target) {
-                                    "active" -> Color(0xFF15803D)
-                                    "suspended" -> Color(0xFFB45309)
+                                    "active" -> Color(0xFF34D399)
+                                    "suspended" -> Color(0xFFFBBF24)
                                     else -> MaterialTheme.colorScheme.error
                                 }
                                 if (isCurrent) {
@@ -646,7 +646,7 @@ private fun AdminStudentDetailView(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = Color(0xFFB45309))
+                            Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = Color(0xFFFBBF24))
                             Text(
                                 text = "Manage Subscription Status",
                                 style = MaterialTheme.typography.titleMedium,
@@ -803,10 +803,10 @@ private fun AdminStudentDetailView(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            StudentStatBox("Streak", "${detail.stats.streakDays}d", Color(0xFFEA580C), Modifier.weight(1f))
+                            StudentStatBox("Streak", "${detail.stats.streakDays}d", Color(0xFFFB923C), Modifier.weight(1f))
                             StudentStatBox("Vocab", "${detail.stats.vocabularyLearned}", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                            StudentStatBox("Patterns", "${detail.stats.patternsPracticed}", Color(0xFF7C3AED), Modifier.weight(1f))
-                            StudentStatBox("Reading", "${detail.stats.readingMinutes}m", Color(0xFF0D9488), Modifier.weight(1f))
+                            StudentStatBox("Patterns", "${detail.stats.patternsPracticed}", Color(0xFFA78BFA), Modifier.weight(1f))
+                            StudentStatBox("Reading", "${detail.stats.readingMinutes}m", Color(0xFF2DD4BF), Modifier.weight(1f))
                         }
 
                         Text(
@@ -885,9 +885,9 @@ private fun AdminStudentDetailView(
 @Composable
 private fun AccountStatusBadge(status: String) {
     val (bg, fg) = when (status.lowercase()) {
-        "active" -> Color(0xFFDCFCE7) to Color(0xFF166534)
-        "suspended" -> Color(0xFFFEF3C7) to Color(0xFF92400E)
-        else -> Color(0xFFFEE2E2) to Color(0xFF991B1B)
+        "active" -> Color(0xFF133A29) to Color(0xFF34D399)
+        "suspended" -> Color(0xFF3E2B0D) to Color(0xFFFBBF24)
+        else -> Color(0xFF451A1A) to Color(0xFFFCA5A5)
     }
     Surface(shape = RoundedCornerShape(8.dp), color = bg) {
         Text(
@@ -903,9 +903,9 @@ private fun AccountStatusBadge(status: String) {
 @Composable
 private fun SubscriptionStatusBadge(subStatus: String, label: String) {
     val (bg, fg) = when (subStatus.lowercase()) {
-        "active" -> Color(0xFFE0E7FF) to Color(0xFF3730A3)
-        "trial" -> Color(0xFFCCFBF1) to Color(0xFF115E59)
-        "expired", "cancelled" -> Color(0xFFF3F4F6) to Color(0xFF4B5563)
+        "active" -> Color(0xFF1E2654) to Color(0xFFA5B4FC)
+        "trial" -> Color(0xFF113836) to Color(0xFF2DD4BF)
+        "expired", "cancelled" -> Color(0xFF272D38) to Color(0xFFCBD5E1)
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(shape = RoundedCornerShape(8.dp), color = bg) {

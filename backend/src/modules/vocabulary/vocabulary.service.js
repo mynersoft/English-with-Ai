@@ -1107,7 +1107,12 @@ export async function submitQuizAttempt({ userId, body, settings, now = new Date
  * If AI_API_KEY is not configured, clearly returns `aiConfigured: false` with a
  * deterministic basic check (no faked AI output).
  */
-export async function evaluateSentenceWithAi({ wordObj, sentence }) {
+export async function evaluateSentenceWithAi({
+  wordObj,
+  sentence,
+  userId = "system",
+  isPremium = false,
+}) {
   const trimmed = String(sentence || "").trim();
   const containsWord = trimmed.toLowerCase().includes(wordObj.word.toLowerCase());
 
@@ -1123,8 +1128,16 @@ export async function evaluateSentenceWithAi({ wordObj, sentence }) {
     };
   }
 
-  const system = `You are a friendly English teacher for Bengali-speaking beginners.
-Evaluate the student's English sentence using the target word "${wordObj.word}" (Bengali meaning: "${wordObj.meaning}").
+  const { getEffectiveAiConfig } = await import("@/modules/ai/aiConfig.service");
+  const config = await getEffectiveAiConfig();
+  const baseInstr = String(
+    config?.instructions?.vocabSentencePrompt ||
+      'You are a friendly English teacher for Bengali-speaking beginners.\nEvaluate the student\'s English sentence using the target word "{{word}}" (Bengali meaning: "{{meaning}}").'
+  )
+    .replace(/\{\{word\}\}/g, wordObj.word)
+    .replace(/\{\{meaning\}\}/g, wordObj.meaning);
+
+  const system = `${baseInstr}
 Return ONLY valid JSON:
 {
   "isCorrect": true or false,
@@ -1137,8 +1150,11 @@ Return ONLY valid JSON:
     system,
     messages: [{ role: "user", content: trimmed }],
     json: true,
-    maxTokens: 300,
+    maxTokens: Math.min(400, Number(config?.maxOutputTokens || 300)),
     temperature: 0.3,
+    feature: "vocab_sentence",
+    userId,
+    isPremium,
   });
 
   const cleaned = String(raw || "").replace(/```json|```/gi, "").trim();
@@ -1213,9 +1229,14 @@ export async function evaluateSpeakingPractice({
     ? targetWords.map((w) => `${w.word} (${w.meaning})`).join(", ")
     : "general daily English";
 
-  const system = `You are "English AI", an encouraging spoken-English coach for Bengali learners.
-Evaluate the student's spoken transcript. Target words to practice: ${wordsPrompt}.
-Ignore missing punctuation from speech-to-text.
+  const { getEffectiveAiConfig } = await import("@/modules/ai/aiConfig.service");
+  const config = await getEffectiveAiConfig();
+  const baseEvalPrompt = String(
+    config?.instructions?.speakingEvalPrompt ||
+      'You are "English AI", an encouraging spoken-English coach for Bengali learners.\nEvaluate the student\'s spoken transcript. Target words to practice: {{words}}.\nIgnore missing punctuation from speech-to-text.'
+  ).replace(/\{\{words\}\}/g, wordsPrompt);
+
+  const system = `${baseEvalPrompt}
 Return ONLY valid JSON:
 {
   "grammarScore": 0-100 integer,
@@ -1228,8 +1249,10 @@ Return ONLY valid JSON:
     system,
     messages: [{ role: "user", content: cleanTranscript }],
     json: true,
-    maxTokens: 450,
+    maxTokens: Math.min(600, Number(config?.maxOutputTokens || 450)),
     temperature: 0.4,
+    feature: "speaking_eval",
+    userId: userId || "system",
   });
 
   const cleaned = String(raw || "").replace(/```json|```/gi, "").trim();

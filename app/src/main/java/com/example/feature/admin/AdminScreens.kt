@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dashboard
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
@@ -99,12 +101,21 @@ import com.google.firebase.auth.auth
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.feature.courses.admin.AdminCourseDetailScreen
+import com.example.feature.courses.admin.AdminCourseListUiState
+import com.example.feature.courses.admin.AdminCourseViewModel
+import com.example.feature.courses.admin.AdminCoursesPanel
+import com.example.feature.courses.admin.AdminLessonEditorScreen
 import com.example.feature.reading.ReadingAdminListState
 import com.example.feature.reading.ReadingAdminViewModel
 import com.example.feature.reading.ui.ReadingAdminPanel
+import androidx.compose.runtime.CompositionLocalProvider
+import com.example.core.ui.SystemBarsAppearance
+import com.example.feature.vocabulary.LocalVocabDarkTheme
 import com.example.feature.vocabulary.VocabAdminPanel
 import com.example.feature.vocabulary.VocabAdminUiState
 import com.example.feature.vocabulary.VocabAdminViewModel
+import com.example.ui.theme.EnglishAITheme
 
 @Composable
 fun AdminRoute(
@@ -116,7 +127,9 @@ fun AdminRoute(
     dashboardVm: AdminDashboardViewModel = viewModel(),
     vocabAdminVm: VocabAdminViewModel = viewModel(),
     readingAdminVm: ReadingAdminViewModel = viewModel(),
-    studentsAdminVm: AdminStudentsViewModel = viewModel()
+    studentsAdminVm: AdminStudentsViewModel = viewModel(),
+    courseAdminVm: AdminCourseViewModel = viewModel(),
+    aiAdminVm: AdminAiManagementViewModel = viewModel()
 ) {
     val access by vm.access.collectAsStateWithLifecycle()
     val dashboardState by dashboardVm.state.collectAsStateWithLifecycle()
@@ -125,11 +138,16 @@ fun AdminRoute(
     val readingListState by readingAdminVm.listState.collectAsStateWithLifecycle()
     val readingEditorState by readingAdminVm.editorState.collectAsStateWithLifecycle()
     val studentsState by studentsAdminVm.state.collectAsStateWithLifecycle()
+    val courseListState by courseAdminVm.listState.collectAsStateWithLifecycle()
+    val courseDetailState by courseAdminVm.detailState.collectAsStateWithLifecycle()
+    val lessonEditorState by courseAdminVm.editorState.collectAsStateWithLifecycle()
+    val aiState by aiAdminVm.state.collectAsStateWithLifecycle()
 
     var showPatternEditor by rememberSaveable { mutableStateOf(false) }
-    var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary, 3=Reading, 4=Students
+    var activeSectionTab by rememberSaveable { mutableIntStateOf(0) } // 0=Overview, 1=Patterns, 2=Vocabulary, 3=Reading, 4=Students, 5=Courses, 6=AI
     var vocabSubTab by rememberSaveable { mutableIntStateOf(0) }
     var openAddWordTrigger by remember { mutableIntStateOf(0) }
+    var openCreateCourseTrigger by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         vm.verifyAccessAndLoad()
@@ -141,6 +159,8 @@ fun AdminRoute(
             vocabAdminVm.loadInitial()
             readingAdminVm.loadInitial()
             studentsAdminVm.loadInitial()
+            courseAdminVm.loadInitial()
+            aiAdminVm.loadInitial()
         }
     }
 
@@ -154,6 +174,12 @@ fun AdminRoute(
                 readingAdminVm.closeEditor()
                 readingAdminVm.loadInitial()
             }
+            lessonEditorState.isOpen -> {
+                courseAdminVm.closeLessonEditor()
+            }
+            courseDetailState.isOpen -> {
+                courseAdminVm.closeCourseDetail()
+            }
             activeSectionTab == 4 && studentsState.isViewingDetail -> {
                 studentsAdminVm.closeStudentDetail()
             }
@@ -161,9 +187,12 @@ fun AdminRoute(
         }
     }
 
-    when (val gate = access) {
-        is AdminAccessState.Checking -> {
-            AdminAccessGateScreen(
+    EnglishAITheme(darkTheme = true) {
+        CompositionLocalProvider(LocalVocabDarkTheme provides true) {
+            SystemBarsAppearance(lightStatusBars = false, lightNavigationBars = false)
+            when (val gate = access) {
+                is AdminAccessState.Checking -> {
+                    AdminAccessGateScreen(
                 checking = true,
                 reason = "Verifying administrator permissions...",
                 onBack = onBack,
@@ -204,6 +233,58 @@ fun AdminRoute(
                         }
                     }
                 }
+                lessonEditorState.isOpen -> {
+                    AdminLessonEditorScreen(
+                        state = lessonEditorState,
+                        inMemoryPreviewLesson = { courseAdminVm.buildInMemoryPreviewLesson() },
+                        onBack = { courseAdminVm.closeLessonEditor() },
+                        onUpdateFields = { title, subtitle, desc, dur, prem, pub ->
+                            courseAdminVm.updateLessonFields(title, subtitle, desc, dur, prem, pub)
+                        },
+                        onCreateEmptyBlock = { type -> courseAdminVm.createEmptyBlock(type) },
+                        onUpsertBlock = { blk -> courseAdminVm.upsertBlock(blk) },
+                        onRemoveBlock = { id -> courseAdminVm.removeBlock(id) },
+                        onReorderBlocks = { from, to -> courseAdminVm.reorderContentBlocks(from, to) },
+                        onUploadBlockMedia = { uri, mediaType, cb ->
+                            courseAdminVm.uploadBlockMedia(uri, mediaType, cb)
+                        },
+                        onOpenFullPreview = { open -> courseAdminVm.setFullPreviewOpen(open) },
+                        onOpenBlockPreview = { blk -> courseAdminVm.setBlockPreview(blk) },
+                        onSaveDraft = { courseAdminVm.saveLesson(publish = false) },
+                        onPublish = { courseAdminVm.saveLesson(publish = true) }
+                    )
+                }
+                courseDetailState.isOpen -> {
+                    AdminCourseDetailScreen(
+                        state = courseDetailState,
+                        onBack = { courseAdminVm.closeCourseDetail() },
+                        onPreviewCourse = { courseAdminVm.setCoursePreviewOpen(true) },
+                        onDismissPreviewCourse = { courseAdminVm.setCoursePreviewOpen(false) },
+                        onSaveModule = { cid, mid, title, desc, pub, onDone ->
+                            courseAdminVm.saveModule(cid, mid, title, desc, pub, onDone)
+                        },
+                        onToggleModulePublish = { mid, pub ->
+                            courseAdminVm.toggleModulePublish(mid, pub)
+                        },
+                        onDeleteModule = { mid -> courseAdminVm.deleteModule(mid) },
+                        onMoveModule = { from, to -> courseAdminVm.moveModule(from, to) },
+                        onAddLesson = { cid, mid, mTitle ->
+                            courseAdminVm.openNewLesson(cid, mid, mTitle)
+                        },
+                        onEditLesson = { lid, mTitle ->
+                            courseAdminVm.openEditLesson(lid, mTitle, openInPreviewDirectly = false)
+                        },
+                        onPreviewLesson = { lid, mTitle ->
+                            courseAdminVm.openEditLesson(lid, mTitle, openInPreviewDirectly = true)
+                        },
+                        onDuplicateLesson = { lid -> courseAdminVm.duplicateLesson(lid) },
+                        onToggleLessonPublish = { lid, pub ->
+                            courseAdminVm.toggleLessonPublish(lid, pub)
+                        },
+                        onDeleteLesson = { lid -> courseAdminVm.deleteLesson(lid) },
+                        onMoveLesson = { mid, from, to -> courseAdminVm.moveLesson(mid, from, to) }
+                    )
+                }
                 else -> {
                     AdminDashboardHub(
                         activeTab = activeSectionTab,
@@ -215,8 +296,11 @@ fun AdminRoute(
                         vocabState = vocabAdminState,
                         readingState = readingListState,
                         studentsState = studentsState,
+                        courseListState = courseListState,
+                        aiState = aiState,
                         vocabSubTab = vocabSubTab,
                         openAddWordTrigger = openAddWordTrigger,
+                        openCreateCourseTrigger = openCreateCourseTrigger,
                         onBack = onBack,
                         onLogout = onLogout,
                         onRefreshDashboard = { dashboardVm.loadDashboard(forceRefresh = true) },
@@ -226,6 +310,8 @@ fun AdminRoute(
                             vocabAdminVm.loadInitial()
                             readingAdminVm.loadInitial()
                             studentsAdminVm.refresh()
+                            courseAdminVm.loadInitial()
+                            aiAdminVm.loadInitial(forceRefresh = true)
                         },
                         onNewPattern = {
                             vm.openNew()
@@ -260,13 +346,27 @@ fun AdminRoute(
                         onQuickManageStudents = {
                             activeSectionTab = 4
                         },
+                        onQuickManageCourses = {
+                            activeSectionTab = 5
+                        },
+                        onQuickCreateCourse = {
+                            activeSectionTab = 5
+                            openCreateCourseTrigger++
+                        },
+                        onQuickManageAi = {
+                            activeSectionTab = 6
+                        },
                         onClearReadingMessage = { readingAdminVm.clearBanner() },
                         vocabAdminVm = vocabAdminVm,
                         readingAdminVm = readingAdminVm,
-                        studentsAdminVm = studentsAdminVm
+                        studentsAdminVm = studentsAdminVm,
+                        courseAdminVm = courseAdminVm,
+                        aiAdminVm = aiAdminVm
                     )
                 }
             }
+        }
+    }
         }
     }
 }
@@ -356,8 +456,11 @@ private fun AdminDashboardHub(
     vocabState: VocabAdminUiState,
     readingState: ReadingAdminListState,
     studentsState: AdminStudentsUiState,
+    courseListState: AdminCourseListUiState,
+    aiState: AdminAiManagementUiState,
     vocabSubTab: Int,
     openAddWordTrigger: Int,
+    openCreateCourseTrigger: Int,
     onBack: () -> Unit,
     onLogout: () -> Unit,
     onRefreshDashboard: () -> Unit,
@@ -372,10 +475,15 @@ private fun AdminDashboardHub(
     onQuickCreateReading: () -> Unit,
     onQuickManageReading: () -> Unit,
     onQuickManageStudents: () -> Unit,
+    onQuickManageCourses: () -> Unit,
+    onQuickCreateCourse: () -> Unit,
+    onQuickManageAi: () -> Unit,
     onClearReadingMessage: () -> Unit,
     vocabAdminVm: VocabAdminViewModel,
     readingAdminVm: ReadingAdminViewModel,
-    studentsAdminVm: AdminStudentsViewModel
+    studentsAdminVm: AdminStudentsViewModel,
+    courseAdminVm: AdminCourseViewModel,
+    aiAdminVm: AdminAiManagementViewModel
 ) {
     val snackbar = remember { SnackbarHostState() }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -410,6 +518,21 @@ private fun AdminDashboardHub(
         }
     }
 
+    LaunchedEffect(courseListState.message, courseListState.error) {
+        val msg = courseListState.message ?: courseListState.error
+        if (!msg.isNullOrBlank()) {
+            snackbar.showSnackbar(msg)
+            courseAdminVm.clearBanner()
+        }
+    }
+
+    LaunchedEffect(aiState.message) {
+        aiState.message?.let { msg ->
+            snackbar.showSnackbar(msg)
+            aiAdminVm.clearBanner()
+        }
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideScreen = maxWidth >= 840.dp
 
@@ -422,6 +545,8 @@ private fun AdminDashboardHub(
                 vocabCount = vocabState.total,
                 readingCount = readingState.total,
                 studentCount = studentsState.counts.totalStudents,
+                courseCount = courseListState.pagination.total,
+                aiBadge = if (aiState.draftConfig.isEnabled) "On" else "Off",
                 onSelectTab = { idx ->
                     onSelectTab(idx)
                     if (!isWideScreen) {
@@ -464,6 +589,8 @@ private fun AdminDashboardHub(
                                         2 -> "Vocabulary Catalog"
                                         3 -> "Reading Passages"
                                         4 -> "Student Management"
+                                        5 -> "Courses & Lessons"
+                                        6 -> "AI Management & Costs"
                                         else -> "Overview & Quick Actions"
                                     },
                                     style = MaterialTheme.typography.labelSmall,
@@ -572,6 +699,18 @@ private fun AdminDashboardHub(
                                 text = { Text("Students (${studentsState.counts.totalStudents})") },
                                 modifier = Modifier.testTag("admin_tab_students")
                             )
+                            Tab(
+                                selected = activeTab == 5,
+                                onClick = { onSelectTab(5) },
+                                text = { Text("Courses (${courseListState.pagination.total})") },
+                                modifier = Modifier.testTag("admin_tab_courses")
+                            )
+                            Tab(
+                                selected = activeTab == 6,
+                                onClick = { onSelectTab(6) },
+                                text = { Text("AI") },
+                                modifier = Modifier.testTag("admin_tab_ai")
+                            )
                         }
                     }
 
@@ -583,6 +722,7 @@ private fun AdminDashboardHub(
                             categoryCount = vocabState.categories.size,
                             readingCount = readingState.total,
                             studentCount = studentsState.counts.totalStudents,
+                            courseCount = courseListState.pagination.total,
                             onRefreshDashboard = onRefreshDashboard,
                             onPostNewPattern = onNewPattern,
                             onOpenPatterns = { onSelectTab(1) },
@@ -591,7 +731,10 @@ private fun AdminDashboardHub(
                             onCsvImport = onQuickCsvImport,
                             onCreateReading = onQuickCreateReading,
                             onManageReading = onQuickManageReading,
-                            onManageStudents = onQuickManageStudents
+                            onManageStudents = onQuickManageStudents,
+                            onCreateCourse = onQuickCreateCourse,
+                            onManageCourses = onQuickManageCourses,
+                            onManageAi = onQuickManageAi
                         )
                         1 -> AdminPatternsListTab(
                             state = patternState,
@@ -642,6 +785,69 @@ private fun AdminDashboardHub(
                                 onUpdateSubscription = { id, st, pl, exp ->
                                     studentsAdminVm.updateSubscription(id, st, pl, exp)
                                 }
+                            )
+                        }
+                        5 -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            AdminCoursesPanel(
+                                state = courseListState,
+                                openCreateTrigger = openCreateCourseTrigger,
+                                onSearchChange = { courseAdminVm.updateFilters(search = it) },
+                                onLevelFilterChange = { courseAdminVm.updateFilters(level = it) },
+                                onPublishedFilterChange = { courseAdminVm.updateFilters(published = it) },
+                                onPageChange = { p -> courseAdminVm.loadCourses(p) },
+                                onOpenCourseDetail = { cid -> courseAdminVm.openCourseDetail(cid) },
+                                onTogglePublish = { cid, pub -> courseAdminVm.toggleCoursePublish(cid, pub) },
+                                onDeleteCourse = { cid -> courseAdminVm.deleteCourse(cid) },
+                                onUploadThumbnail = { uri, cb -> courseAdminVm.uploadThumbnailImage(uri, cb) },
+                                onUploadMedia = { uri, mediaType, cb -> courseAdminVm.uploadDialogMedia(uri, mediaType, cb) },
+                                onSaveCourse = { cid, t, st, d, url, pid, lvl, cat, days, prem, price, pub, initMod, initLesson, initVidUrl, initVidPid, initVidDur, initPdfUrl, initPdfPid, initText, openModules, done ->
+                                    courseAdminVm.saveCourse(
+                                        courseId = cid,
+                                        title = t,
+                                        subtitle = st,
+                                        description = d,
+                                        thumbnailUrl = url,
+                                        thumbnailPublicId = pid,
+                                        level = lvl,
+                                        category = cat,
+                                        durationDays = days,
+                                        isPremium = prem,
+                                        price = price,
+                                        isPublished = pub,
+                                        initialModuleTitle = initMod,
+                                        initialLessonTitle = initLesson,
+                                        initialVideoUrl = initVidUrl,
+                                        initialVideoPublicId = initVidPid,
+                                        initialVideoDuration = initVidDur,
+                                        initialPdfUrl = initPdfUrl,
+                                        initialPdfPublicId = initPdfPid,
+                                        initialTextContent = initText,
+                                        openModulesAfterSave = openModules,
+                                        onDone = done
+                                    )
+                                },
+                                onClearDialogError = { courseAdminVm.clearDialogError() }
+                            )
+                        }
+                        6 -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            AdminAiManagementPanel(
+                                state = aiState,
+                                onRefresh = { aiAdminVm.loadInitial(forceRefresh = true) },
+                                onSelectWindowDays = { days -> aiAdminVm.selectWindowDays(days) },
+                                onToggleGlobalEnabled = { enabled -> aiAdminVm.toggleGlobalEnabled(enabled) },
+                                onUpdateDraft = { transform -> aiAdminVm.updateDraft(transform) },
+                                onSelectProvider = { providerId -> aiAdminVm.selectProvider(providerId) },
+                                onSelectPresetModel = { model -> aiAdminVm.selectPresetModel(model) },
+                                onSaveInstructions = { aiAdminVm.saveInstructions() },
+                                onSaveLimits = { aiAdminVm.saveLimits() },
+                                onSaveModelAndConversation = { aiAdminVm.saveModelAndConversation() },
+                                onResetSection = { section -> aiAdminVm.resetSection(section) }
                             )
                         }
                     }
@@ -726,6 +932,8 @@ private fun AdminSidebarDrawerContent(
     vocabCount: Int,
     readingCount: Int,
     studentCount: Int,
+    courseCount: Int,
+    aiBadge: String,
     onSelectTab: (Int) -> Unit,
     onRefreshAll: () -> Unit,
     onBackToApp: () -> Unit,
@@ -816,10 +1024,12 @@ private fun AdminSidebarDrawerContent(
 
             val entries = listOf(
                 NavEntry(0, "Overview", Icons.Filled.Dashboard, null, "admin_drawer_overview"),
+                NavEntry(5, "Courses & Lessons", Icons.Filled.School, "$courseCount", "admin_drawer_courses"),
                 NavEntry(1, "Sentence Patterns", Icons.AutoMirrored.Filled.MenuBook, "$patternCount", "admin_drawer_patterns"),
                 NavEntry(2, "Vocabulary", Icons.Filled.Translate, "$vocabCount", "admin_drawer_vocabulary"),
                 NavEntry(3, "Reading Practice", Icons.Filled.AutoStories, "$readingCount", "admin_drawer_reading"),
-                NavEntry(4, "Students", Icons.Filled.People, "$studentCount", "admin_drawer_students")
+                NavEntry(4, "Students", Icons.Filled.People, "$studentCount", "admin_drawer_students"),
+                NavEntry(6, "AI Management", Icons.Filled.AutoAwesome, aiBadge, "admin_drawer_ai")
             )
 
             entries.forEach { item ->
@@ -933,6 +1143,7 @@ private fun AdminOverviewTab(
     categoryCount: Int,
     readingCount: Int,
     studentCount: Int,
+    courseCount: Int,
     onRefreshDashboard: () -> Unit,
     onPostNewPattern: () -> Unit,
     onOpenPatterns: () -> Unit,
@@ -941,7 +1152,10 @@ private fun AdminOverviewTab(
     onCsvImport: () -> Unit,
     onCreateReading: () -> Unit,
     onManageReading: () -> Unit,
-    onManageStudents: () -> Unit
+    onManageStudents: () -> Unit,
+    onCreateCourse: () -> Unit,
+    onManageCourses: () -> Unit,
+    onManageAi: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -958,7 +1172,8 @@ private fun AdminOverviewTab(
                 fallbackVocabCount = vocabCount,
                 fallbackReadingCount = readingCount,
                 onRetry = onRefreshDashboard,
-                onOpenStudents = onManageStudents
+                onOpenStudents = onManageStudents,
+                onOpenAiManagement = onManageAi
             )
         }
 
@@ -968,6 +1183,36 @@ private fun AdminOverviewTab(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.School,
+                title = "Manage Courses & Lessons ($courseCount)",
+                subtitle = "Create courses, organize modules, build Video/PDF/Rich Text/Image lessons & preview",
+                testTag = "admin_quick_manage_courses",
+                onClick = onManageCourses
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.Add,
+                title = "Create New Course",
+                subtitle = "Launch a structured course with level, cover image & pricing",
+                testTag = "admin_quick_create_course",
+                onClick = onCreateCourse
+            )
+        }
+
+        item {
+            AdminActionCard(
+                icon = Icons.Filled.AutoAwesome,
+                title = "AI Management & Costs",
+                subtitle = "Edit AI prompts, usage limits, token costs, conversation rules & model config",
+                testTag = "admin_quick_manage_ai",
+                onClick = onManageAi
             )
         }
 
@@ -1159,7 +1404,7 @@ private fun PatternCard(p: AdminPatternSummary, onEdit: () -> Unit, onDelete: ()
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 if (p.isPremium) {
-                    Tag("Premium", Color(0xFFFFE8CC), Color(0xFFB45309), Modifier.padding(start = 8.dp))
+                    Tag("Premium", Color(0xFF3E2B0D), Color(0xFFFBBF24), Modifier.padding(start = 8.dp))
                 }
             }
             Text(p.meaning, style = MaterialTheme.typography.bodyMedium)

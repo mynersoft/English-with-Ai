@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,11 +48,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.ui.StatusBanner
 import com.example.domain.model.LearningLevel
 import com.example.domain.model.UserProfile
+import com.example.ui.theme.AppThemeManager
+import com.example.ui.theme.AppThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -222,6 +229,58 @@ fun ProfileScreen(
                                 )
                             } else {
                                 Text("Save Preferences")
+                            }
+                        }
+                    }
+                }
+
+                val context = LocalContext.current
+                val themeMode by AppThemeManager.observeThemeMode(context).collectAsStateWithLifecycle()
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_theme_mode_selector")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Theme Mode",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Choose how the app looks across student screens. Admin tools stay in dark mode.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AppThemeMode.entries.forEach { mode ->
+                                val modeIcon = when (mode) {
+                                    AppThemeMode.SYSTEM -> Icons.Filled.BrightnessAuto
+                                    AppThemeMode.LIGHT -> Icons.Filled.LightMode
+                                    AppThemeMode.DARK -> Icons.Filled.DarkMode
+                                }
+                                FilterChip(
+                                    selected = themeMode == mode,
+                                    onClick = { AppThemeManager.setThemeMode(context, mode) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = modeIcon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    label = { Text(mode.label) },
+                                    modifier = Modifier.testTag("theme_chip_${mode.storageKey}")
+                                )
                             }
                         }
                     }

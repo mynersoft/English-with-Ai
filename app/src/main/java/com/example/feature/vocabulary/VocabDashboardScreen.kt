@@ -300,9 +300,10 @@ fun VocabularyDashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                val isDark = com.example.ui.theme.LocalIsDarkTheme.current
                                 DashStatCard("Due Today", "${data.dueReviews}", pal.gold, Modifier.weight(1f))
                                 DashStatCard("Learned", "${data.totalLearned}", pal.primary, Modifier.weight(1f))
-                                DashStatCard("Mastered", "${data.masteredCount}", Color(0xFF0E7490), Modifier.weight(1f))
+                                DashStatCard("Mastered", "${data.masteredCount}", if (isDark) Color(0xFF22D3EE) else Color(0xFF0E7490), Modifier.weight(1f))
                             }
                         }
 

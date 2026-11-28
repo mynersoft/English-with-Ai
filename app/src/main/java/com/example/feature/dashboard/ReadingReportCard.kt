@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.model.ReadingReportSummary
+import com.example.ui.theme.LocalIsDarkTheme
 
 @Composable
 fun ReadingReportSection(
@@ -48,11 +49,15 @@ fun ReadingReportSection(
     onOpenReading: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val emerald = Color(0xFF0E6B3B)
-    val emeraldSoft = Color(0xFFE6F4EC)
-    val textDark = Color(0xFF111827)
-    val textMuted = Color(0xFF6B7280)
-    val border = Color(0xFFE5E7EB)
+    val isDark = LocalIsDarkTheme.current
+    val emerald = if (isDark) Color(0xFF34D399) else Color(0xFF0E6B3B)
+    val emeraldButton = if (isDark) Color(0xFF10B981) else Color(0xFF0E6B3B)
+    val emeraldSoft = if (isDark) Color(0xFF133A29) else Color(0xFFE6F4EC)
+    val sectionBg = if (isDark) Color(0xFF0B1120) else Color.White
+    val cardBg = if (isDark) Color(0xFF131C31) else Color(0xFFF9FBF9)
+    val textDark = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827)
+    val textMuted = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
+    val border = if (isDark) Color(0xFF23304A) else Color(0xFFE5E7EB)
 
     val goalRatio = if (report.dailyGoalMinutes > 0) {
         (report.todayMinutes.toFloat() / report.dailyGoalMinutes.toFloat()).coerceIn(0f, 1f)
@@ -61,7 +66,7 @@ fun ReadingReportSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(sectionBg)
             .padding(horizontal = 20.dp, vertical = 22.dp)
             .testTag("reading_report_section"),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -81,7 +86,7 @@ fun ReadingReportSection(
 
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = Color(0xFFF9FBF9),
+            color = cardBg,
             border = BorderStroke(1.dp, border),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -160,14 +165,14 @@ fun ReadingReportSection(
                     )
                     ReportMetricBox(
                         icon = Icons.Filled.MenuBook,
-                        tint = Color(0xFFD97706),
+                        tint = if (isDark) Color(0xFFFBBF24) else Color(0xFFD97706),
                         value = "${report.inProgressPassages}",
                         label = "In Progress",
                         modifier = Modifier.weight(1f)
                     )
                     ReportMetricBox(
                         icon = Icons.Filled.Schedule,
-                        tint = Color(0xFF2563EB),
+                        tint = if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB),
                         value = "${report.totalMinutes}m",
                         label = "Total Time",
                         modifier = Modifier.weight(1f)
@@ -180,14 +185,14 @@ fun ReadingReportSection(
                 ) {
                     ReportMetricBox(
                         icon = Icons.Filled.Quiz,
-                        tint = Color(0xFF7C3AED),
+                        tint = if (isDark) Color(0xFFC084FC) else Color(0xFF7C3AED),
                         value = if (report.quizAttemptsCount > 0) "${report.averageQuizScore}%" else "--",
                         label = "Quiz Avg (${report.quizAttemptsCount})",
                         modifier = Modifier.weight(1f)
                     )
                     ReportMetricBox(
                         icon = Icons.Filled.RecordVoiceOver,
-                        tint = Color(0xFF0F766E),
+                        tint = if (isDark) Color(0xFF2DD4BF) else Color(0xFF0F766E),
                         value = if (report.readAloudCount > 0) "${report.averageReadAloudScore}%" else "--",
                         label = "Text Match (${report.readAloudCount})",
                         modifier = Modifier.weight(1f)
@@ -236,7 +241,7 @@ fun ReadingReportSection(
                 Button(
                     onClick = onOpenReading,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = emerald,
+                        containerColor = emeraldButton,
                         contentColor = Color.White
                     ),
                     shape = RoundedCornerShape(12.dp),
@@ -267,10 +272,16 @@ private fun ReportMetricBox(
     label: String,
     modifier: Modifier = Modifier
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val boxBg = if (isDark) Color(0xFF1A253D) else Color.White
+    val boxBorder = if (isDark) Color(0xFF283652) else Color(0xFFEAECEF)
+    val valueColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827)
+    val labelColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
+
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color(0xFFEAECEF)),
+        color = boxBg,
+        border = BorderStroke(1.dp, boxBorder),
         modifier = modifier
     ) {
         Column(
@@ -282,13 +293,13 @@ private fun ReportMetricBox(
                 text = value,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827),
+                color = valueColor,
                 maxLines = 1
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF6B7280),
+                color = labelColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

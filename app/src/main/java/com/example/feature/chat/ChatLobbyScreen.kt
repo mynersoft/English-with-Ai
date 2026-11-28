@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -74,10 +75,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.domain.model.ChatRoomSummary
 import com.example.domain.model.ChatStudentSummary
+import com.example.ui.theme.LocalIsDarkTheme
 
 @Composable
 fun ChatRoute(
     onBack: () -> Unit,
+    onOpenVideoCalls: () -> Unit = {},
+    onStartDirectVideoCall: (peerUserId: String) -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
     vm: ChatViewModel = viewModel()
 ) {
@@ -131,6 +135,7 @@ fun ChatRoute(
             state = lobbyState,
             bottomBar = bottomBar,
             onBack = onBack,
+            onOpenVideoCalls = onOpenVideoCalls,
             onRefresh = { vm.loadLobby() },
             onOpenRoom = { vm.openRoom(it) },
             onCreateGroupRoom = { name, desc, emoji, done ->
@@ -145,7 +150,8 @@ fun ChatRoute(
                     done()
                     vm.openRoom(room)
                 }
-            }
+            },
+            onStartDirectVideoCall = onStartDirectVideoCall
         )
     }
 }
@@ -156,18 +162,25 @@ private fun ChatLobbyScreen(
     state: ChatLobbyUiState,
     bottomBar: @Composable () -> Unit = {},
     onBack: () -> Unit,
+    onOpenVideoCalls: () -> Unit = {},
     onRefresh: () -> Unit,
     onOpenRoom: (ChatRoomSummary) -> Unit,
     onCreateGroupRoom: (name: String, description: String, emoji: String, onDone: () -> Unit) -> Unit,
     onSearchStudents: (String) -> Unit,
-    onStartDirectChat: (peerUserId: String, onDone: () -> Unit) -> Unit
+    onStartDirectChat: (peerUserId: String, onDone: () -> Unit) -> Unit,
+    onStartDirectVideoCall: (peerUserId: String) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0=Study Rooms, 1=Direct Chats
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var showStudentDialog by rememberSaveable { mutableStateOf(false) }
 
-    val primaryGreen = Color(0xFF1F5D3B)
-    val bgLight = Color(0xFFF7FBF7)
+    val isDark = LocalIsDarkTheme.current
+    val primaryGreen = if (isDark) Color(0xFF34D399) else Color(0xFF1F5D3B)
+    val buttonGreen = if (isDark) Color(0xFF0E7A4D) else Color(0xFF1F5D3B)
+    val bgLight = if (isDark) Color(0xFF0B120F) else Color(0xFFF7FBF7)
+    val topBarBg = if (isDark) Color(0xFF101915) else Color.White
+    val cardBg = if (isDark) Color(0xFF141E1A) else Color.White
+    val emptyBorder = if (isDark) Color(0xFF24352E) else Color(0xFFE2E8F0)
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -205,6 +218,18 @@ private fun ChatLobbyScreen(
                 },
                 actions = {
                     IconButton(
+                        onClick = onOpenVideoCalls,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("chat_open_video_calls_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Videocam,
+                            contentDescription = "Open video calls",
+                            tint = primaryGreen
+                        )
+                    }
+                    IconButton(
                         onClick = {
                             onSearchStudents("")
                             showStudentDialog = true
@@ -224,7 +249,7 @@ private fun ChatLobbyScreen(
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh rooms")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = topBarBg)
             )
         }
     ) { padding ->
@@ -236,7 +261,7 @@ private fun ChatLobbyScreen(
         ) {
             TabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = Color.White,
+                containerColor = topBarBg,
                 modifier = Modifier.widthIn(max = 600.dp)
             ) {
                 Tab(
@@ -304,7 +329,7 @@ private fun ChatLobbyScreen(
                             Button(
                                 onClick = { showCreateDialog = true },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = primaryGreen,
+                                    containerColor = buttonGreen,
                                     contentColor = Color.White
                                 ),
                                 shape = RoundedCornerShape(14.dp),
@@ -341,8 +366,8 @@ private fun ChatLobbyScreen(
                         item {
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
-                                color = Color.White,
-                                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                color = cardBg,
+                                border = BorderStroke(1.dp, emptyBorder),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
@@ -407,6 +432,10 @@ private fun ChatLobbyScreen(
             onDismiss = { showStudentDialog = false },
             onSelectStudent = { student ->
                 onStartDirectChat(student.id) { showStudentDialog = false }
+            },
+            onVideoCallStudent = { student ->
+                showStudentDialog = false
+                onStartDirectVideoCall(student.id)
             }
         )
     }
@@ -418,10 +447,11 @@ private fun ChatRoomCard(
     primaryGreen: Color,
     onClick: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color(0xFFE5ECE5)),
+        color = if (isDark) Color(0xFF141E1A) else Color.White,
+        border = BorderStroke(1.dp, if (isDark) Color(0xFF24352E) else Color(0xFFE5ECE5)),
         modifier = Modifier
             .fillMaxWidth()
             .minimumInteractiveComponentSize()
@@ -438,7 +468,7 @@ private fun ChatRoomCard(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFFEDF6EF)),
+                    .background(if (isDark) Color(0xFF1B2B23) else Color(0xFFEDF6EF)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(text = room.avatarEmoji, fontSize = 22.sp)
@@ -460,7 +490,7 @@ private fun ChatRoomCard(
                     if (room.isMember) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFE8F5EC)
+                            color = if (isDark) Color(0xFF153827) else Color(0xFFE8F5EC)
                         ) {
                             Text(
                                 text = "Member",
@@ -497,7 +527,7 @@ private fun ChatRoomCard(
                     Text(
                         text = "${room.onlineCount} online",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF15803D)
+                        color = if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D)
                     )
                 }
             }
@@ -572,11 +602,12 @@ private fun FindStudentDialog(
     creating: Boolean,
     onSearchChange: (String) -> Unit,
     onDismiss: () -> Unit,
-    onSelectStudent: (ChatStudentSummary) -> Unit
+    onSelectStudent: (ChatStudentSummary) -> Unit,
+    onVideoCallStudent: (ChatStudentSummary) -> Unit = {}
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Message a Student") },
+        title = { Text("Message or Call a Student") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
@@ -607,10 +638,14 @@ private fun FindStudentDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(students, key = { it.id }) { student ->
+                            val isDark = LocalIsDarkTheme.current
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFF7FBF7),
-                                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                color = if (isDark) Color(0xFF18241F) else Color(0xFFF7FBF7),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isDark) Color(0xFF2A3B33) else Color(0xFFE2E8F0)
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .minimumInteractiveComponentSize()
@@ -626,7 +661,7 @@ private fun FindStudentDialog(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFF1F5D3B)),
+                                            .background(if (isDark) Color(0xFF0E7A4D) else Color(0xFF1F5D3B)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
@@ -648,10 +683,23 @@ private fun FindStudentDialog(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                    IconButton(
+                                        onClick = { onVideoCallStudent(student) },
+                                        enabled = !creating,
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .testTag("find_student_video_call_${student.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Videocam,
+                                            contentDescription = "Video call ${student.name}",
+                                            tint = if (isDark) Color(0xFF34D399) else Color(0xFF1F5D3B)
+                                        )
+                                    }
                                     Text(
                                         text = "Chat",
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = Color(0xFF1F5D3B),
+                                        color = if (isDark) Color(0xFF34D399) else Color(0xFF1F5D3B),
                                         fontWeight = FontWeight.Bold
                                     )
                                 }

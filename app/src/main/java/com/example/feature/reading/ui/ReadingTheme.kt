@@ -2,7 +2,6 @@ package com.example.feature.reading.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,7 +70,7 @@ data class ReadingPalette(
 )
 
 @Composable
-fun readingPalette(dark: Boolean = isSystemInDarkTheme()): ReadingPalette {
+fun readingPalette(dark: Boolean = com.example.ui.theme.LocalIsDarkTheme.current): ReadingPalette {
     val vp = com.example.feature.vocabulary.vocabPalette(dark)
     return ReadingPalette(
         primary = vp.primary,
@@ -149,10 +148,11 @@ fun ReadingTopBar(
 @Composable
 fun CefrBadge(level: String, modifier: Modifier = Modifier) {
     val pal = readingPalette()
+    val isDark = com.example.ui.theme.LocalIsDarkTheme.current
     val (bg, fg) = when (level.uppercase()) {
         "A1", "A2" -> pal.primaryContainer to pal.primary
         "B1", "B2" -> pal.amberContainer to pal.amber
-        else -> Color(0xFFEDE9FE) to Color(0xFF6D28D9)
+        else -> if (isDark) Color(0xFF3B1F6E) to Color(0xFFDDD6FE) else Color(0xFFEDE9FE) to Color(0xFF6D28D9)
     }
     Surface(
         shape = RoundedCornerShape(8.dp),

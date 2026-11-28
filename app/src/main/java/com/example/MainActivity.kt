@@ -2,6 +2,7 @@ package com.example
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -50,6 +52,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,11 +66,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.englishai.feature.speaking.SentenceLearningScreen
+import com.example.core.call.CallInviteNotifier
+import com.example.core.call.CallNotificationConstants
 import com.example.core.chat.ChatMessageNotifier
 import com.example.core.chat.ChatNotificationConstants
 import com.example.core.chat.ChatNotificationMonitor
 import com.example.core.common.UiState
 import com.example.core.network.NetworkMonitor
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import com.example.core.reminder.DailySessionReminderPrefs
@@ -79,8 +86,12 @@ import com.example.core.wordofday.WordOfTheDayScheduler
 import com.example.core.wordofday.WordOfTheDayStorage
 import com.example.core.wordofday.WordOfTheDaySync
 import com.example.core.ui.OfflineFloatingBanner
+import com.example.core.ui.PermissionPromptDialog
 import com.example.core.ui.SystemBarsAppearance
 import com.example.core.ui.attemptSilentGoogleAutoSignIn
+import com.example.core.ui.isPermissionPermanentlyDenied
+import com.example.core.ui.markPermissionRequested
+import com.example.core.ui.openAppPermissionSettings
 import org.json.JSONObject
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.UserRepository
@@ -92,8 +103,12 @@ import com.example.feature.auth.EmailVerificationScreen
 import com.example.feature.auth.ForgotPasswordScreen
 import com.example.feature.auth.LoginScreen
 import com.example.feature.auth.RegisterScreen
+import com.example.feature.call.CallViewModel
+import com.example.feature.call.IncomingCallBanner
+import com.example.feature.call.VideoCallRoute
 import com.example.feature.chat.ChatRoute
 import com.example.feature.chat.ChatViewModel
+import com.example.feature.courses.student.CoursesRoute
 import com.example.feature.dashboard.AppMainTab
 import com.example.feature.dashboard.DashboardScreen
 import com.example.feature.dashboard.DashboardViewModel
@@ -110,7 +125,9 @@ import com.example.feature.reading.ui.ReadingRoute
 import com.example.feature.speaking.SpeakingRoute
 import com.example.feature.vocabulary.VocabularyRoute
 import com.example.feature.vocabulary.VocabularyViewModel
+import com.example.ui.theme.AppThemeManager
 import com.example.ui.theme.EnglishAITheme
+import com.example.ui.theme.resolveIsDarkTheme
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -127,6 +144,8 @@ private object AppRoutes {
     const val SESSIONS = "sessions"
     const val SECURITY = "security"
     const val READING = "reading"
+    const val COURSES = "courses"
+    const val VIDEO_CALLS = "video_calls"
     const val ADMIN = "admin"
 }
 
@@ -135,9 +154,15 @@ data class ChatDeepLinkTarget(
     val messageId: String? = null
 )
 
+data class CallDeepLinkTarget(
+    val roomId: String,
+    val callerName: String? = null
+)
+
 class MainActivity : ComponentActivity() {
     private var launchedWordOfTheDay by mutableStateOf<WordOfTheDayEntry?>(null)
     private var launchedChatTarget by mutableStateOf<ChatDeepLinkTarget?>(null)
+    private var launchedCallTarget by mutableStateOf<CallDeepLinkTarget?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -145,14 +170,20 @@ class MainActivity : ComponentActivity() {
         DailySessionReminderScheduler.scheduleDailyReminder(this)
         WordOfTheDayScheduler.scheduleMorningNotification(this)
         ChatMessageNotifier.ensureChannel(this)
+        CallInviteNotifier.ensureChannel(this)
         handleDeepLinkIntents(intent)
         setContent {
-            EnglishAITheme {
+            val themeMode by AppThemeManager.observeThemeMode(this).collectAsStateWithLifecycle()
+            val appDark = resolveIsDarkTheme(themeMode)
+            EnglishAITheme(darkTheme = appDark) {
                 EnglishAIApp(
+                    appDark = appDark,
                     wordOfTheDayPopup = launchedWordOfTheDay,
                     onDismissWordOfTheDay = { launchedWordOfTheDay = null },
                     chatDeepLinkTarget = launchedChatTarget,
-                    onConsumeChatDeepLink = { launchedChatTarget = null }
+                    onConsumeChatDeepLink = { launchedChatTarget = null },
+                    callDeepLinkTarget = launchedCallTarget,
+                    onConsumeCallDeepLink = { launchedCallTarget = null }
                 )
             }
         }
@@ -167,6 +198,7 @@ class MainActivity : ComponentActivity() {
     private fun handleDeepLinkIntents(intent: Intent?) {
         handleWordOfTheDayIntent(intent)
         handleChatNotificationIntent(intent)
+        handleCallNotificationIntent(intent)
     }
 
     private fun handleWordOfTheDayIntent(intent: Intent?) {
@@ -194,14 +226,28 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(ChatNotificationConstants.EXTRA_OPEN_CHAT_ROOM_ID)
         intent.removeExtra(ChatNotificationConstants.EXTRA_OPEN_CHAT_MESSAGE_ID)
     }
+
+    private fun handleCallNotificationIntent(intent: Intent?) {
+        val roomId = intent?.getStringExtra(CallNotificationConstants.EXTRA_OPEN_CALL_ROOM_ID)
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+        val callerName = intent.getStringExtra(CallNotificationConstants.EXTRA_OPEN_CALL_CALLER_NAME)
+            ?.takeIf { it.isNotBlank() }
+        launchedCallTarget = CallDeepLinkTarget(roomId = roomId, callerName = callerName)
+        intent.removeExtra(CallNotificationConstants.EXTRA_OPEN_CALL_ROOM_ID)
+        intent.removeExtra(CallNotificationConstants.EXTRA_OPEN_CALL_CALLER_NAME)
+    }
 }
 
 @Composable
 fun EnglishAIApp(
+    appDark: Boolean = isSystemInDarkTheme(),
     wordOfTheDayPopup: WordOfTheDayEntry? = null,
     onDismissWordOfTheDay: () -> Unit = {},
     chatDeepLinkTarget: ChatDeepLinkTarget? = null,
-    onConsumeChatDeepLink: () -> Unit = {}
+    onConsumeChatDeepLink: () -> Unit = {},
+    callDeepLinkTarget: CallDeepLinkTarget? = null,
+    onConsumeCallDeepLink: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -281,13 +327,11 @@ fun EnglishAIApp(
         )
     }
 
-    val systemDark = isSystemInDarkTheme()
-
     if (user == null) {
-        SystemBarsAppearance(lightStatusBars = !systemDark)
+        SystemBarsAppearance(lightStatusBars = !appDark, lightNavigationBars = !appDark)
         UnauthenticatedNavGraph(authViewModel = authViewModel)
     } else if (!isVerifiedCheck) {
-        SystemBarsAppearance(lightStatusBars = !systemDark)
+        SystemBarsAppearance(lightStatusBars = !appDark, lightNavigationBars = !appDark)
         val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
         EmailVerificationScreen(
             userEmail = user.email.orEmpty(),
@@ -303,10 +347,13 @@ fun EnglishAIApp(
     } else {
         key(user.uid) {
             AuthenticatedNavGraph(
+                appDark = appDark,
                 currentUserId = user.uid,
                 credentialManager = credentialManager,
                 chatDeepLinkTarget = chatDeepLinkTarget,
-                onConsumeChatDeepLink = onConsumeChatDeepLink
+                onConsumeChatDeepLink = onConsumeChatDeepLink,
+                callDeepLinkTarget = callDeepLinkTarget,
+                onConsumeCallDeepLink = onConsumeCallDeepLink
             )
         }
     }
@@ -411,10 +458,13 @@ private fun UnauthenticatedNavGraph(
 
 @Composable
 private fun AuthenticatedNavGraph(
+    appDark: Boolean,
     currentUserId: String,
     credentialManager: CredentialManager,
     chatDeepLinkTarget: ChatDeepLinkTarget? = null,
-    onConsumeChatDeepLink: () -> Unit = {}
+    onConsumeChatDeepLink: () -> Unit = {},
+    callDeepLinkTarget: CallDeepLinkTarget? = null,
+    onConsumeCallDeepLink: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val navScope = rememberCoroutineScope()
@@ -437,6 +487,7 @@ private fun AuthenticatedNavGraph(
     val vocabularyViewModel: VocabularyViewModel = viewModel(key = "vocab_$currentUserId")
     val patternViewModel: PatternViewModel = viewModel(key = "pattern_$currentUserId")
     val chatViewModel: ChatViewModel = viewModel(key = "chat_$currentUserId")
+    val callViewModel: CallViewModel = viewModel(key = "call_$currentUserId")
 
     val profileState by dashboardViewModel.profileState.collectAsStateWithLifecycle()
     val sessionsState by dashboardViewModel.sessionsState.collectAsStateWithLifecycle()
@@ -444,6 +495,8 @@ private fun AuthenticatedNavGraph(
     val studentDashboardState by studentDashboardViewModel.state.collectAsStateWithLifecycle()
     val studentDashboardRefreshing by studentDashboardViewModel.isRefreshing.collectAsStateWithLifecycle()
     val chatLobbyState by chatViewModel.lobby.collectAsStateWithLifecycle()
+    val callLobbyState by callViewModel.lobby.collectAsStateWithLifecycle()
+    val activeCallState by callViewModel.activeCall.collectAsStateWithLifecycle()
 
     val isOnline by remember(context) {
         NetworkMonitor.observeIsOnline(context)
@@ -454,12 +507,14 @@ private fun AuthenticatedNavGraph(
     LaunchedEffect(currentUserId) {
         dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
         chatViewModel.loadLobby()
+        callViewModel.loadLobby(silent = true)
     }
 
     LaunchedEffect(isOnline) {
         if (isOnline && wasOffline) {
             dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
             chatViewModel.loadLobby()
+            callViewModel.loadLobby(silent = true)
             studentDashboardViewModel.loadDashboard(silent = true)
         }
         wasOffline = !isOnline
@@ -488,10 +543,8 @@ private fun AuthenticatedNavGraph(
         }
     }
 
-    val systemDark = isSystemInDarkTheme()
-
     if (profileState is UiState.Loading) {
-        SystemBarsAppearance(lightStatusBars = !systemDark)
+        SystemBarsAppearance(lightStatusBars = !appDark, lightNavigationBars = !appDark)
         ProfileLoadingFallbackScreen(
             isBusy = actionState.isBusy,
             onSignOut = performSignOut
@@ -500,7 +553,7 @@ private fun AuthenticatedNavGraph(
     }
 
     if (loadedProfile?.safeAccountStatus == AccountStatus.DEACTIVATED) {
-        SystemBarsAppearance(lightStatusBars = !systemDark)
+        SystemBarsAppearance(lightStatusBars = !appDark, lightNavigationBars = !appDark)
         DeactivatedAccountScreen(
             displayName = loadedProfile.displayName.ifBlank { "Learner" },
             actionState = actionState,
@@ -513,6 +566,50 @@ private fun AuthenticatedNavGraph(
     val navController = rememberNavController()
     var selectedTab by rememberSaveable { mutableStateOf(AppMainTab.HOME) }
     var patternFullscreen by remember { mutableStateOf(false) }
+
+    var showCallPermissionDialog by remember { mutableStateOf(false) }
+    var pendingGlobalCallAction by remember { mutableStateOf<((videoEnabled: Boolean) -> Unit)?>(null) }
+    val globalCallPermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val micGranted = result[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val camGranted = result[Manifest.permission.CAMERA] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val action = pendingGlobalCallAction
+        pendingGlobalCallAction = null
+        if (micGranted && action != null) {
+            action(camGranted)
+        } else if (!micGranted) {
+            showCallPermissionDialog = true
+        }
+    }
+
+    val runWithGlobalCallPermissions: ((videoEnabled: Boolean) -> Unit) -> Unit = { action ->
+        val hasMic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val hasCam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasMic && hasCam) {
+            action(true)
+        } else if (!hasMic && isPermissionPermanentlyDenied(context, Manifest.permission.RECORD_AUDIO)) {
+            showCallPermissionDialog = true
+        } else {
+            pendingGlobalCallAction = action
+            markPermissionRequested(context, Manifest.permission.RECORD_AUDIO)
+            markPermissionRequested(context, Manifest.permission.CAMERA)
+            globalCallPermissionsLauncher.launch(
+                arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+            )
+        }
+    }
+
+    LaunchedEffect(currentUserId, isOnline, activeCallState.room?.id) {
+        if (isOnline && activeCallState.room == null) {
+            while (isActive) {
+                callViewModel.refreshIncomingInvites()
+                delay(6_000L)
+            }
+        }
+    }
 
     LaunchedEffect(chatDeepLinkTarget) {
         val target = chatDeepLinkTarget ?: return@LaunchedEffect
@@ -529,18 +626,40 @@ private fun AuthenticatedNavGraph(
         onConsumeChatDeepLink()
     }
 
+    LaunchedEffect(callDeepLinkTarget) {
+        val target = callDeepLinkTarget ?: return@LaunchedEffect
+        dashboardViewModel.clearBanner()
+        if (navController.currentDestination?.route != AppRoutes.VIDEO_CALLS) {
+            navController.navigate(AppRoutes.VIDEO_CALLS) {
+                launchSingleTop = true
+            }
+        }
+        val hasMic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val hasCam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasMic) {
+            callViewModel.joinRoom(
+                context = context,
+                roomId = target.roomId,
+                videoEnabled = hasCam
+            )
+        } else {
+            callViewModel.refreshIncomingInvites()
+        }
+        onConsumeCallDeepLink()
+    }
+
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: AppRoutes.MAIN_TABS
     val density = LocalDensity.current
     val isImeVisible = WindowInsets.ime.getBottom(density) > WindowInsets.navigationBars.getBottom(density)
 
     val (lightStatusBars, lightNavigationBars) = when {
+        currentRoute == AppRoutes.ADMIN -> false to false
+        currentRoute == AppRoutes.VIDEO_CALLS && activeCallState.room != null -> false to false
         currentRoute == AppRoutes.MAIN_TABS && selectedTab == AppMainTab.SPEAKING ->
-            (!systemDark) to (if (isImeVisible) !systemDark else true)
-        currentRoute == AppRoutes.MAIN_TABS ->
-            true to true
+            (!appDark) to (if (isImeVisible) !appDark else !appDark)
         else ->
-            (!systemDark) to (!systemDark)
+            (!appDark) to (!appDark)
     }
     SystemBarsAppearance(
         lightStatusBars = lightStatusBars,
@@ -565,6 +684,7 @@ private fun AuthenticatedNavGraph(
         )
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = AppRoutes.MAIN_TABS
@@ -609,6 +729,14 @@ private fun AuthenticatedNavGraph(
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.READING)
                 },
+                onOpenCourses = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.COURSES)
+                },
+                onOpenVideoCalls = {
+                    dashboardViewModel.clearBanner()
+                    navController.navigate(AppRoutes.VIDEO_CALLS)
+                },
                 onOpenProfile = {
                     dashboardViewModel.clearBanner()
                     navController.navigate(AppRoutes.PROFILE)
@@ -633,17 +761,16 @@ private fun AuthenticatedNavGraph(
                 Box(modifier = Modifier.fillMaxSize()) {
                     when (selectedTab) {
                         AppMainTab.HOME -> {
-                            EnglishAITheme(darkTheme = false) {
-                                DashboardScreen(
-                                    profileState = profileState,
-                                    sessionsState = sessionsState,
-                                    fallbackEmail = dashboardViewModel.currentEmail(),
-                                    isEmailVerified = dashboardViewModel.isEmailVerified(),
-                                    actionState = actionState,
-                                    bottomBar = effectiveBottomBar,
-                                    isOnline = isOnline,
-                                    showMenuButton = !isWideScreen,
-                                    onOpenMenu = openDrawer,
+                            DashboardScreen(
+                                profileState = profileState,
+                                sessionsState = sessionsState,
+                                fallbackEmail = dashboardViewModel.currentEmail(),
+                                isEmailVerified = dashboardViewModel.isEmailVerified(),
+                                actionState = actionState,
+                                bottomBar = effectiveBottomBar,
+                                isOnline = isOnline,
+                                showMenuButton = !isWideScreen,
+                                onOpenMenu = openDrawer,
                                 onOpenProfile = {
                                     dashboardViewModel.clearBanner()
                                     navController.navigate(AppRoutes.PROFILE)
@@ -672,9 +799,17 @@ private fun AuthenticatedNavGraph(
                                     dashboardViewModel.clearBanner()
                                     navController.navigate(AppRoutes.READING)
                                 },
+                                onOpenCourses = {
+                                    dashboardViewModel.clearBanner()
+                                    navController.navigate(AppRoutes.COURSES)
+                                },
                                 onOpenChat = {
                                     dashboardViewModel.clearBanner()
                                     selectedTab = AppMainTab.CHAT
+                                },
+                                onOpenVideoCalls = {
+                                    dashboardViewModel.clearBanner()
+                                    navController.navigate(AppRoutes.VIDEO_CALLS)
                                 },
                                 onOpenProgress = {
                                     dashboardViewModel.clearBanner()
@@ -691,18 +826,16 @@ private fun AuthenticatedNavGraph(
                                 onSignOut = performSignOut
                             )
                         }
-                    }
 
-                    AppMainTab.VOCABULARY -> {
-                        VocabularyRoute(
-                            vm = vocabularyViewModel,
-                            bottomBar = effectiveBottomBar,
-                            onBack = { selectedTab = AppMainTab.HOME }
-                        )
-                    }
+                        AppMainTab.VOCABULARY -> {
+                            VocabularyRoute(
+                                vm = vocabularyViewModel,
+                                bottomBar = effectiveBottomBar,
+                                onBack = { selectedTab = AppMainTab.HOME }
+                            )
+                        }
 
-                    AppMainTab.PATTERNS -> {
-                        EnglishAITheme(darkTheme = false) {
+                        AppMainTab.PATTERNS -> {
                             SentenceLearningScreen(
                                 viewModel = patternViewModel,
                                 bottomBar = if (patternFullscreen) ({}) else effectiveBottomBar,
@@ -710,28 +843,40 @@ private fun AuthenticatedNavGraph(
                                 onBack = { selectedTab = AppMainTab.HOME }
                             )
                         }
-                    }
 
-                    AppMainTab.SPEAKING -> {
-                        SpeakingRoute(
-                            level = loadedProfile?.safeLevel?.name ?: "Beginner",
-                            bottomBar = effectiveBottomBar,
-                            onBack = { selectedTab = AppMainTab.HOME }
-                        )
-                    }
-
-                    AppMainTab.CHAT -> {
-                        EnglishAITheme(darkTheme = false) {
-                            ChatRoute(
-                                vm = chatViewModel,
+                        AppMainTab.SPEAKING -> {
+                            SpeakingRoute(
+                                level = loadedProfile?.safeLevel?.name ?: "Beginner",
                                 bottomBar = effectiveBottomBar,
                                 onBack = { selectedTab = AppMainTab.HOME }
                             )
                         }
-                    }
 
-                    AppMainTab.PROGRESS -> {
-                        EnglishAITheme(darkTheme = false) {
+                        AppMainTab.CHAT -> {
+                            ChatRoute(
+                                vm = chatViewModel,
+                                bottomBar = effectiveBottomBar,
+                                onOpenVideoCalls = {
+                                    dashboardViewModel.clearBanner()
+                                    navController.navigate(AppRoutes.VIDEO_CALLS)
+                                },
+                                onStartDirectVideoCall = { peerUserId ->
+                                    runWithGlobalCallPermissions { videoEnabled ->
+                                        callViewModel.startDirectCall(
+                                            context = context,
+                                            targetUserId = peerUserId,
+                                            videoEnabled = videoEnabled
+                                        )
+                                        navController.navigate(AppRoutes.VIDEO_CALLS) {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                onBack = { selectedTab = AppMainTab.HOME }
+                            )
+                        }
+
+                        AppMainTab.PROGRESS -> {
                             StudentProfileDashboardScreen(
                                 state = studentDashboardState,
                                 isRefreshing = studentDashboardRefreshing,
@@ -751,6 +896,8 @@ private fun AuthenticatedNavGraph(
                                         "speaking", "speak" -> selectedTab = AppMainTab.SPEAKING
                                         "chat", "group" -> selectedTab = AppMainTab.CHAT
                                         "reading" -> navController.navigate(AppRoutes.READING)
+                                        "courses", "course" -> navController.navigate(AppRoutes.COURSES)
+                                        "calls", "video_calls", "video" -> navController.navigate(AppRoutes.VIDEO_CALLS)
                                         else -> selectedTab = AppMainTab.HOME
                                     }
                                 },
@@ -774,7 +921,6 @@ private fun AuthenticatedNavGraph(
                             )
                         }
                     }
-                }
 
                     OfflineFloatingBanner(
                         visible = !isOnline && selectedTab != AppMainTab.HOME,
@@ -804,6 +950,43 @@ private fun AuthenticatedNavGraph(
                     onRetry = {
                         if (NetworkMonitor.isDeviceOnline(context)) {
                             dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
+        }
+
+        composable(AppRoutes.COURSES) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                CoursesRoute(
+                    onBack = { navController.popBackStack() }
+                )
+                OfflineFloatingBanner(
+                    visible = !isOnline,
+                    isReconnecting = actionState.isSyncingBackend,
+                    onRetry = {
+                        if (NetworkMonitor.isDeviceOnline(context)) {
+                            dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
+        }
+
+        composable(AppRoutes.VIDEO_CALLS) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                VideoCallRoute(
+                    callViewModel = callViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+                OfflineFloatingBanner(
+                    visible = !isOnline && activeCallState.room == null,
+                    isReconnecting = actionState.isSyncingBackend,
+                    onRetry = {
+                        if (NetworkMonitor.isDeviceOnline(context)) {
+                            callViewModel.loadLobby(silent = false)
                         }
                     },
                     modifier = Modifier.align(Alignment.TopCenter)
@@ -876,6 +1059,46 @@ private fun AuthenticatedNavGraph(
                     navController.popBackStack()
                 },
                 onClearBanner = { dashboardViewModel.clearBanner() }
+            )
+        }
+    }
+
+        val incomingInvite = callLobbyState.incomingInvites.firstOrNull()
+        if (incomingInvite != null && activeCallState.room == null) {
+            IncomingCallBanner(
+                invite = incomingInvite,
+                busy = callLobbyState.busy,
+                onAccept = {
+                    runWithGlobalCallPermissions { videoEnabled ->
+                        callViewModel.acceptIncomingInvite(
+                            context = context,
+                            room = incomingInvite,
+                            videoEnabled = videoEnabled
+                        )
+                        if (currentRoute != AppRoutes.VIDEO_CALLS) {
+                            navController.navigate(AppRoutes.VIDEO_CALLS) {
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                },
+                onDecline = {
+                    callViewModel.declineIncomingInvite(context, incomingInvite.id)
+                },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
+
+        if (showCallPermissionDialog) {
+            PermissionPromptDialog(
+                title = "Microphone & Camera Required",
+                message = "Video calls require microphone (and optional camera) access. Please allow them in App Settings to answer or start calls.",
+                icon = Icons.Filled.Videocam,
+                onAllow = {
+                    showCallPermissionDialog = false
+                    openAppPermissionSettings(context)
+                },
+                onCancel = { showCallPermissionDialog = false }
             )
         }
     }

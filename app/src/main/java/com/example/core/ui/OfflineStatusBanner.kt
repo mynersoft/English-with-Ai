@@ -51,13 +51,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-
-private val OfflineSurfaceBg = Color(0xFFF4F7F6)
-private val OfflineSurfaceBorder = Color(0xFFD5E0DC)
-private val OfflineAccent = Color(0xFF0E6B3B)
-private val OfflineBadgeBg = Color(0xFFE0EFE8)
-private val OfflineTitleDark = Color(0xFF111827)
-private val OfflineBodyMuted = Color(0xFF4B5563)
+import com.example.ui.theme.LocalIsDarkTheme
 
 @Composable
 fun OfflineStatusCard(
@@ -78,10 +72,18 @@ fun OfflineStatusCard(
         label = "offline_icon_alpha"
     )
 
+    val isDark = LocalIsDarkTheme.current
+    val surfaceBg = if (isDark) Color(0xFF141E1A) else Color(0xFFF4F7F6)
+    val surfaceBorder = if (isDark) Color(0xFF283A33) else Color(0xFFD5E0DC)
+    val offlineAccent = if (isDark) Color(0xFF34D399) else Color(0xFF0E6B3B)
+    val badgeBg = if (isDark) Color(0xFF1A3A2B) else Color(0xFFE0EFE8)
+    val titleColor = if (isDark) Color(0xFFF3F4F6) else Color(0xFF111827)
+    val bodyMuted = if (isDark) Color(0xFFD1D5DB) else Color(0xFF4B5563)
+
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = OfflineSurfaceBg,
-        border = BorderStroke(1.dp, OfflineSurfaceBorder),
+        color = surfaceBg,
+        border = BorderStroke(1.dp, surfaceBorder),
         modifier = modifier
             .fillMaxWidth()
             .testTag("offline_status_card")
@@ -98,7 +100,7 @@ fun OfflineStatusCard(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(OfflineBadgeBg)
+                        .background(badgeBg)
                         .alpha(pulseAlpha),
                     contentAlignment = Alignment.Center
                 ) {
@@ -106,13 +108,13 @@ fun OfflineStatusCard(
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.2.dp,
-                            color = OfflineAccent
+                            color = offlineAccent
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Filled.WifiOff,
                             contentDescription = "Offline",
-                            tint = OfflineAccent,
+                            tint = offlineAccent,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -123,12 +125,12 @@ fun OfflineStatusCard(
                         text = if (isReconnecting) "Reconnecting..." else title,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = OfflineTitleDark
+                        color = titleColor
                     )
                     Text(
                         text = "Waiting for internet connection...",
                         style = MaterialTheme.typography.labelSmall,
-                        color = OfflineAccent,
+                        color = offlineAccent,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -137,12 +139,12 @@ fun OfflineStatusCard(
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
-                color = OfflineBodyMuted
+                color = bodyMuted
             )
 
             LinearProgressIndicator(
-                color = OfflineAccent,
-                trackColor = OfflineBadgeBg,
+                color = offlineAccent,
+                trackColor = badgeBg,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(3.dp)
@@ -153,8 +155,8 @@ fun OfflineStatusCard(
                 onClick = onRetry,
                 enabled = !isReconnecting,
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, OfflineAccent.copy(alpha = 0.4f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = OfflineAccent),
+                border = BorderStroke(1.dp, offlineAccent.copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = offlineAccent),
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .testTag("offline_retry_button")

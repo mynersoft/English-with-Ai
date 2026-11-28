@@ -90,6 +90,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.core.common.UiState
 import com.example.core.ui.OfflineStatusCard
@@ -97,19 +102,53 @@ import com.example.domain.model.CourseReportModule
 import com.example.domain.model.StreakCalendarData
 import com.example.domain.model.StudentDashboardData
 import com.example.domain.model.WeeklyActivityDay
+import com.example.ui.theme.AppThemeManager
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.LocalIsDarkTheme
 
-private val HeroMintTop = Color(0xFFD3F4E4)
-private val HeroMintMid = Color(0xFFEAFAF2)
-private val BrandEmerald = Color(0xFF0E6B3B)
-private val SectionBandBg = Color(0xFFF2F4F4)
 private val FlameOrange = Color(0xFFF97316)
-private val VocabGreen = Color(0xFF15803D)
-private val PatternsPurple = Color(0xFF7C3AED)
-private val SpeakingIndigo = Color(0xFF4F46E5)
-private val PracticeAmber = Color(0xFFF59E0B)
-private val DotInactive = Color(0xFFEAEEF0)
-private val TextDark = Color(0xFF111827)
-private val TextMuted = Color(0xFF6B7280)
+
+@Composable
+private fun dashBg(): Color = if (LocalIsDarkTheme.current) Color(0xFF0B1120) else Color.White
+
+@Composable
+private fun dashCard(): Color = if (LocalIsDarkTheme.current) Color(0xFF131C31) else Color.White
+
+@Composable
+private fun dashBandBg(): Color = if (LocalIsDarkTheme.current) Color(0xFF111827) else Color(0xFFF2F4F4)
+
+@Composable
+private fun dashHeroTop(): Color = if (LocalIsDarkTheme.current) Color(0xFF123526) else Color(0xFFD3F4E4)
+
+@Composable
+private fun dashHeroMid(): Color = if (LocalIsDarkTheme.current) Color(0xFF0E211C) else Color(0xFFEAFAF2)
+
+@Composable
+private fun dashEmerald(): Color = if (LocalIsDarkTheme.current) Color(0xFF34D399) else Color(0xFF0E6B3B)
+
+@Composable
+private fun dashVocabGreen(): Color = if (LocalIsDarkTheme.current) Color(0xFF4ADE80) else Color(0xFF15803D)
+
+@Composable
+private fun dashPatternsPurple(): Color = if (LocalIsDarkTheme.current) Color(0xFFC084FC) else Color(0xFF7C3AED)
+
+@Composable
+private fun dashSpeakingIndigo(): Color = if (LocalIsDarkTheme.current) Color(0xFF818CF8) else Color(0xFF4F46E5)
+
+@Composable
+private fun dashAmber(): Color = if (LocalIsDarkTheme.current) Color(0xFFFBBF24) else Color(0xFFF59E0B)
+
+@Composable
+private fun dashDotInactive(): Color = if (LocalIsDarkTheme.current) Color(0xFF1E293B) else Color(0xFFEAEEF0)
+
+@Composable
+private fun dashTextPrimary(): Color = if (LocalIsDarkTheme.current) Color(0xFFF8FAFC) else Color(0xFF111827)
+
+@Composable
+private fun dashTextMuted(): Color = if (LocalIsDarkTheme.current) Color(0xFF94A3B8) else Color(0xFF6B7280)
+
+@Composable
+private fun dashBorder(): Color = if (LocalIsDarkTheme.current) Color(0xFF23304A) else Color(0xFFE5E7EB)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,7 +177,7 @@ fun StudentProfileDashboardScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = Color.White,
+        containerColor = dashBg(),
         bottomBar = bottomBar
     ) { innerPadding ->
         Box(
@@ -172,7 +211,7 @@ fun StudentProfileDashboardScreen(
                                 .weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = BrandEmerald)
+                            CircularProgressIndicator(color = dashEmerald())
                         }
                     }
                 }
@@ -282,7 +321,7 @@ fun StudentProfileDashboardScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(10.dp)
-                                    .background(SectionBandBg)
+                                    .background(dashBandBg())
                             )
                         }
 
@@ -298,7 +337,7 @@ fun StudentProfileDashboardScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(10.dp)
-                                    .background(SectionBandBg)
+                                    .background(dashBandBg())
                             )
                         }
 
@@ -314,7 +353,7 @@ fun StudentProfileDashboardScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(10.dp)
-                                    .background(SectionBandBg)
+                                    .background(dashBandBg())
                             )
                         }
 
@@ -346,10 +385,13 @@ fun StudentProfileDashboardScreen(
 
     if (showSettingsSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val context = LocalContext.current
+        val themeMode by AppThemeManager.observeThemeMode(context).collectAsStateWithLifecycle()
+        val isDark = LocalIsDarkTheme.current
         ModalBottomSheet(
             onDismissRequest = { showSettingsSheet = false },
             sheetState = sheetState,
-            containerColor = Color.White
+            containerColor = dashCard()
         ) {
             Column(
                 modifier = Modifier
@@ -362,9 +404,66 @@ fun StudentProfileDashboardScreen(
                     text = "Account & Settings",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = TextDark,
-                    modifier = Modifier.padding(bottom = 6.dp)
+                    color = dashTextPrimary(),
+                    modifier = Modifier.padding(bottom = 2.dp)
                 )
+                Text(
+                    text = "Theme Mode",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = dashTextMuted()
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .testTag("progress_theme_mode_selector"),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AppThemeMode.entries.forEach { mode ->
+                        val selected = themeMode == mode
+                        val modeIcon = when (mode) {
+                            AppThemeMode.SYSTEM -> Icons.Filled.BrightnessAuto
+                            AppThemeMode.LIGHT -> Icons.Filled.LightMode
+                            AppThemeMode.DARK -> Icons.Filled.DarkMode
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (selected) (if (isDark) Color(0xFF133A29) else Color(0xFFD1FAE5))
+                            else (if (isDark) Color(0xFF1E293B) else Color(0xFFF3F4F6)),
+                            border = BorderStroke(
+                                1.dp,
+                                if (selected) dashEmerald() else Color.Transparent
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .minimumInteractiveComponentSize()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { AppThemeManager.setThemeMode(context, mode) }
+                                .testTag("progress_theme_chip_${mode.storageKey}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = modeIcon,
+                                    contentDescription = "${mode.label} theme",
+                                    tint = if (selected) dashEmerald() else dashTextMuted(),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    text = mode.label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) dashEmerald() else dashTextPrimary()
+                                )
+                            }
+                        }
+                    }
+                }
                 SettingsSheetItem(
                     icon = Icons.Filled.ManageAccounts,
                     title = "Edit Profile & Learning Level",
@@ -399,7 +498,7 @@ fun StudentProfileDashboardScreen(
                         }
                     )
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = dashBorder())
                 SettingsSheetItem(
                     icon = Icons.AutoMirrored.Filled.Logout,
                     title = "Sign Out",
@@ -434,12 +533,17 @@ private fun ProfileHeaderSection(
     onRefresh: () -> Unit,
     onOpenStreakCalendar: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val circleBtnBg = if (isDark) Color(0xFF131C31) else Color.White
+    val planBadgeBg = if (isDark) Color(0xFF1A2D24) else Color(0xFFD9E6DF)
+    val planBadgeFg = if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(HeroMintTop, HeroMintMid, Color.White)
+                    colors = listOf(dashHeroTop(), dashHeroMid(), dashBg())
                 )
             )
             .windowInsetsPadding(WindowInsets.statusBars)
@@ -454,7 +558,7 @@ private fun ProfileHeaderSection(
                 if (showMenuButton) {
                     Surface(
                         shape = CircleShape,
-                        color = Color.White,
+                        color = circleBtnBg,
                         shadowElevation = 2.dp,
                         modifier = Modifier.size(44.dp)
                     ) {
@@ -467,14 +571,14 @@ private fun ProfileHeaderSection(
                             Icon(
                                 imageVector = Icons.Filled.Menu,
                                 contentDescription = "Open student menu",
-                                tint = TextDark
+                                tint = dashTextPrimary()
                             )
                         }
                     }
                 }
                 Surface(
                     shape = CircleShape,
-                    color = Color.White,
+                    color = circleBtnBg,
                     shadowElevation = 2.dp,
                     modifier = Modifier.size(44.dp)
                 ) {
@@ -487,7 +591,7 @@ private fun ProfileHeaderSection(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back to Home",
-                            tint = TextDark
+                            tint = dashTextPrimary()
                         )
                     }
                 }
@@ -496,7 +600,7 @@ private fun ProfileHeaderSection(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Surface(
                     shape = CircleShape,
-                    color = Color.White,
+                    color = circleBtnBg,
                     shadowElevation = 2.dp,
                     modifier = Modifier.size(44.dp)
                 ) {
@@ -511,13 +615,13 @@ private fun ProfileHeaderSection(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
-                                color = BrandEmerald
+                                color = dashEmerald()
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Filled.Refresh,
                                 contentDescription = "Refresh progress",
-                                tint = TextDark
+                                tint = dashTextPrimary()
                             )
                         }
                     }
@@ -525,7 +629,7 @@ private fun ProfileHeaderSection(
 
                 Surface(
                     shape = CircleShape,
-                    color = Color.White,
+                    color = circleBtnBg,
                     shadowElevation = 2.dp,
                     modifier = Modifier.size(44.dp)
                 ) {
@@ -538,7 +642,7 @@ private fun ProfileHeaderSection(
                         Icon(
                             imageVector = Icons.Outlined.Settings,
                             contentDescription = "Account and settings",
-                            tint = TextDark
+                            tint = dashTextPrimary()
                         )
                     }
                 }
@@ -550,7 +654,7 @@ private fun ProfileHeaderSection(
         // Plan badge ("Free" or "Admin") matching screenshot
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = Color(0xFFD9E6DF)
+            color = planBadgeBg
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
@@ -560,14 +664,14 @@ private fun ProfileHeaderSection(
                 Icon(
                     imageVector = Icons.Filled.WorkspacePremium,
                     contentDescription = null,
-                    tint = Color(0xFF374151),
+                    tint = planBadgeFg,
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
                     text = planLabel,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF374151)
+                    color = planBadgeFg
                 )
             }
         }
@@ -586,7 +690,7 @@ private fun ProfileHeaderSection(
                     modifier = Modifier
                         .size(86.dp)
                         .clip(CircleShape)
-                        .border(2.dp, Color.White, CircleShape)
+                        .border(2.dp, circleBtnBg, CircleShape)
                 )
                 Box(
                     modifier = Modifier
@@ -595,7 +699,7 @@ private fun ProfileHeaderSection(
                         .size(16.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF16A34A))
-                        .border(2.dp, Color.White, CircleShape)
+                        .border(2.dp, circleBtnBg, CircleShape)
                 )
             }
 
@@ -607,7 +711,7 @@ private fun ProfileHeaderSection(
                     text = name,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = TextDark,
+                    color = dashTextPrimary(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -615,7 +719,7 @@ private fun ProfileHeaderSection(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted,
+                        color = dashTextMuted(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -641,7 +745,7 @@ private fun ProfileHeaderSection(
             )
             InlineStatMetric(
                 icon = Icons.Outlined.MenuBook,
-                iconTint = VocabGreen,
+                iconTint = dashVocabGreen(),
                 valueText = "$vocabCount",
                 labelText = "vocabulary",
                 modifier = Modifier.weight(1f)
@@ -658,14 +762,14 @@ private fun ProfileHeaderSection(
         ) {
             InlineStatMetric(
                 icon = Icons.Filled.GraphicEq,
-                iconTint = PatternsPurple,
+                iconTint = dashPatternsPurple(),
                 valueText = "$patternsCount",
                 labelText = "patterns",
                 modifier = Modifier.weight(1f)
             )
             InlineStatMetric(
                 icon = Icons.Filled.RecordVoiceOver,
-                iconTint = SpeakingIndigo,
+                iconTint = dashSpeakingIndigo(),
                 valueText = "${speakingMinutes}m",
                 labelText = if (speakingCount > 0) "AI talk ($speakingCount)" else "AI talk",
                 modifier = Modifier.weight(1f)
@@ -682,14 +786,14 @@ private fun ProfileHeaderSection(
         ) {
             InlineStatMetric(
                 icon = Icons.Filled.AutoStories,
-                iconTint = VocabGreen,
+                iconTint = dashVocabGreen(),
                 valueText = "$readingCount",
                 labelText = "passages",
                 modifier = Modifier.weight(1f)
             )
             InlineStatMetric(
                 icon = Icons.Outlined.MenuBook,
-                iconTint = Color(0xFF0F766E),
+                iconTint = if (isDark) Color(0xFF2DD4BF) else Color(0xFF0F766E),
                 valueText = "${readingMinutes}m",
                 labelText = "reading",
                 modifier = Modifier.weight(1f)
@@ -701,10 +805,10 @@ private fun ProfileHeaderSection(
         OutlinedButton(
             onClick = onOpenStreakCalendar,
             shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, Color(0xFFD5DCE0)),
+            border = BorderStroke(1.dp, dashBorder()),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
-                contentColor = BrandEmerald
+                containerColor = dashCard(),
+                contentColor = dashEmerald()
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -715,7 +819,7 @@ private fun ProfileHeaderSection(
             Icon(
                 imageVector = Icons.Outlined.EventAvailable,
                 contentDescription = null,
-                tint = BrandEmerald,
+                tint = dashEmerald(),
                 modifier = Modifier.size(19.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -723,7 +827,7 @@ private fun ProfileHeaderSection(
                 text = "View Streak Calendar",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = BrandEmerald
+                color = dashEmerald()
             )
         }
 
@@ -753,11 +857,11 @@ private fun InlineStatMetric(
         Spacer(modifier = Modifier.width(7.dp))
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = TextDark)) {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = dashTextPrimary())) {
                     append(valueText)
                 }
                 append(" ")
-                withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = TextMuted)) {
+                withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = dashTextMuted())) {
                     append(labelText)
                 }
             },
@@ -773,10 +877,11 @@ private fun LearningActivitySection(
     weekRangeLabel: String,
     weeklyActivity: List<WeeklyActivityDay>
 ) {
+    val isDark = LocalIsDarkTheme.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(dashBg())
             .padding(horizontal = 20.dp, vertical = 22.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -784,14 +889,14 @@ private fun LearningActivitySection(
             text = "Learning Activity",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = TextDark
+            color = dashTextPrimary()
         )
         if (weekRangeLabel.isNotBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = weekRangeLabel,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextMuted
+                color = dashTextMuted()
             )
         }
 
@@ -799,35 +904,35 @@ private fun LearningActivitySection(
 
         ActivityMatrixRow(
             icon = Icons.Filled.GraphicEq,
-            iconTint = PatternsPurple,
+            iconTint = dashPatternsPurple(),
             label = "Patterns",
             activeList = weeklyActivity.map { it.patternsActive }
         )
         Spacer(modifier = Modifier.height(14.dp))
         ActivityMatrixRow(
             icon = Icons.Filled.RecordVoiceOver,
-            iconTint = Color(0xFF3B82F6),
+            iconTint = if (isDark) Color(0xFF60A5FA) else Color(0xFF3B82F6),
             label = "AI Speaking",
             activeList = weeklyActivity.map { it.speakingActive }
         )
         Spacer(modifier = Modifier.height(14.dp))
         ActivityMatrixRow(
             icon = Icons.Filled.Style,
-            iconTint = BrandEmerald,
+            iconTint = dashEmerald(),
             label = "Vocabulary",
             activeList = weeklyActivity.map { it.vocabularyActive }
         )
         Spacer(modifier = Modifier.height(14.dp))
         ActivityMatrixRow(
             icon = Icons.Filled.AutoStories,
-            iconTint = Color(0xFF0F766E),
+            iconTint = if (isDark) Color(0xFF2DD4BF) else Color(0xFF0F766E),
             label = "Reading",
             activeList = weeklyActivity.map { it.readingActive }
         )
         Spacer(modifier = Modifier.height(14.dp))
         ActivityMatrixRow(
             icon = Icons.Filled.CheckCircle,
-            iconTint = PracticeAmber,
+            iconTint = dashAmber(),
             label = "Practice",
             activeList = weeklyActivity.map { it.practiceActive }
         )
@@ -850,7 +955,7 @@ private fun LearningActivitySection(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(BrandEmerald)
+                                .background(if (isDark) Color(0xFF10B981) else Color(0xFF0E6B3B))
                                 .padding(horizontal = 6.dp, vertical = 7.dp)
                         ) {
                             Text(
@@ -879,13 +984,13 @@ private fun LearningActivitySection(
                                 text = day.dayNumber,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = TextDark,
+                                color = dashTextPrimary(),
                                 lineHeight = 16.sp
                             )
                             Text(
                                 text = day.dayShort,
                                 fontSize = 10.sp,
-                                color = TextMuted,
+                                color = dashTextMuted(),
                                 lineHeight = 12.sp,
                                 maxLines = 1,
                                 softWrap = false
@@ -923,7 +1028,7 @@ private fun ActivityMatrixRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextDark,
+                color = dashTextPrimary(),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -939,7 +1044,7 @@ private fun ActivityMatrixRow(
                     modifier = Modifier
                         .size(13.dp)
                         .clip(CircleShape)
-                        .background(if (active) iconTint else DotInactive)
+                        .background(if (active) iconTint else dashDotInactive())
                 )
             }
         }
@@ -955,10 +1060,11 @@ private fun CourseReportSection(
     onToggleModule: (String) -> Unit,
     onOpenModule: (String) -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(dashBg())
             .padding(horizontal = 20.dp, vertical = 22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -967,12 +1073,12 @@ private fun CourseReportSection(
             text = "Course Report",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = TextDark
+            color = dashTextPrimary()
         )
         Text(
             text = "Overall $overallPercent% completed",
             style = MaterialTheme.typography.bodySmall,
-            color = TextMuted
+            color = dashTextMuted()
         )
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -980,17 +1086,17 @@ private fun CourseReportSection(
         modules.forEach { mod ->
             val isExpanded = expandedMap[mod.key] == true
             val (icon, iconTint, iconBg) = when (mod.key) {
-                "vocabulary" -> Triple(Icons.Filled.Style, BrandEmerald, Color(0xFFE6F4EC))
-                "patterns" -> Triple(Icons.Filled.GraphicEq, PatternsPurple, Color(0xFFF3E8FF))
-                "speaking" -> Triple(Icons.Filled.RecordVoiceOver, SpeakingIndigo, Color(0xFFEEF2FF))
-                "reading" -> Triple(Icons.Filled.AutoStories, BrandEmerald, Color(0xFFE6F4EC))
-                else -> Triple(Icons.Filled.Forum, Color(0xFF0F766E), Color(0xFFCCFBF1))
+                "vocabulary" -> Triple(Icons.Filled.Style, dashEmerald(), if (isDark) Color(0xFF133A29) else Color(0xFFE6F4EC))
+                "patterns" -> Triple(Icons.Filled.GraphicEq, dashPatternsPurple(), if (isDark) Color(0xFF321B4D) else Color(0xFFF3E8FF))
+                "speaking" -> Triple(Icons.Filled.RecordVoiceOver, dashSpeakingIndigo(), if (isDark) Color(0xFF1F2752) else Color(0xFFEEF2FF))
+                "reading" -> Triple(Icons.Filled.AutoStories, dashEmerald(), if (isDark) Color(0xFF133A29) else Color(0xFFE6F4EC))
+                else -> Triple(Icons.Filled.Forum, if (isDark) Color(0xFF2DD4BF) else Color(0xFF0F766E), if (isDark) Color(0xFF133A36) else Color(0xFFCCFBF1))
             }
 
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+                color = dashCard(),
+                border = BorderStroke(1.dp, dashBorder()),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
@@ -1022,7 +1128,7 @@ private fun CourseReportSection(
                                 text = mod.title,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = TextDark,
+                                color = dashTextPrimary(),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1030,7 +1136,7 @@ private fun CourseReportSection(
                                 Text(
                                     text = "$speakingMinutes min talked with AI",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = SpeakingIndigo,
+                                    color = dashSpeakingIndigo(),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -1040,12 +1146,12 @@ private fun CourseReportSection(
                             text = "${mod.percent}%",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Medium,
-                            color = TextMuted
+                            color = dashTextMuted()
                         )
                         Icon(
                             imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                             contentDescription = if (isExpanded) "Collapse" else "Expand",
-                            tint = TextMuted
+                            tint = dashTextMuted()
                         )
                     }
 
@@ -1060,16 +1166,16 @@ private fun CourseReportSection(
                                 .padding(top = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            HorizontalDivider(color = Color(0xFFF1F5F9))
+                            HorizontalDivider(color = dashBorder())
                             Text(
                                 text = mod.summary,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextMuted
+                                color = dashTextMuted()
                             )
                             Button(
                                 onClick = { onOpenModule(mod.route) },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = BrandEmerald,
+                                    containerColor = if (isDark) Color(0xFF10B981) else Color(0xFF0E6B3B),
                                     contentColor = Color.White
                                 ),
                                 shape = RoundedCornerShape(12.dp),
@@ -1102,10 +1208,13 @@ private fun StreakCalendarDialog(
     val leadingBlanks = calendar.firstDayOfWeek.coerceIn(0, 6)
     val totalCells = leadingBlanks + calendar.daysInMonth
     val weeks = (totalCells + 6) / 7
+    val isDark = LocalIsDarkTheme.current
+    val activeCircle = if (isDark) Color(0xFF10B981) else Color(0xFF0E6B3B)
+    val todaySoft = if (isDark) Color(0xFF133A29) else Color(0xFFE6F4EC)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = dashCard(),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1138,7 +1247,7 @@ private fun StreakCalendarDialog(
                         Text(
                             text = d,
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextMuted,
+                            color = dashTextMuted(),
                             textAlign = TextAlign.Center,
                             modifier = Modifier.weight(1f)
                         )
@@ -1166,14 +1275,14 @@ private fun StreakCalendarDialog(
                                                 .clip(CircleShape)
                                                 .background(
                                                     when {
-                                                        isActive -> BrandEmerald
-                                                        isToday -> Color(0xFFE6F4EC)
+                                                        isActive -> activeCircle
+                                                        isToday -> todaySoft
                                                         else -> Color.Transparent
                                                     }
                                                 )
                                                 .then(
                                                     if (isToday && !isActive) {
-                                                        Modifier.border(1.5.dp, BrandEmerald, CircleShape)
+                                                        Modifier.border(1.5.dp, dashEmerald(), CircleShape)
                                                     } else Modifier
                                                 ),
                                             contentAlignment = Alignment.Center
@@ -1184,8 +1293,8 @@ private fun StreakCalendarDialog(
                                                 fontWeight = if (isActive || isToday) FontWeight.Bold else FontWeight.Normal,
                                                 color = when {
                                                     isActive -> Color.White
-                                                    isToday -> BrandEmerald
-                                                    else -> TextDark
+                                                    isToday -> dashEmerald()
+                                                    else -> dashTextPrimary()
                                                 }
                                             )
                                         }
@@ -1199,7 +1308,7 @@ private fun StreakCalendarDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close", color = BrandEmerald, fontWeight = FontWeight.Bold)
+                Text("Close", color = dashEmerald(), fontWeight = FontWeight.Bold)
             }
         }
     )
@@ -1211,9 +1320,10 @@ private fun CalendarSummaryPill(
     value: String,
     modifier: Modifier = Modifier
 ) {
+    val isDark = LocalIsDarkTheme.current
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = Color(0xFFF3F8F5),
+        color = if (isDark) Color(0xFF1A2A24) else Color(0xFFF3F8F5),
         modifier = modifier
     ) {
         Column(
@@ -1224,12 +1334,12 @@ private fun CalendarSummaryPill(
                 text = value,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = BrandEmerald
+                color = dashEmerald()
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = TextMuted
+                color = dashTextMuted()
             )
         }
     }
@@ -1239,12 +1349,13 @@ private fun CalendarSummaryPill(
 private fun SettingsSheetItem(
     icon: ImageVector,
     title: String,
-    tint: Color = TextDark,
+    tint: Color = dashTextPrimary(),
     onClick: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFF8FAFC),
+        color = if (isDark) Color(0xFF1E293B) else Color(0xFFF8FAFC),
         modifier = Modifier
             .fillMaxWidth()
             .minimumInteractiveComponentSize()
@@ -1267,7 +1378,7 @@ private fun SettingsSheetItem(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = TextMuted
+                tint = dashTextMuted()
             )
         }
     }

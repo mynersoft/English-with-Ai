@@ -15,7 +15,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.core.common.UiState
 import com.example.core.ui.CelebrationOverlay
+import com.example.core.ui.SystemBarsAppearance
 import com.example.ui.theme.EnglishAITheme
+import com.example.ui.theme.LocalIsDarkTheme
 
 private object VocabRoutes {
     const val DASHBOARD = "vocab_dashboard"
@@ -62,14 +64,14 @@ fun VocabularyRoute(
     val adminState by adminVm.state.collectAsStateWithLifecycle()
 
     val autoPronounce = (settingsState as? UiState.Success)?.data?.autoPronounce ?: true
+    val isDark = LocalIsDarkTheme.current
 
-    EnglishAITheme(darkTheme = false) {
-        CompositionLocalProvider(LocalVocabDarkTheme provides false) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                NavHost(
-                    navController = nav,
-                    startDestination = VocabRoutes.DASHBOARD
-                ) {
+    CompositionLocalProvider(LocalVocabDarkTheme provides isDark) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                navController = nav,
+                startDestination = VocabRoutes.DASHBOARD
+            ) {
         composable(VocabRoutes.DASHBOARD) {
             VocabularyDashboardScreen(
                 dashboardState = dashboardState,
@@ -274,20 +276,25 @@ fun VocabularyRoute(
         }
 
         composable(VocabRoutes.ADMIN) {
-            VocabAdminScreen(
-                isAdmin = isAdmin,
-                state = adminState,
-                onBack = { nav.popBackStack() },
-                onInit = { adminVm.loadInitial() },
-                onFilterChange = { search, level, cat -> adminVm.updateFilters(search, level, cat) },
-                onPageChange = { p -> adminVm.loadWords(p) },
-                onSaveWord = { word, done -> adminVm.saveWord(word, done) },
-                onTogglePublish = { id, pub -> adminVm.togglePublish(id, pub) },
-                onDeleteWord = { id -> adminVm.deleteWord(id) },
-                onSaveCategory = { id, name, desc, parent, active -> adminVm.saveCategory(id, name, desc, parent, active) },
-                onDeleteCategory = { id -> adminVm.deleteCategory(id) },
-                onImportCsv = { csv -> adminVm.importCsv(csv) }
-            )
+            EnglishAITheme(darkTheme = true) {
+                CompositionLocalProvider(LocalVocabDarkTheme provides true) {
+                    SystemBarsAppearance(lightStatusBars = false, lightNavigationBars = false)
+                    VocabAdminScreen(
+                        isAdmin = isAdmin,
+                        state = adminState,
+                        onBack = { nav.popBackStack() },
+                        onInit = { adminVm.loadInitial() },
+                        onFilterChange = { search, level, cat -> adminVm.updateFilters(search, level, cat) },
+                        onPageChange = { p -> adminVm.loadWords(p) },
+                        onSaveWord = { word, done -> adminVm.saveWord(word, done) },
+                        onTogglePublish = { id, pub -> adminVm.togglePublish(id, pub) },
+                        onDeleteWord = { id -> adminVm.deleteWord(id) },
+                        onSaveCategory = { id, name, desc, parent, active -> adminVm.saveCategory(id, name, desc, parent, active) },
+                        onDeleteCategory = { id -> adminVm.deleteCategory(id) },
+                        onImportCsv = { csv -> adminVm.importCsv(csv) }
+                    )
+                }
+            }
         }
                 }
                 CelebrationOverlay(
@@ -296,5 +303,4 @@ fun VocabularyRoute(
                 )
             }
         }
-    }
 }

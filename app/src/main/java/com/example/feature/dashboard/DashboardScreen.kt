@@ -31,16 +31,20 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -63,6 +67,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -72,6 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.example.R
 import com.example.core.common.UiState
 import com.example.core.ui.BannerTone
@@ -79,14 +85,34 @@ import com.example.core.ui.OfflineStatusCard
 import com.example.core.ui.StatusBanner
 import com.example.domain.model.UserProfile
 import com.example.domain.model.UserSession
+import com.example.ui.theme.AppThemeManager
+import com.example.ui.theme.LocalIsDarkTheme
 import java.util.Calendar
 
 private val HomeEmerald = Color(0xFF0E6B3B)
 private val HomeEmeraldBright = Color(0xFF15803D)
-private val HomeSurfaceBg = Color(0xFFF8FAF9)
-private val HomeTextDark = Color(0xFF111827)
-private val HomeTextMuted = Color(0xFF6B7280)
 private val HomeFlameOrange = Color(0xFFF97316)
+
+@Composable
+private fun homeBgColor(): Color = if (LocalIsDarkTheme.current) Color(0xFF0B1120) else Color(0xFFF8FAF9)
+
+@Composable
+private fun homeCardColor(): Color = if (LocalIsDarkTheme.current) Color(0xFF131C31) else Color.White
+
+@Composable
+private fun homeBorderColor(): Color = if (LocalIsDarkTheme.current) Color(0xFF23304A) else Color(0xFFE5E7EB)
+
+@Composable
+private fun homeTextPrimary(): Color = if (LocalIsDarkTheme.current) Color(0xFFF8FAFC) else Color(0xFF111827)
+
+@Composable
+private fun homeTextMuted(): Color = if (LocalIsDarkTheme.current) Color(0xFF94A3B8) else Color(0xFF6B7280)
+
+@Composable
+private fun homeAccentEmerald(): Color = if (LocalIsDarkTheme.current) Color(0xFF34D399) else HomeEmerald
+
+@Composable
+private fun homeEmeraldBadgeBg(): Color = if (LocalIsDarkTheme.current) Color(0xFF133A29) else Color(0xFFE6F4EC)
 
 @Composable
 fun DashboardScreen(
@@ -106,7 +132,9 @@ fun DashboardScreen(
     onOpenSentenceLearning: () -> Unit = {},
     onOpenVocabulary: () -> Unit = {},
     onOpenReading: () -> Unit = {},
+    onOpenCourses: () -> Unit = {},
     onOpenChat: () -> Unit = {},
+    onOpenVideoCalls: () -> Unit = {},
     onOpenProgress: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     onRetryBackendSync: () -> Unit = {},
@@ -124,7 +152,7 @@ fun DashboardScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = HomeSurfaceBg,
+        containerColor = homeBgColor(),
         bottomBar = bottomBar,
         topBar = {
             HomeTopHeader(
@@ -149,7 +177,7 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = HomeEmerald)
+                        CircularProgressIndicator(color = homeAccentEmerald())
                     }
                 }
 
@@ -189,8 +217,10 @@ fun DashboardScreen(
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
                                 onOpenReading = onOpenReading,
+                                onOpenCourses = onOpenCourses,
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenChat = onOpenChat,
+                                onOpenVideoCalls = onOpenVideoCalls,
                                 onOpenProgress = onOpenProgress
                             )
                         }
@@ -262,8 +292,10 @@ fun DashboardScreen(
                                 onOpenSentenceLearning = onOpenSentenceLearning,
                                 onOpenVocabulary = onOpenVocabulary,
                                 onOpenReading = onOpenReading,
+                                onOpenCourses = onOpenCourses,
                                 onOpenSpeaking = onOpenSpeaking,
                                 onOpenChat = onOpenChat,
+                                onOpenVideoCalls = onOpenVideoCalls,
                                 onOpenProgress = onOpenProgress
                             )
                         }
@@ -299,8 +331,14 @@ private fun HomeTopHeader(
     onStreakClick: () -> Unit,
     onAvatarClick: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+    val headerBg = if (isDark) Color(0xFF111827) else Color.White
+    val pillBg = if (isDark) Color(0xFF1E293B) else Color(0xFFF3F4F6)
+
     Surface(
-        color = Color.White,
+        color = headerBg,
         shadowElevation = 1.dp
     ) {
         Row(
@@ -325,16 +363,16 @@ private fun HomeTopHeader(
                         Icon(
                             imageVector = Icons.Filled.Menu,
                             contentDescription = "Open student menu",
-                            tint = HomeTextDark
+                            tint = homeTextPrimary()
                         )
                     }
                 }
                 Text(
                     text = buildAnnotatedString {
-                        withStyle(SpanStyle(color = HomeEmerald, fontWeight = FontWeight.ExtraBold)) {
+                        withStyle(SpanStyle(color = homeAccentEmerald(), fontWeight = FontWeight.ExtraBold)) {
                             append("English")
                         }
-                        withStyle(SpanStyle(color = HomeTextDark, fontWeight = FontWeight.ExtraBold)) {
+                        withStyle(SpanStyle(color = homeTextPrimary(), fontWeight = FontWeight.ExtraBold)) {
                             append(" AI")
                         }
                     },
@@ -346,12 +384,26 @@ private fun HomeTopHeader(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                // Quick Light/Dark Mode Toggle
+                IconButton(
+                    onClick = { AppThemeManager.toggleLightDark(context, systemDark) },
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("home_theme_toggle_button")
+                ) {
+                    Icon(
+                        imageVector = if (isDark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                        contentDescription = if (isDark) "Switch to light mode" else "Switch to dark mode",
+                        tint = if (isDark) Color(0xFFFCD34D) else Color(0xFF334155)
+                    )
+                }
+
                 // Streak pill
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFFF3F4F6),
+                    color = pillBg,
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .clickable(onClick = onStreakClick)
@@ -373,7 +425,7 @@ private fun HomeTopHeader(
                             text = "$streakDays",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = HomeTextDark
+                            color = homeTextPrimary()
                         )
                     }
                 }
@@ -394,7 +446,7 @@ private fun HomeTopHeader(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .border(1.5.dp, Color(0xFFD1FAE5), CircleShape)
+                            .border(1.5.dp, if (isDark) Color(0xFF34D399) else Color(0xFFD1FAE5), CircleShape)
                     )
                     Box(
                         modifier = Modifier
@@ -403,7 +455,7 @@ private fun HomeTopHeader(
                             .size(11.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF16A34A))
-                            .border(1.5.dp, Color.White, CircleShape)
+                            .border(1.5.dp, headerBg, CircleShape)
                     )
                 }
             }
@@ -442,15 +494,15 @@ private fun HomeGreetingSection(
             Text(
                 text = "$greetingPrefix, $firstName 👋",
                 style = MaterialTheme.typography.bodyMedium,
-                color = HomeTextMuted,
+                color = homeTextMuted(),
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = HomeTextDark, fontWeight = FontWeight.Bold)) {
+                    withStyle(SpanStyle(color = homeTextPrimary(), fontWeight = FontWeight.Bold)) {
                         append("What will you ")
                     }
-                    withStyle(SpanStyle(color = HomeEmerald, fontWeight = FontWeight.ExtraBold)) {
+                    withStyle(SpanStyle(color = homeAccentEmerald(), fontWeight = FontWeight.ExtraBold)) {
                         append("learn today?")
                     }
                 },
@@ -460,7 +512,7 @@ private fun HomeGreetingSection(
 
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFE6F4EC),
+            color = homeEmeraldBadgeBg(),
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(onClick = onOpenProgress)
@@ -468,7 +520,7 @@ private fun HomeGreetingSection(
             Text(
                 text = "$level · Day $currentDay/60\n${dailyGoalMin}m goal",
                 style = MaterialTheme.typography.labelSmall,
-                color = HomeEmerald,
+                color = homeAccentEmerald(),
                 fontWeight = FontWeight.SemiBold,
                 lineHeight = 14.sp,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -484,8 +536,10 @@ private fun AllHomeFeaturesSection(
     onOpenSentenceLearning: () -> Unit,
     onOpenVocabulary: () -> Unit,
     onOpenReading: () -> Unit,
+    onOpenCourses: () -> Unit = {},
     onOpenSpeaking: () -> Unit,
     onOpenChat: () -> Unit,
+    onOpenVideoCalls: () -> Unit = {},
     onOpenProgress: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -707,13 +761,13 @@ private fun AllHomeFeaturesSection(
                                             text = "fluent",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = HomeTextDark,
+                                            color = Color(0xFF111827),
                                             maxLines = 1
                                         )
                                         Text(
                                             text = "সাবলীল",
                                             fontSize = 8.sp,
-                                            color = HomeTextMuted,
+                                            color = Color(0xFF6B7280),
                                             maxLines = 1
                                         )
                                     }
@@ -828,7 +882,97 @@ private fun AllHomeFeaturesSection(
             }
         }
 
-        // 4 & 5. AI Speaking Partner + Student English Chat (2-Column Grid)
+        // 4. Structured Courses Card (Royal Blue Gradient Card)
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Color.Transparent,
+            shadowElevation = 2.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(onClick = onOpenCourses)
+                .testTag("nav_courses_card")
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF1D4ED8), Color(0xFF0369A1))
+                        )
+                    )
+                    .padding(18.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            HeroPillBadge(text = "Modules & Lessons", bg = Color.White, fg = Color(0xFF1D4ED8))
+                            HeroPillBadge(
+                                text = "Video · PDF · Notes",
+                                bg = Color.White.copy(alpha = 0.2f),
+                                fg = Color.White
+                            )
+                        }
+                        Text(
+                            text = "Structured Courses",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Step-by-step video lessons, downloadable PDFs, rich notes & offline mode",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.88f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Button(
+                            onClick = onOpenCourses,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF1D4ED8)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("quick_nav_courses_button")
+                        ) {
+                            Text("Browse Courses", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.School,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5 & 6. AI Speaking Partner + Student English Chat (2-Column Grid)
+        val isDark = LocalIsDarkTheme.current
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -837,8 +981,8 @@ private fun AllHomeFeaturesSection(
                 icon = Icons.Filled.Mic,
                 title = "AI Speaking",
                 subtitle = "Real-time voice chat & instant corrections",
-                accent = Color(0xFF2563EB),
-                accentBg = Color(0xFFDBEAFE),
+                accent = if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB),
+                accentBg = if (isDark) Color(0xFF1E3A5F) else Color(0xFFDBEAFE),
                 testTag = "quick_nav_speaking_button",
                 onClick = onOpenSpeaking,
                 modifier = Modifier.weight(1f)
@@ -847,12 +991,101 @@ private fun AllHomeFeaturesSection(
                 icon = Icons.Filled.Forum,
                 title = "Student Chat",
                 subtitle = "Study groups, 1-on-1 & handwriting OCR",
-                accent = HomeEmerald,
-                accentBg = Color(0xFFD1FAE5),
+                accent = homeAccentEmerald(),
+                accentBg = if (isDark) Color(0xFF133A29) else Color(0xFFD1FAE5),
                 testTag = "quick_nav_chat_button",
                 onClick = onOpenChat,
                 modifier = Modifier.weight(1f)
             )
+        }
+
+        // 7. Live Video Calls Card (1-on-1 + Public/Private Group Rooms)
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Color.Transparent,
+            shadowElevation = 2.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(onClick = onOpenVideoCalls)
+                .testTag("nav_video_calls_card")
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF7C3AED), Color(0xFFDB2777))
+                        )
+                    )
+                    .padding(18.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            HeroPillBadge(text = "1-on-1 & Group", bg = Color.White, fg = Color(0xFF7C3AED))
+                            HeroPillBadge(
+                                text = "Public · Private Code",
+                                bg = Color.White.copy(alpha = 0.2f),
+                                fg = Color.White
+                            )
+                        }
+                        Text(
+                            text = "Live Video Practice Calls",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Practice face-to-face English with 1-on-1 calls or join public & private group rooms",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Button(
+                            onClick = onOpenVideoCalls,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF7C3AED)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("quick_nav_video_calls_button")
+                        ) {
+                            Text("Open Video Calls", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Videocam,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -890,8 +1123,8 @@ private fun HomeFeatureGridCard(
 ) {
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+        color = homeCardColor(),
+        border = BorderStroke(1.dp, homeBorderColor()),
         modifier = modifier
             .minimumInteractiveComponentSize()
             .clip(RoundedCornerShape(20.dp))
@@ -920,14 +1153,14 @@ private fun HomeFeatureGridCard(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = HomeTextDark,
+                color = homeTextPrimary(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = HomeTextMuted,
+                color = homeTextMuted(),
                 minLines = 2,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -964,12 +1197,13 @@ private fun AccountControlsSection(
     onOpenAdmin: () -> Unit,
     onSignOut: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = "Account & Settings",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = HomeTextDark
+            color = homeTextPrimary()
         )
 
         Row(
@@ -1000,10 +1234,13 @@ private fun AccountControlsSection(
         }
 
         if (isAdmin) {
+            val adminCardBg = if (isDark) Color(0xFF281E10) else Color(0xFFFEF5E6)
+            val adminIconBg = if (isDark) Color(0xFF452D0E) else Color(0xFFFDE68A)
+            val adminAccent = if (isDark) Color(0xFFFBBF24) else Color(0xFFB45309)
             Surface(
                 shape = RoundedCornerShape(18.dp),
-                color = Color(0xFFFEF5E6),
-                border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f)),
+                color = adminCardBg,
+                border = BorderStroke(1.dp, adminAccent.copy(alpha = 0.45f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .minimumInteractiveComponentSize()
@@ -1022,13 +1259,13 @@ private fun AccountControlsSection(
                         modifier = Modifier
                             .size(42.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFFDE68A)),
+                            .background(adminIconBg),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AdminPanelSettings,
                             contentDescription = null,
-                            tint = Color(0xFFB45309)
+                            tint = adminAccent
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -1036,18 +1273,18 @@ private fun AccountControlsSection(
                             text = "Admin Dashboard",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = HomeTextDark
+                            color = homeTextPrimary()
                         )
                         Text(
                             text = "Manage Patterns, Vocabulary, Categories, CSV & Reading",
                             style = MaterialTheme.typography.bodySmall,
-                            color = HomeTextMuted
+                            color = homeTextMuted()
                         )
                     }
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = Color(0xFFB45309)
+                        tint = adminAccent
                     )
                 }
             }
@@ -1092,8 +1329,8 @@ private fun CompactAccountTile(
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+        color = homeCardColor(),
+        border = BorderStroke(1.dp, homeBorderColor()),
         modifier = modifier
             .minimumInteractiveComponentSize()
             .clip(RoundedCornerShape(14.dp))
@@ -1108,14 +1345,14 @@ private fun CompactAccountTile(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = HomeEmerald,
+                tint = homeAccentEmerald(),
                 modifier = Modifier.size(20.dp)
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = HomeTextDark,
+                color = homeTextPrimary(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1129,10 +1366,15 @@ private fun BackendSyncWarningCard(
     isSyncing: Boolean,
     onRetry: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val bg = if (isDark) Color(0xFF2B2110) else Color(0xFFFFFBEB)
+    val border = if (isDark) Color(0xFF78350F) else Color(0xFFFDE68A)
+    val titleColor = if (isDark) Color(0xFFFCD34D) else Color(0xFF92400E)
+    val bodyColor = if (isDark) Color(0xFFFDE68A) else Color(0xFF78350F)
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = Color(0xFFFFFBEB),
-        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+        color = bg,
+        border = BorderStroke(1.dp, border),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1143,17 +1385,17 @@ private fun BackendSyncWarningCard(
                 text = if (isSyncing) "Syncing Your Account..." else "Connection Taking Longer",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF92400E)
+                color = titleColor
             )
             Text(
                 text = if (isSyncing) "Connecting to the server. Please hold on a moment." else error,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF78350F)
+                color = bodyColor
             )
             if (isSyncing) {
                 LinearProgressIndicator(
-                    color = HomeEmerald,
-                    trackColor = Color(0xFFFEF3C7),
+                    color = homeAccentEmerald(),
+                    trackColor = border,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(3.dp)
@@ -1164,8 +1406,8 @@ private fun BackendSyncWarningCard(
                 onClick = onRetry,
                 enabled = !isSyncing,
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFFD97706).copy(alpha = 0.45f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF92400E)),
+                border = BorderStroke(1.dp, titleColor.copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = titleColor),
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .testTag("retry_backend_sync_button")

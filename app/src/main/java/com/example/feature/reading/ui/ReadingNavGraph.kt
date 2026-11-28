@@ -2,6 +2,7 @@ package com.example.feature.reading.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -12,10 +13,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.core.common.UiState
+import com.example.core.ui.SystemBarsAppearance
 import com.example.feature.reading.PassageReaderViewModel
 import com.example.feature.reading.ReadingAdminViewModel
 import com.example.feature.reading.ReadingDashboardViewModel
 import com.example.feature.reading.ReadingSettingsViewModel
+import com.example.feature.vocabulary.LocalVocabDarkTheme
+import com.example.ui.theme.EnglishAITheme
 
 private object ReadingRoutes {
     const val DASHBOARD = "reading_dashboard"
@@ -88,13 +92,18 @@ fun ReadingRoute(
         composable(ReadingRoutes.ADMIN) {
             if (isAdmin) {
                 val adminVm: ReadingAdminViewModel = viewModel()
-                ReadingAdminScreen(
-                    vm = adminVm,
-                    onBack = {
-                        navController.popBackStack()
-                        dashboardVm.loadAll(silent = true)
+                EnglishAITheme(darkTheme = true) {
+                    CompositionLocalProvider(LocalVocabDarkTheme provides true) {
+                        SystemBarsAppearance(lightStatusBars = false, lightNavigationBars = false)
+                        ReadingAdminScreen(
+                            vm = adminVm,
+                            onBack = {
+                                navController.popBackStack()
+                                dashboardVm.loadAll(silent = true)
+                            }
+                        )
                     }
-                )
+                }
             }
         }
     }

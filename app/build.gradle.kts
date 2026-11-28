@@ -168,6 +168,21 @@ secrets {
     ignoreList.add("AI_API_KEY")
     ignoreList.add("API_BASE_URL")
     ignoreList.add("BACKEND_BASE_URL")
+    ignoreList.add("CLOUDINARY_API_KEY")
+    ignoreList.add("CLOUDINARY_API_SECRET")
+    ignoreList.add("CLOUDINARY_CLOUD_NAME")
+    ignoreList.add("CALL_PROVIDER")
+    ignoreList.add("CALL_P2P_MAX_PARTICIPANTS")
+    ignoreList.add("CALL_SFU_MAX_PARTICIPANTS")
+    ignoreList.add("TURN_SERVER_URL")
+    ignoreList.add("TURN_USERNAME")
+    ignoreList.add("TURN_CREDENTIAL")
+    ignoreList.add("LIVEKIT_URL")
+    ignoreList.add("LIVEKIT_API_KEY")
+    ignoreList.add("LIVEKIT_API_SECRET")
+    ignoreList.add("AGORA_APP_ID")
+    ignoreList.add("DAILY_API_KEY")
+    ignoreList.add("DAILY_DOMAIN")
 }
 
 // Firebase Google Services
@@ -213,8 +228,15 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
 
-    // Network
+    // Network & Media
     implementation(libs.okhttp)
+    implementation(libs.coil.compose)
+    implementation(libs.stream.webrtc.android)
+
+    // Local Offline Persistence (Room)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // Unit Testing
     testImplementation(libs.androidx.compose.ui.test.junit4)

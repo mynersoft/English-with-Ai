@@ -71,10 +71,10 @@ function parseCorrectionJson(raw) {
 }
 
 /**
- * Corrects a student's English chat message using server AI (if configured).
+ * Corrects a student's English chat message using server AI (if configured & enabled).
  * Returns status: "unavailable" when AI_API_KEY is not set (never fakes AI output).
  */
-export async function correctEnglishChatMessage(text) {
+export async function correctEnglishChatMessage(text, { userId = "system", isPremium = false } = {}) {
   const original = String(text || "").trim();
   if (!original) {
     return {
@@ -96,29 +96,36 @@ export async function correctEnglishChatMessage(text) {
     };
   }
 
-  const system = `You are a helpful English grammar corrector for Bengali-speaking students chatting in an English practice room.
-Check the student's chat message for spelling mistakes, wrong verb forms, missing/wrong prepositions, tense errors, or unnatural grammar.
-Keep the student's intended meaning and casual chat tone. Do NOT change messages just for formality or missing trailing punctuation.
-Examples:
-- "I foel like to go" -> "I feel like going"
-- "Where are you live?" -> "Where do you live?"
-- "Yes" -> no mistake.
-
-Return ONLY valid JSON:
-{
-  "hasMistake": true or false,
-  "correctedText": "natural corrected English sentence (empty string if no mistake)",
-  "explanationBn": "1 short sentence in simple Bangla explaining the fix (empty string if no mistake)"
-}`;
-
   try {
+    const { buildChatGrammarSystemPrompt } = await import("@/lib/aiConfigUtils");
+    const { getEffectiveAiConfig } = await import("@/modules/ai/aiConfig.service");
+    const config = await getEffectiveAiConfig();
+
+    if (
+      config?.isEnabled === false ||
+      config?.conversation?.chatGrammarEnabled === false ||
+      config?.conversation?.autoCorrectGrammar === false
+    ) {
+      return {
+        status: "none",
+        hasMistake: false,
+        correctedText: "",
+        tokens: [],
+        explanationBn: "",
+      };
+    }
+
+    const system = buildChatGrammarSystemPrompt(config);
     const { generateText } = await import("@/lib/aiProvider");
     const raw = await generateText({
       system,
       messages: [{ role: "user", content: original }],
       json: true,
-      maxTokens: 250,
-      temperature: 0.2,
+      maxTokens: Math.min(400, Number(config?.maxOutputTokens || 300)),
+      temperature: Math.min(0.4, Number(config?.temperature ?? 0.2)),
+      feature: "chat_grammar",
+      userId,
+      isPremium,
     });
 
     const parsed = parseCorrectionJson(raw);
@@ -163,7 +170,9 @@ Return ONLY valid JSON:
       hasMistake: false,
       correctedText: "",
       tokens: [],
-      explanationBn: "AI grammar check temporarily unavailable.",
+      explanationBn: err?.code === "AI_DAILY_LIMIT_REACHED"
+        ? err.message
+        : "AI grammar check temporarily unavailable.",
     };
   }
 }
@@ -175,7 +184,12 @@ const MAX_BASE64_LENGTH = 7_000_000; // ~5 MB binary
  * Extracts only the handwritten text from an uploaded photo without storing the image.
  * Preserves the student's actual wording so chat AI correction can review it afterwards.
  */
-export async function extractHandwritingTextFromImage({ imageBase64, mimeType = "image/jpeg" }) {
+export async function extractHandwritingTextFromImage({
+  imageBase64,
+  mimeType = "image/jpeg",
+  userId = "system",
+  isPremium = false,
+}) {
   const cleanB64 = String(imageBase64 || "").replace(/\s+/g, "");
   const normalizedMime = String(mimeType || "image/jpeg").toLowerCase().trim();
 
@@ -218,6 +232,9 @@ Rules:
     json: true,
     maxTokens: 500,
     temperature: 0.1,
+    feature: "chat_ocr",
+    userId,
+    isPremium,
   });
 
   const parsed = parseCorrectionJson(raw);

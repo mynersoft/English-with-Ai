@@ -36,8 +36,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
@@ -73,15 +75,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
+import com.example.ui.theme.AppThemeManager
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.LocalIsDarkTheme
 import kotlinx.coroutines.launch
 
-private val DrawerEmerald = Color(0xFF0E6B3B)
-private val DrawerMintTop = Color(0xFFD3F4E4)
-private val DrawerMintBottom = Color(0xFFEAFAF2)
-private val DrawerActivePill = Color(0xFFD1FAE5)
-private val DrawerTextDark = Color(0xFF111827)
-private val DrawerTextMuted = Color(0xFF6B7280)
 private val DrawerFlameOrange = Color(0xFFF97316)
 
 private data class StudentSidebarEntry(
@@ -110,6 +115,8 @@ fun StudentSidebarContainer(
     gesturesEnabled: Boolean = true,
     onSelectTab: (AppMainTab) -> Unit,
     onOpenReading: () -> Unit,
+    onOpenCourses: () -> Unit = {},
+    onOpenVideoCalls: () -> Unit = {},
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
@@ -120,6 +127,9 @@ fun StudentSidebarContainer(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var confirmLogout by remember { mutableStateOf(false) }
+
+    val isDark = LocalIsDarkTheme.current
+    val drawerBg = if (isDark) Color(0xFF111827) else Color.White
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideScreen = maxWidth >= 840.dp
@@ -154,6 +164,8 @@ fun StudentSidebarContainer(
                 isAdmin = isAdmin,
                 onSelectTab = { tab -> closeIfModal { onSelectTab(tab) } },
                 onOpenReading = { closeIfModal(onOpenReading) },
+                onOpenCourses = { closeIfModal(onOpenCourses) },
+                onOpenVideoCalls = { closeIfModal(onOpenVideoCalls) },
                 onOpenProfile = { closeIfModal(onOpenProfile) },
                 onOpenSessions = { closeIfModal(onOpenSessions) },
                 onOpenSecurity = { closeIfModal(onOpenSecurity) },
@@ -173,7 +185,7 @@ fun StudentSidebarContainer(
                 drawerContent = {
                     PermanentDrawerSheet(
                         modifier = Modifier.width(292.dp),
-                        drawerContainerColor = Color.White
+                        drawerContainerColor = drawerBg
                     ) {
                         drawerContent()
                     }
@@ -188,7 +200,7 @@ fun StudentSidebarContainer(
                 drawerContent = {
                     ModalDrawerSheet(
                         modifier = Modifier.width(304.dp),
-                        drawerContainerColor = Color.White
+                        drawerContainerColor = drawerBg
                     ) {
                         drawerContent()
                     }
@@ -202,7 +214,7 @@ fun StudentSidebarContainer(
     if (confirmLogout) {
         AlertDialog(
             onDismissRequest = { confirmLogout = false },
-            containerColor = Color.White,
+            containerColor = if (isDark) Color(0xFF131C31) else Color.White,
             title = { Text("Log out?", fontWeight = FontWeight.Bold) },
             text = { Text("You will be signed out of your student account.") },
             confirmButton = {
@@ -240,24 +252,40 @@ private fun StudentSidebarDrawerContent(
     isAdmin: Boolean,
     onSelectTab: (AppMainTab) -> Unit,
     onOpenReading: () -> Unit,
+    onOpenCourses: () -> Unit = {},
+    onOpenVideoCalls: () -> Unit = {},
     onOpenProfile: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAdmin: () -> Unit,
     onRequestLogout: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val context = LocalContext.current
+    val themeMode by AppThemeManager.observeThemeMode(context).collectAsStateWithLifecycle()
+
+    val drawerBg = if (isDark) Color(0xFF111827) else Color.White
+    val emerald = if (isDark) Color(0xFF34D399) else Color(0xFF0E6B3B)
+    val activePill = if (isDark) Color(0xFF133A29) else Color(0xFFD1FAE5)
+    val mintTop = if (isDark) Color(0xFF123526) else Color(0xFFD3F4E4)
+    val mintBottom = if (isDark) Color(0xFF0F241C) else Color(0xFFEAFAF2)
+    val textDark = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827)
+    val textMuted = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
+    val dividerColor = if (isDark) Color(0xFF1E293B) else Color(0xFFE5E7EB)
+    val miniBadgeBg = if (isDark) Color(0xFF1E293B) else Color.White
+
     val itemColors = NavigationDrawerItemDefaults.colors(
-        selectedContainerColor = DrawerActivePill,
-        selectedIconColor = DrawerEmerald,
-        selectedTextColor = DrawerEmerald,
-        unselectedIconColor = DrawerTextMuted,
-        unselectedTextColor = DrawerTextDark
+        selectedContainerColor = activePill,
+        selectedIconColor = emerald,
+        selectedTextColor = emerald,
+        unselectedIconColor = textMuted,
+        unselectedTextColor = textDark
     )
 
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .background(Color.White)
+            .background(drawerBg)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
@@ -274,7 +302,7 @@ private fun StudentSidebarDrawerContent(
         ) {
             Column(
                 modifier = Modifier
-                    .background(Brush.verticalGradient(listOf(DrawerMintTop, DrawerMintBottom)))
+                    .background(Brush.verticalGradient(listOf(mintTop, mintBottom)))
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -290,7 +318,7 @@ private fun StudentSidebarDrawerContent(
                             modifier = Modifier
                                 .size(46.dp)
                                 .clip(CircleShape)
-                                .border(2.dp, Color.White, CircleShape)
+                                .border(2.dp, miniBadgeBg, CircleShape)
                         )
                         Box(
                             modifier = Modifier
@@ -299,7 +327,7 @@ private fun StudentSidebarDrawerContent(
                                 .size(12.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF16A34A))
-                                .border(1.5.dp, Color.White, CircleShape)
+                                .border(1.5.dp, miniBadgeBg, CircleShape)
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -307,7 +335,7 @@ private fun StudentSidebarDrawerContent(
                             text = displayName.ifBlank { "Learner" },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = DrawerTextDark,
+                            color = textDark,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -315,7 +343,7 @@ private fun StudentSidebarDrawerContent(
                             Text(
                                 text = email,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = DrawerTextMuted,
+                                color = textMuted,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -332,20 +360,20 @@ private fun StudentSidebarDrawerContent(
                         text = "$streakDays d",
                         icon = Icons.Filled.LocalFireDepartment,
                         iconTint = DrawerFlameOrange,
-                        bg = Color.White,
-                        fg = DrawerTextDark
+                        bg = miniBadgeBg,
+                        fg = textDark
                     )
                     DrawerMiniBadge(
                         text = "$level · D$currentDay",
-                        bg = Color.White.copy(alpha = 0.85f),
-                        fg = DrawerEmerald
+                        bg = miniBadgeBg.copy(alpha = 0.9f),
+                        fg = emerald
                     )
                     DrawerMiniBadge(
                         text = planLabel,
                         icon = Icons.Filled.WorkspacePremium,
-                        iconTint = DrawerEmerald,
-                        bg = Color(0xFFD1FAE5),
-                        fg = DrawerEmerald
+                        iconTint = emerald,
+                        bg = activePill,
+                        fg = emerald
                     )
                 }
             }
@@ -362,7 +390,7 @@ private fun StudentSidebarDrawerContent(
                 text = "LEARNING",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = DrawerTextMuted,
+                color = textMuted,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
 
@@ -397,6 +425,14 @@ private fun StudentSidebarDrawerContent(
                     onClick = onOpenReading
                 ),
                 StudentSidebarEntry(
+                    label = "Courses",
+                    icon = Icons.Filled.School,
+                    selected = false,
+                    badge = "Video · PDF",
+                    tag = "student_drawer_courses",
+                    onClick = onOpenCourses
+                ),
+                StudentSidebarEntry(
                     label = "AI Speaking",
                     icon = Icons.Filled.Mic,
                     selected = selectedTab == AppMainTab.SPEAKING,
@@ -413,6 +449,14 @@ private fun StudentSidebarDrawerContent(
                     onClick = { onSelectTab(AppMainTab.CHAT) }
                 ),
                 StudentSidebarEntry(
+                    label = "Video Calls",
+                    icon = Icons.Filled.Videocam,
+                    selected = false,
+                    badge = "1-on-1 · Group",
+                    tag = "student_drawer_video_calls",
+                    onClick = onOpenVideoCalls
+                ),
+                StudentSidebarEntry(
                     label = "Progress & Reports",
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
                     selected = selectedTab == AppMainTab.PROGRESS,
@@ -427,7 +471,72 @@ private fun StudentSidebarDrawerContent(
             }
 
             HorizontalDivider(
-                color = Color(0xFFE5E7EB),
+                color = dividerColor,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+
+            Text(
+                text = "APPEARANCE",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = textMuted,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .testTag("drawer_theme_mode_selector"),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                AppThemeMode.entries.forEach { mode ->
+                    val selected = themeMode == mode
+                    val modeIcon = when (mode) {
+                        AppThemeMode.SYSTEM -> Icons.Filled.BrightnessAuto
+                        AppThemeMode.LIGHT -> Icons.Filled.LightMode
+                        AppThemeMode.DARK -> Icons.Filled.DarkMode
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) activePill else if (isDark) Color(0xFF1E293B) else Color(0xFFF3F4F6),
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) emerald else Color.Transparent
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .minimumInteractiveComponentSize()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { AppThemeManager.setThemeMode(context, mode) }
+                            .testTag("drawer_theme_chip_${mode.storageKey}")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = modeIcon,
+                                contentDescription = "${mode.label} theme",
+                                tint = if (selected) emerald else textMuted,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = mode.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) emerald else textDark,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = dividerColor,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
 
@@ -435,7 +544,7 @@ private fun StudentSidebarDrawerContent(
                 text = "ACCOUNT & SETTINGS",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = DrawerTextMuted,
+                color = textMuted,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
             )
 
@@ -491,7 +600,7 @@ private fun StudentSidebarDrawerContent(
         }
 
         HorizontalDivider(
-            color = Color(0xFFE5E7EB),
+            color = dividerColor,
             modifier = Modifier.padding(horizontal = 14.dp)
         )
 
@@ -533,6 +642,11 @@ private fun StudentDrawerNavRow(
     entry: StudentSidebarEntry,
     colors: androidx.compose.material3.NavigationDrawerItemColors
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val emerald = if (isDark) Color(0xFF10B981) else Color(0xFF0E6B3B)
+    val badgeBg = if (isDark) Color(0xFF1E293B) else Color(0xFFF3F4F6)
+    val badgeText = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
+
     NavigationDrawerItem(
         label = {
             Text(
@@ -552,8 +666,8 @@ private fun StudentDrawerNavRow(
                     shape = RoundedCornerShape(10.dp),
                     color = when {
                         entry.badgeHighlight -> Color(0xFFDC2626)
-                        entry.selected -> DrawerEmerald
-                        else -> Color(0xFFF3F4F6)
+                        entry.selected -> emerald
+                        else -> badgeBg
                     }
                 ) {
                     Text(
@@ -562,7 +676,7 @@ private fun StudentDrawerNavRow(
                         fontWeight = FontWeight.SemiBold,
                         color = when {
                             entry.badgeHighlight || entry.selected -> Color.White
-                            else -> DrawerTextMuted
+                            else -> badgeText
                         },
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
@@ -579,7 +693,7 @@ private fun StudentDrawerNavRow(
 private fun DrawerMiniBadge(
     text: String,
     icon: ImageVector? = null,
-    iconTint: Color = DrawerEmerald,
+    iconTint: Color = if (LocalIsDarkTheme.current) Color(0xFF34D399) else Color(0xFF0E6B3B),
     bg: Color,
     fg: Color
 ) {

@@ -28,25 +28,38 @@ class ChatMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
         val data = remoteMessage.data
-        if (data["type"] != "chat_message") return
+        when (data["type"]) {
+            "call_invite" -> {
+                val callRoomId = data["callRoomId"].orEmpty()
+                if (callRoomId.isBlank()) return
+                com.example.core.call.CallInviteNotifier.showIncomingCallInvite(
+                    context = applicationContext,
+                    callRoomId = callRoomId,
+                    callerName = data["callerName"].orEmpty().ifBlank { "Classmate" },
+                    title = data["title"].orEmpty().ifBlank { "1-on-1 English Video Call" }
+                )
+            }
 
-        val roomId = data["roomId"].orEmpty()
-        val messageId = data["messageId"].orEmpty()
-        if (roomId.isBlank() || messageId.isBlank()) return
+            "chat_message" -> {
+                val roomId = data["roomId"].orEmpty()
+                val messageId = data["messageId"].orEmpty()
+                if (roomId.isBlank() || messageId.isBlank()) return
 
-        val notification = ChatIncomingNotification(
-            messageId = messageId,
-            roomId = roomId,
-            roomName = data["roomName"].orEmpty().ifBlank { "Study Room" },
-            roomType = data["roomType"].orEmpty().ifBlank { "group" },
-            roomEmoji = data["roomEmoji"].orEmpty().ifBlank { "🦁" },
-            senderId = data["senderId"].orEmpty(),
-            senderName = data["senderName"].orEmpty().ifBlank { "Learner" },
-            senderBadge = data["senderBadge"].orEmpty(),
-            textPreview = data["textPreview"].orEmpty().ifBlank { "New message" },
-            createdAt = data["createdAt"].orEmpty()
-        )
-        ChatMessageNotifier.showIncomingMessage(applicationContext, notification)
+                val notification = ChatIncomingNotification(
+                    messageId = messageId,
+                    roomId = roomId,
+                    roomName = data["roomName"].orEmpty().ifBlank { "Study Room" },
+                    roomType = data["roomType"].orEmpty().ifBlank { "group" },
+                    roomEmoji = data["roomEmoji"].orEmpty().ifBlank { "🦁" },
+                    senderId = data["senderId"].orEmpty(),
+                    senderName = data["senderName"].orEmpty().ifBlank { "Learner" },
+                    senderBadge = data["senderBadge"].orEmpty(),
+                    textPreview = data["textPreview"].orEmpty().ifBlank { "New message" },
+                    createdAt = data["createdAt"].orEmpty()
+                )
+                ChatMessageNotifier.showIncomingMessage(applicationContext, notification)
+            }
+        }
     }
 
     companion object {

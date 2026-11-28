@@ -7,7 +7,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
+import com.example.ui.theme.LocalIsDarkTheme
+
 val BrandGreen = Color(0xFF0E6B3B)
 val BrandGreenLight = Color(0xFFD1FAE5)
 val BrandGold = Color(0xFFD97706)
@@ -77,7 +78,7 @@ data class VocabPalette(
 )
 
 @Composable
-fun vocabPalette(dark: Boolean = LocalVocabDarkTheme.current ?: isSystemInDarkTheme()): VocabPalette {
+fun vocabPalette(dark: Boolean = LocalVocabDarkTheme.current ?: LocalIsDarkTheme.current): VocabPalette {
     return if (dark) {
         VocabPalette(
             primary = Color(0xFF52B788),

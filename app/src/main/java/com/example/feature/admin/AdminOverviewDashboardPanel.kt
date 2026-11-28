@@ -49,14 +49,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-private val EmeraldSuccess = Color(0xFF15803D)
-private val EmeraldContainer = Color(0xFFDCFCE7)
-private val AmberWarning = Color(0xFFB45309)
-private val AmberContainer = Color(0xFFFEF3C7)
-private val IndigoAccent = Color(0xFF4338CA)
-private val IndigoContainer = Color(0xFFE0E7FF)
-private val CyanAccent = Color(0xFF0E7490)
-private val CyanContainer = Color(0xFFCFFAFE)
+private val EmeraldSuccess = Color(0xFF34D399)
+private val EmeraldContainer = Color(0xFF133A29)
+private val AmberWarning = Color(0xFFFBBF24)
+private val AmberContainer = Color(0xFF3E2B0D)
+private val IndigoAccent = Color(0xFFA5B4FC)
+private val IndigoContainer = Color(0xFF1E2654)
+private val CyanAccent = Color(0xFF22D3EE)
+private val CyanContainer = Color(0xFF113540)
 
 @Composable
 fun AdminDashboardAnalyticsSection(
@@ -66,7 +66,8 @@ fun AdminDashboardAnalyticsSection(
     fallbackVocabCount: Int,
     fallbackReadingCount: Int,
     onRetry: () -> Unit,
-    onOpenStudents: () -> Unit
+    onOpenStudents: () -> Unit,
+    onOpenAiManagement: () -> Unit
 ) {
     val overview = state.data
 
@@ -159,7 +160,8 @@ fun AdminDashboardAnalyticsSection(
             )
 
             AiUsageStatsCard(
-                ai = overview.aiUsage
+                ai = overview.aiUsage,
+                onManageAi = onOpenAiManagement
             )
 
             SubscriptionStatsCard(
@@ -628,7 +630,8 @@ private fun CourseCompletionCard(
 
 @Composable
 private fun AiUsageStatsCard(
-    ai: AdminDashboardAiUsage
+    ai: AdminDashboardAiUsage,
+    onManageAi: () -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -675,12 +678,20 @@ private fun AiUsageStatsCard(
                     color = if (ai.configured) EmeraldContainer else AmberContainer
                 ) {
                     Text(
-                        text = if (ai.configured) "AI Active" else "Not Set",
+                        text = if (ai.configured) "AI Active" else "Paused/Off",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (ai.configured) EmeraldSuccess else AmberWarning,
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                     )
+                }
+                TextButton(
+                    onClick = onManageAi,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("admin_ai_card_manage_button")
+                ) {
+                    Text("Configure", fontWeight = FontWeight.SemiBold)
                 }
             }
 
