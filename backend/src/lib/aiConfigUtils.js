@@ -393,7 +393,7 @@ Return ONLY valid JSON in exactly this shape:
   }
 }
 If the student's message is correct, set hasMistake to false and keep the other correction fields empty.
-Never add text outside the JSON.`;
+Write plain UTF-8 characters (never \\uXXXX escapes), keep explanationBn under 15 words, and never add text outside the JSON.`;
 }
 
 export function buildChatGrammarSystemPrompt(config) {

@@ -102,6 +102,9 @@ export async function generateText({
             temperature: effectiveTemp,
             maxOutputTokens: effectiveMaxTokens,
             ...(json ? { responseMimeType: "application/json" } : {}),
+            ...(json && model.startsWith("gemini-2.5-flash")
+              ? { thinkingConfig: { thinkingBudget: 0 } }
+              : {}),
           },
         },
         timeoutMs

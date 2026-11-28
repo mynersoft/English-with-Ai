@@ -98,6 +98,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.core.common.UiState
 import com.example.core.ui.OfflineStatusCard
+import com.example.core.ui.StudentAvatarImage
 import com.example.domain.model.CourseReportModule
 import com.example.domain.model.StreakCalendarData
 import com.example.domain.model.StudentDashboardData
@@ -157,6 +158,7 @@ fun StudentProfileDashboardScreen(
     isRefreshing: Boolean,
     fallbackName: String,
     fallbackEmail: String,
+    fallbackAvatarUrl: String? = null,
     isAdmin: Boolean,
     bottomBar: @Composable () -> Unit,
     isOnline: Boolean = true,
@@ -169,7 +171,8 @@ fun StudentProfileDashboardScreen(
     onOpenSessions: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAdmin: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onOpenCourseDetail: (String) -> Unit = { onNavigateRoute("courses") }
 ) {
     var showStreakCalendar by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
@@ -192,6 +195,7 @@ fun StudentProfileDashboardScreen(
                         ProfileHeaderSection(
                             name = fallbackName.ifBlank { "Learner" },
                             subtitle = fallbackEmail,
+                            avatarUrl = fallbackAvatarUrl,
                             planLabel = if (isAdmin) "Admin" else "Free",
                             streakDays = 0,
                             vocabCount = 0,
@@ -227,6 +231,7 @@ fun StudentProfileDashboardScreen(
                             ProfileHeaderSection(
                                 name = fallbackName.ifBlank { "Learner" },
                                 subtitle = fallbackEmail,
+                                avatarUrl = fallbackAvatarUrl,
                                 planLabel = if (isAdmin) "Admin" else "Free",
                                 streakDays = 0,
                                 vocabCount = 0,
@@ -298,7 +303,9 @@ fun StudentProfileDashboardScreen(
                             ProfileHeaderSection(
                                 name = data.user.name.ifBlank { fallbackName.ifBlank { "Learner" } },
                                 subtitle = data.user.email.ifBlank { fallbackEmail },
+                                avatarUrl = fallbackAvatarUrl ?: data.user.photoUrl,
                                 planLabel = data.user.planLabel,
+                                learningLevel = data.user.learningLevel,
                                 streakDays = data.stats.streakDays,
                                 vocabCount = data.stats.vocabularyLearned,
                                 patternsCount = data.stats.patternsPracticed,
@@ -310,9 +317,41 @@ fun StudentProfileDashboardScreen(
                                 showMenuButton = showMenuButton,
                                 onOpenMenu = onOpenMenu,
                                 onBack = onBackToHome,
+                                onEditProfile = onOpenProfile,
                                 onOpenSettings = { showSettingsSheet = true },
                                 onRefresh = onRefresh,
                                 onOpenStreakCalendar = { showStreakCalendar = true }
+                            )
+                        }
+
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(10.dp)
+                                    .background(dashBandBg())
+                            )
+                        }
+
+                        item {
+                            LearningReportOverviewSection(data = data)
+                        }
+
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(10.dp)
+                                    .background(dashBandBg())
+                            )
+                        }
+
+                        item {
+                            MyCoursesAndPurchasesSection(
+                                purchasedCourses = data.purchasedCourses,
+                                recommendedCourses = data.recommendedCourses,
+                                onOpenCoursesCatalog = { onNavigateRoute("courses") },
+                                onOpenCourseDetail = onOpenCourseDetail
                             )
                         }
 
@@ -367,6 +406,29 @@ fun StudentProfileDashboardScreen(
                                     expandedModules[key] = !(expandedModules[key] ?: false)
                                 },
                                 onOpenModule = onNavigateRoute
+                            )
+                        }
+
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(10.dp)
+                                    .background(dashBandBg())
+                            )
+                        }
+
+                        item {
+                            StudentAccountFeaturesSection(
+                                isAdmin = isAdmin,
+                                onOpenProfile = onOpenProfile,
+                                onOpenCourses = { onNavigateRoute("courses") },
+                                onOpenVideoCalls = { onNavigateRoute("calls") },
+                                onOpenReading = { onNavigateRoute("reading") },
+                                onOpenSessions = onOpenSessions,
+                                onOpenSecurity = onOpenSecurity,
+                                onOpenAdmin = onOpenAdmin,
+                                onSignOut = onSignOut
                             )
                         }
                     }
@@ -517,7 +579,9 @@ fun StudentProfileDashboardScreen(
 private fun ProfileHeaderSection(
     name: String,
     subtitle: String,
+    avatarUrl: String? = null,
     planLabel: String,
+    learningLevel: String = "Beginner",
     streakDays: Int,
     vocabCount: Int,
     patternsCount: Int,
@@ -529,14 +593,27 @@ private fun ProfileHeaderSection(
     showMenuButton: Boolean = true,
     onOpenMenu: () -> Unit = {},
     onBack: () -> Unit,
+    onEditProfile: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
     onOpenStreakCalendar: () -> Unit
 ) {
     val isDark = LocalIsDarkTheme.current
     val circleBtnBg = if (isDark) Color(0xFF131C31) else Color.White
-    val planBadgeBg = if (isDark) Color(0xFF1A2D24) else Color(0xFFD9E6DF)
-    val planBadgeFg = if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151)
+    val isPremiumOrAdmin = planLabel.equals("Premium", ignoreCase = true) ||
+        planLabel.equals("Admin", ignoreCase = true)
+    val planBadgeBg = when {
+        isPremiumOrAdmin && isDark -> Color(0xFF2D220B)
+        isPremiumOrAdmin -> Color(0xFFFEF3C7)
+        isDark -> Color(0xFF1A2D24)
+        else -> Color(0xFFD9E6DF)
+    }
+    val planBadgeFg = when {
+        isPremiumOrAdmin && isDark -> Color(0xFFFBBF24)
+        isPremiumOrAdmin -> Color(0xFFB45309)
+        isDark -> Color(0xFFCBD5E1)
+        else -> Color(0xFF374151)
+    }
 
     Column(
         modifier = Modifier
@@ -651,28 +728,62 @@ private fun ProfileHeaderSection(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Plan badge ("Free" or "Admin") matching screenshot
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = planBadgeBg
+        // Plan badge ("Free", "Premium", or "Admin") + Level / Edit Profile pill
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = planBadgeBg
             ) {
-                Icon(
-                    imageVector = Icons.Filled.WorkspacePremium,
-                    contentDescription = null,
-                    tint = planBadgeFg,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = planLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = planBadgeFg
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.WorkspacePremium,
+                        contentDescription = null,
+                        tint = planBadgeFg,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = planLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = planBadgeFg
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = circleBtnBg,
+                border = BorderStroke(1.dp, dashBorder()),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(onClick = onEditProfile)
+                    .testTag("student_header_edit_profile_pill")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ManageAccounts,
+                        contentDescription = null,
+                        tint = dashEmerald(),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "$learningLevel · Edit",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = dashTextPrimary()
+                    )
+                }
             }
         }
 
@@ -680,13 +791,16 @@ private fun ProfileHeaderSection(
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .clickable(onClick = onEditProfile)
         ) {
             Box(modifier = Modifier.size(88.dp)) {
-                Image(
-                    painter = painterResource(id = R.drawable.img_student_avatar),
+                StudentAvatarImage(
+                    photoUrl = avatarUrl,
                     contentDescription = "$name profile avatar",
-                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(86.dp)
                         .clip(CircleShape)
@@ -944,26 +1058,28 @@ private fun LearningActivitySection(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Spacer(modifier = Modifier.weight(1.35f))
+            Spacer(modifier = Modifier.weight(1.85f))
             weeklyActivity.forEach { day ->
                 Box(
-                    modifier = Modifier.weight(0.5f),
+                    modifier = Modifier.weight(0.45f),
                     contentAlignment = Alignment.Center
                 ) {
                     if (day.isToday) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(if (isDark) Color(0xFF10B981) else Color(0xFF0E6B3B))
-                                .padding(horizontal = 6.dp, vertical = 7.dp)
+                                .padding(horizontal = 3.dp, vertical = 6.dp)
                         ) {
                             Text(
                                 text = day.dayNumber,
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
-                                lineHeight = 16.sp
+                                lineHeight = 15.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                             Text(
                                 text = day.dayShort,
@@ -978,14 +1094,16 @@ private fun LearningActivitySection(
                     } else {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(vertical = 7.dp)
+                            modifier = Modifier.padding(vertical = 6.dp)
                         ) {
                             Text(
                                 text = day.dayNumber,
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = dashTextPrimary(),
-                                lineHeight = 16.sp
+                                lineHeight = 15.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                             Text(
                                 text = day.dayShort,
@@ -1015,15 +1133,15 @@ private fun ActivityMatrixRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier.weight(1.35f),
+            modifier = Modifier.weight(1.85f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
             Text(
                 text = label,
@@ -1031,13 +1149,14 @@ private fun ActivityMatrixRow(
                 color = dashTextPrimary(),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
         }
         val normalized = if (activeList.size == 7) activeList else List(7) { false }
         normalized.forEach { active ->
             Box(
-                modifier = Modifier.weight(0.5f),
+                modifier = Modifier.weight(0.45f),
                 contentAlignment = Alignment.Center
             ) {
                 Box(

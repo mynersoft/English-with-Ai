@@ -1,6 +1,7 @@
 package com.example.feature.speaking
 
 import android.app.Application
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.repository.ChatTurn
@@ -29,6 +30,8 @@ data class SpeakingUiState(
     val phase: SpeakingPhase = SpeakingPhase.IDLE,
     val draftText: String = "",
     val partialText: String = "",
+    val voiceLevel: Float = 0f,
+    val isRecognizerReady: Boolean = false,
     val topic: String = "Daily Life",
     val error: String? = null
 )
@@ -84,6 +87,10 @@ class SpeakingViewModel(
     fun clearError() = _state.update { it.copy(error = null) }
     fun showError(message: String) = _state.update { it.copy(error = message) }
 
+    fun isInlineSpeechAvailable(): Boolean = speech.isInlineRecognitionAvailable()
+    fun canUseVoiceActivityFallback(): Boolean = speech.canLaunchVoiceActivity()
+    fun buildVoiceIntent(): Intent = speech.createRecognizerIntent()
+
     fun onDraftChange(rawText: String) {
         if (sessionStartedAtMs == null && rawText.isNotBlank()) {
             sessionStartedAtMs = System.currentTimeMillis()
@@ -91,16 +98,101 @@ class SpeakingViewModel(
         _state.update { it.copy(draftText = rawText.take(500)) }
     }
 
-    fun onMicTap() {
+    fun speakText(text: String, slow: Boolean = false) {
+        if (text.isBlank()) return
+        if (_state.value.phase == SpeakingPhase.LISTENING) {
+            cancelListening()
+        }
+        if (_state.value.phase == SpeakingPhase.THINKING) return
+        speech.stopSpeaking()
+        _state.update { it.copy(phase = SpeakingPhase.SPEAKING, error = null) }
+        val rate = if (slow) 0.78f else 0.9f
+        speech.speak(text, speechRate = rate) {
+            _state.update { s ->
+                if (s.phase == SpeakingPhase.SPEAKING) s.copy(phase = SpeakingPhase.IDLE) else s
+            }
+        }
+    }
+
+    fun onMicTap(clearDraftFirst: Boolean = false) {
         when (_state.value.phase) {
             SpeakingPhase.THINKING -> Unit
-            SpeakingPhase.LISTENING -> speech.stopListening()
+            SpeakingPhase.LISTENING -> {
+                val stopped = speech.stopListening()
+                if (!stopped) {
+                    val captured = _state.value.partialText
+                    val combined = combineDraftAndSpeech(baseDraftBeforeListening, captured)
+                    baseDraftBeforeListening = ""
+                    _state.update {
+                        it.copy(
+                            phase = SpeakingPhase.IDLE,
+                            partialText = "",
+                            voiceLevel = 0f,
+                            isRecognizerReady = false,
+                            draftText = combined
+                        )
+                    }
+                }
+            }
             SpeakingPhase.SPEAKING -> {
                 speech.stopSpeaking()
-                _state.update { it.copy(phase = SpeakingPhase.IDLE) }
+                if (clearDraftFirst) {
+                    _state.update { it.copy(phase = SpeakingPhase.IDLE, draftText = "") }
+                } else {
+                    _state.update { it.copy(phase = SpeakingPhase.IDLE) }
+                }
                 startListening()
             }
-            SpeakingPhase.IDLE -> startListening()
+            SpeakingPhase.IDLE -> {
+                if (clearDraftFirst) {
+                    _state.update { it.copy(draftText = "") }
+                }
+                startListening()
+            }
+        }
+    }
+
+    fun cancelListening() {
+        speech.cancelListening()
+        val restored = baseDraftBeforeListening
+        baseDraftBeforeListening = ""
+        _state.update {
+            it.copy(
+                phase = SpeakingPhase.IDLE,
+                partialText = "",
+                voiceLevel = 0f,
+                isRecognizerReady = false,
+                draftText = restored
+            )
+        }
+    }
+
+    fun onExternalVoiceResult(recognizedText: String?) {
+        val clean = recognizedText?.trim().orEmpty()
+        if (clean.isEmpty()) {
+            _state.update {
+                it.copy(
+                    phase = SpeakingPhase.IDLE,
+                    partialText = "",
+                    voiceLevel = 0f,
+                    isRecognizerReady = false
+                )
+            }
+            return
+        }
+        if (sessionStartedAtMs == null) {
+            sessionStartedAtMs = System.currentTimeMillis()
+        }
+        val combined = combineDraftAndSpeech(_state.value.draftText, clean)
+        _state.update {
+            it.copy(
+                phase = SpeakingPhase.IDLE,
+                partialText = "",
+                voiceLevel = 0f,
+                isRecognizerReady = false,
+                draftText = combined,
+                error = null
+            )
         }
     }
 
@@ -109,8 +201,26 @@ class SpeakingViewModel(
             sessionStartedAtMs = System.currentTimeMillis()
         }
         baseDraftBeforeListening = _state.value.draftText
-        _state.update { it.copy(phase = SpeakingPhase.LISTENING, partialText = "", error = null) }
+        _state.update {
+            it.copy(
+                phase = SpeakingPhase.LISTENING,
+                partialText = "",
+                voiceLevel = 0f,
+                isRecognizerReady = false,
+                error = null
+            )
+        }
         speech.startListening(
+            onReady = {
+                _state.update { s ->
+                    if (s.phase == SpeakingPhase.LISTENING) s.copy(isRecognizerReady = true) else s
+                }
+            },
+            onRmsChanged = { level ->
+                _state.update { s ->
+                    if (s.phase == SpeakingPhase.LISTENING) s.copy(voiceLevel = level) else s
+                }
+            },
             onPartial = { text ->
                 val combined = combineDraftAndSpeech(baseDraftBeforeListening, text)
                 _state.update { it.copy(partialText = text, draftText = combined) }
@@ -122,6 +232,8 @@ class SpeakingViewModel(
                     it.copy(
                         phase = SpeakingPhase.IDLE,
                         partialText = "",
+                        voiceLevel = 0f,
+                        isRecognizerReady = false,
                         draftText = combined,
                         error = null
                     )
@@ -136,6 +248,8 @@ class SpeakingViewModel(
                         it.copy(
                             phase = SpeakingPhase.IDLE,
                             partialText = "",
+                            voiceLevel = 0f,
+                            isRecognizerReady = false,
                             draftText = combined,
                             error = null
                         )
@@ -147,6 +261,8 @@ class SpeakingViewModel(
                         it.copy(
                             phase = SpeakingPhase.IDLE,
                             partialText = "",
+                            voiceLevel = 0f,
+                            isRecognizerReady = false,
                             draftText = restored,
                             error = msg
                         )
@@ -187,6 +303,8 @@ class SpeakingViewModel(
                 phase = SpeakingPhase.THINKING,
                 draftText = "",
                 partialText = "",
+                voiceLevel = 0f,
+                isRecognizerReady = false,
                 error = null
             )
         }

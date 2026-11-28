@@ -83,6 +83,7 @@ import com.example.core.common.UiState
 import com.example.core.ui.BannerTone
 import com.example.core.ui.OfflineStatusCard
 import com.example.core.ui.StatusBanner
+import com.example.core.ui.StudentAvatarImage
 import com.example.domain.model.UserProfile
 import com.example.domain.model.UserSession
 import com.example.ui.theme.AppThemeManager
@@ -150,6 +151,7 @@ fun DashboardScreen(
     val activeSessionsCount = (sessionsState as? UiState.Success)?.data
         ?.count { it.activeSession } ?: 1
 
+    val avatarUrl = actionState.avatarUrl
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = homeBgColor(),
@@ -158,6 +160,7 @@ fun DashboardScreen(
             HomeTopHeader(
                 streakDays = streakDays,
                 displayName = displayName,
+                avatarUrl = avatarUrl,
                 showMenuButton = showMenuButton,
                 onOpenMenu = onOpenMenu,
                 onStreakClick = onOpenProgress,
@@ -326,6 +329,7 @@ fun DashboardScreen(
 private fun HomeTopHeader(
     streakDays: Int,
     displayName: String,
+    avatarUrl: String? = null,
     showMenuButton: Boolean,
     onOpenMenu: () -> Unit,
     onStreakClick: () -> Unit,
@@ -439,10 +443,9 @@ private fun HomeTopHeader(
                         .testTag("home_student_avatar_button"),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_student_avatar),
+                    StudentAvatarImage(
+                        photoUrl = avatarUrl,
                         contentDescription = "$displayName student dashboard",
-                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)

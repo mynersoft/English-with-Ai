@@ -98,6 +98,7 @@ import com.example.data.repository.UserRepository
 import com.example.domain.model.AccountStatus
 import com.example.domain.model.StudentDashboardData
 import com.example.feature.admin.AdminRoute
+import com.example.feature.auth.AuthPreferences
 import com.example.feature.auth.AuthViewModel
 import com.example.feature.auth.EmailVerificationScreen
 import com.example.feature.auth.ForgotPasswordScreen
@@ -145,6 +146,7 @@ private object AppRoutes {
     const val SECURITY = "security"
     const val READING = "reading"
     const val COURSES = "courses"
+    const val COURSE_DETAIL = "courses/{courseId}"
     const val VIDEO_CALLS = "video_calls"
     const val ADMIN = "admin"
 }
@@ -313,6 +315,7 @@ fun EnglishAIApp(
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         if (user != null) {
+            AuthPreferences.saveLastLoginEmail(context, user.email)
             DailySessionReminderPrefs.markLoggedInToday(context)
             WordOfTheDaySync.syncPool(context)
         } else if (DailySessionReminderPrefs.hasNotificationPermission(context)) {
@@ -504,10 +507,20 @@ private fun AuthenticatedNavGraph(
     var wasOffline by remember { mutableStateOf(!isOnline) }
 
     val loadedProfile = (profileState as? UiState.Success)?.data
+    val remoteAvatarUrl = (studentDashboardState as? UiState.Success<StudentDashboardData>)?.data?.user?.photoUrl
+    val resolvedAvatarUrl = actionState.avatarUrl ?: remoteAvatarUrl
+
     LaunchedEffect(currentUserId) {
+        dashboardViewModel.hydrateAvatar(context)
         dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
         chatViewModel.loadLobby()
         callViewModel.loadLobby(silent = true)
+    }
+
+    LaunchedEffect(remoteAvatarUrl) {
+        if (!remoteAvatarUrl.isNullOrBlank()) {
+            dashboardViewModel.hydrateAvatar(context, remoteAvatarUrl)
+        }
     }
 
     LaunchedEffect(isOnline) {
@@ -708,6 +721,7 @@ private fun AuthenticatedNavGraph(
                 displayName = loadedProfile?.displayName?.takeIf { it.isNotBlank() } ?: "Learner",
                 email = loadedProfile?.email?.ifBlank { dashboardViewModel.currentEmail() }
                     ?: dashboardViewModel.currentEmail(),
+                avatarUrl = resolvedAvatarUrl,
                 level = loadedProfile?.safeLevel?.displayName ?: "Beginner",
                 planLabel = sidebarPlanLabel,
                 streakDays = sidebarStreakDays,
@@ -882,6 +896,7 @@ private fun AuthenticatedNavGraph(
                                 isRefreshing = studentDashboardRefreshing,
                                 fallbackName = loadedProfile?.displayName ?: "Learner",
                                 fallbackEmail = loadedProfile?.email ?: dashboardViewModel.currentEmail(),
+                                fallbackAvatarUrl = resolvedAvatarUrl,
                                 isAdmin = actionState.isAdmin,
                                 bottomBar = effectiveBottomBar,
                                 isOnline = isOnline,
@@ -917,7 +932,15 @@ private fun AuthenticatedNavGraph(
                                     dashboardViewModel.clearBanner()
                                     navController.navigate(AppRoutes.ADMIN)
                                 },
-                                onSignOut = performSignOut
+                                onSignOut = performSignOut,
+                                onOpenCourseDetail = { courseId ->
+                                    dashboardViewModel.clearBanner()
+                                    if (courseId.isBlank()) {
+                                        navController.navigate(AppRoutes.COURSES)
+                                    } else {
+                                        navController.navigate("courses/$courseId")
+                                    }
+                                }
                             )
                         }
                     }
@@ -975,6 +998,26 @@ private fun AuthenticatedNavGraph(
             }
         }
 
+        composable(AppRoutes.COURSE_DETAIL) { backStackEntry ->
+            val courseId = backStackEntry.arguments?.getString("courseId")
+            Box(modifier = Modifier.fillMaxSize()) {
+                CoursesRoute(
+                    initialCourseId = courseId,
+                    onBack = { navController.popBackStack() }
+                )
+                OfflineFloatingBanner(
+                    visible = !isOnline,
+                    isReconnecting = actionState.isSyncingBackend,
+                    onRetry = {
+                        if (NetworkMonitor.isDeviceOnline(context)) {
+                            dashboardViewModel.syncBackendUser(preferredName = loadedProfile?.displayName)
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
+        }
+
         composable(AppRoutes.VIDEO_CALLS) {
             Box(modifier = Modifier.fillMaxSize()) {
                 VideoCallRoute(
@@ -1007,6 +1050,18 @@ private fun AuthenticatedNavGraph(
             ProfileScreen(
                 profile = loadedProfile,
                 actionState = actionState,
+                avatarUrl = resolvedAvatarUrl,
+                fallbackEmail = loadedProfile?.email ?: dashboardViewModel.currentEmail(),
+                onUploadAvatar = { uri ->
+                    dashboardViewModel.uploadAvatar(context, uri) {
+                        studentDashboardViewModel.loadDashboard(silent = true)
+                    }
+                },
+                onRemoveAvatar = {
+                    dashboardViewModel.removeAvatar(context) {
+                        studentDashboardViewModel.loadDashboard(silent = true)
+                    }
+                },
                 onSave = { name, level, goal, bangla ->
                     dashboardViewModel.updateProfile(name, level, goal, bangla)
                 },

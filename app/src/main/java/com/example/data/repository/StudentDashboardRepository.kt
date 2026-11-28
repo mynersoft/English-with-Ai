@@ -4,8 +4,10 @@ import com.example.core.network.NetworkClient
 import com.example.core.network.sanitizeForBackendFailure
 import com.example.domain.model.CourseReportData
 import com.example.domain.model.CourseReportModule
+import com.example.domain.model.PurchasedCourseItem
 import com.example.domain.model.ReadingReportRecentAttempt
 import com.example.domain.model.ReadingReportSummary
+import com.example.domain.model.RecommendedCourseItem
 import com.example.domain.model.StreakCalendarData
 import com.example.domain.model.StudentDashboardData
 import com.example.domain.model.StudentDashboardStats
@@ -35,6 +37,42 @@ class StudentDashboardRepository(
             val recentAttArr = readRepObj.optJSONArray("recentAttempts") ?: JSONArray()
             val reportObj = data.optJSONObject("courseReport") ?: JSONObject()
             val modulesArr = reportObj.optJSONArray("modules") ?: JSONArray()
+            val purchasedArr = data.optJSONArray("purchasedCourses") ?: JSONArray()
+            val recommendedArr = data.optJSONArray("recommendedCourses") ?: JSONArray()
+
+            val purchasedList = List(purchasedArr.length()) { i ->
+                val p = purchasedArr.getJSONObject(i)
+                PurchasedCourseItem(
+                    courseId = p.optString("courseId"),
+                    title = p.optString("title", "Premium Course"),
+                    subtitle = p.optString("subtitle"),
+                    level = p.optString("level", "Beginner"),
+                    category = p.optString("category", "General"),
+                    price = p.optDouble("price", 0.0),
+                    currency = p.optString("currency", "BDT"),
+                    amountPaid = p.optDouble("amountPaid", 0.0),
+                    paidAt = p.optString("paidAt"),
+                    tranId = p.optString("tranId"),
+                    totalLessons = p.optInt("totalLessons", 0),
+                    completedLessons = p.optInt("completedLessons", 0),
+                    completionPercent = p.optInt("completionPercent", 0)
+                )
+            }
+
+            val recommendedList = List(recommendedArr.length()) { i ->
+                val r = recommendedArr.getJSONObject(i)
+                RecommendedCourseItem(
+                    courseId = r.optString("courseId"),
+                    title = r.optString("title", "Course"),
+                    subtitle = r.optString("subtitle"),
+                    level = r.optString("level", "Beginner"),
+                    category = r.optString("category", "General"),
+                    isPremium = r.optBoolean("isPremium", false),
+                    price = r.optDouble("price", 0.0),
+                    totalLessons = r.optInt("totalLessons", 0),
+                    durationDays = r.optInt("durationDays", 30)
+                )
+            }
 
             val serverDashboard = StudentDashboardData(
                 user = StudentProfileSummary(
@@ -45,6 +83,7 @@ class StudentDashboardRepository(
                     role = userObj.optString("role", "student"),
                     planLabel = userObj.optString("planLabel", "Free"),
                     learningLevel = userObj.optString("learningLevel", "Beginner"),
+                    dailyGoalMinutes = userObj.optInt("dailyGoalMinutes", 20),
                     timezone = userObj.optString("timezone", "Asia/Dhaka")
                 ),
                 stats = StudentDashboardStats(
@@ -57,8 +96,11 @@ class StudentDashboardRepository(
                     quizzesCompleted = statsObj.optInt("quizzesCompleted", 0),
                     activeChatRooms = statsObj.optInt("activeChatRooms", 0),
                     readingPassagesCompleted = statsObj.optInt("readingPassagesCompleted", 0),
-                    readingMinutes = statsObj.optInt("readingMinutes", 0)
+                    readingMinutes = statsObj.optInt("readingMinutes", 0),
+                    purchasedCoursesCount = statsObj.optInt("purchasedCoursesCount", purchasedList.size)
                 ),
+                purchasedCourses = purchasedList,
+                recommendedCourses = recommendedList,
                 weekRangeLabel = data.optString("weekRangeLabel"),
                 weeklyActivity = List(weekArr.length()) { i ->
                     val d = weekArr.getJSONObject(i)

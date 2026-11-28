@@ -19,6 +19,7 @@ private enum class CourseStudentScreen {
 @Composable
 fun CoursesRoute(
     onBack: () -> Unit,
+    initialCourseId: String? = null,
     vm: StudentCourseViewModel = viewModel()
 ) {
     val catalogState by vm.catalogState.collectAsStateWithLifecycle()
@@ -26,12 +27,19 @@ fun CoursesRoute(
     val lessonState by vm.lessonState.collectAsStateWithLifecycle()
     val checkoutState by vm.checkoutState.collectAsStateWithLifecycle()
 
-    var currentScreen by rememberSaveable { mutableStateOf(CourseStudentScreen.CATALOG) }
-    var activeCourseId by rememberSaveable { mutableStateOf<String?>(null) }
+    var currentScreen by rememberSaveable(initialCourseId) {
+        mutableStateOf(
+            if (initialCourseId.isNullOrBlank()) CourseStudentScreen.CATALOG else CourseStudentScreen.DETAIL
+        )
+    }
+    var activeCourseId by rememberSaveable(initialCourseId) { mutableStateOf(initialCourseId) }
     var activeLessonId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(initialCourseId) {
         vm.loadCatalog(1)
+        if (!initialCourseId.isNullOrBlank()) {
+            vm.loadCourseDetail(initialCourseId)
+        }
     }
 
     BackHandler {

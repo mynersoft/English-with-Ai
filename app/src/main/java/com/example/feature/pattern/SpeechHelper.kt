@@ -17,7 +17,7 @@ class SpeechHelper(context: Context) {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var ttsFailed = false
-    private var pendingSpeak: Pair<String, (() -> Unit)?>? = null
+    private var pendingSpeak: Triple<String, Float, (() -> Unit)?>? = null
     private var onSpeakDone: (() -> Unit)? = null
 
     init {
@@ -33,10 +33,13 @@ class SpeechHelper(context: Context) {
                     override fun onError(utteranceId: String?, errorCode: Int) { finishSpeaking() }
                 })
                 ttsReady = true
-                pendingSpeak?.let { (text, done) -> pendingSpeak = null; speak(text, done) }
+                pendingSpeak?.let { (text, rate, done) ->
+                    pendingSpeak = null
+                    speak(text, rate, done)
+                }
             } else {
                 ttsFailed = true
-                pendingSpeak?.second?.invoke()
+                pendingSpeak?.third?.invoke()
                 pendingSpeak = null
             }
         }
@@ -49,9 +52,20 @@ class SpeechHelper(context: Context) {
     }
 
     fun speak(text: String, onDone: (() -> Unit)?) {
-        if (ttsFailed) { onDone?.invoke(); return }
-        if (!ttsReady) { pendingSpeak = text to onDone; return }
+        speak(text = text, speechRate = 0.9f, onDone = onDone)
+    }
+
+    fun speak(text: String, speechRate: Float = 0.9f, onDone: (() -> Unit)? = null) {
+        if (ttsFailed || text.isBlank()) {
+            onDone?.invoke()
+            return
+        }
+        if (!ttsReady) {
+            pendingSpeak = Triple(text, speechRate, onDone)
+            return
+        }
         onSpeakDone = onDone
+        tts?.setSpeechRate(speechRate.coerceIn(0.6f, 1.25f))
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utt-${System.nanoTime()}")
     }
 
@@ -61,25 +75,65 @@ class SpeechHelper(context: Context) {
         tts?.stop()
     }
 
+    fun isInlineRecognitionAvailable(): Boolean {
+        return runCatching { SpeechRecognizer.isRecognitionAvailable(appContext) }.getOrDefault(false)
+    }
+
+    fun createRecognizerIntent(prompt: String = "Speak in English to practice pronunciation"): Intent {
+        return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+        }
+    }
+
+    fun canLaunchVoiceActivity(): Boolean {
+        return runCatching {
+            createRecognizerIntent().resolveActivity(appContext.packageManager) != null
+        }.getOrDefault(false)
+    }
+
     /** Must be called on the main thread. */
     fun startListening(
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit,
-        onErrorMessage: (String) -> Unit
+        onErrorMessage: (String) -> Unit,
+        onReady: () -> Unit = {},
+        onRmsChanged: (Float) -> Unit = {}
     ) {
-        if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+        if (!isInlineRecognitionAvailable()) {
             onErrorMessage("Speech recognition is not available on this phone. You can type instead.")
             return
         }
         destroyRecognizer()
-        val r = SpeechRecognizer.createSpeechRecognizer(appContext)
+        val r = runCatching { SpeechRecognizer.createSpeechRecognizer(appContext) }.getOrNull()
+        if (r == null) {
+            onErrorMessage("Could not start microphone speech recognition. Please try again.")
+            return
+        }
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onReadyForSpeech(params: Bundle?) {
+                onReady()
+            }
+
             override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
+
+            override fun onRmsChanged(rmsdB: Float) {
+                val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+                onRmsChanged(normalized)
+            }
+
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() {
+                onRmsChanged(0f)
+            }
+
             override fun onEvent(eventType: Int, params: Bundle?) {}
 
             override fun onPartialResults(partialResults: Bundle?) {
@@ -90,7 +144,11 @@ class SpeechHelper(context: Context) {
             override fun onResults(results: Bundle?) {
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 destroyRecognizer()
-                if (text.isNullOrBlank()) onErrorMessage("I did not hear you. Tap the mic and try again.") else onFinal(text)
+                if (text.isNullOrBlank()) {
+                    onErrorMessage("I did not hear you clearly. Tap the mic and try again.")
+                } else {
+                    onFinal(text)
+                }
             }
 
             override fun onError(error: Int) {
@@ -98,37 +156,53 @@ class SpeechHelper(context: Context) {
                 onErrorMessage(
                     when (error) {
                         SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                            "I did not hear you. Tap the mic and try again."
+                            "I did not hear you clearly. Tap the mic and try again."
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                            "Microphone permission is needed to talk."
+                            "Microphone permission is needed to practice speaking."
+                        SpeechRecognizer.ERROR_AUDIO ->
+                            "Could not access the microphone. Close other audio apps and try again."
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
+                            "Microphone recognizer is busy. Please wait a moment and try again."
                         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
                             "Speech recognition needs internet on this phone."
+                        SpeechRecognizer.ERROR_CLIENT ->
+                            "Voice input stopped. Tap the mic to try again."
                         else -> "Could not listen. Please try again."
                     }
                 )
             }
         })
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        val intent = createRecognizerIntent()
+        try {
+            r.startListening(intent)
+        } catch (_: SecurityException) {
+            destroyRecognizer()
+            onErrorMessage("Microphone permission is needed to practice speaking.")
+        } catch (_: Exception) {
+            destroyRecognizer()
+            onErrorMessage("Could not start voice recognition. Please try again.")
         }
-        r.startListening(intent)
     }
 
-    /** Stops recording; the recognizer then delivers the final text through onFinal. */
-    fun stopListening() {
-        recognizer?.stopListening()
+    /** Stops recording; the recognizer then delivers the final text through onFinal. Returns false if no active recognizer. */
+    fun stopListening(): Boolean {
+        val active = recognizer ?: return false
+        return try {
+            active.stopListening()
+            true
+        } catch (_: Exception) {
+            destroyRecognizer()
+            false
+        }
     }
 
     fun cancelListening() {
-        recognizer?.cancel()
+        runCatching { recognizer?.cancel() }
         destroyRecognizer()
     }
 
     private fun destroyRecognizer() {
-        recognizer?.destroy()
+        runCatching { recognizer?.destroy() }
         recognizer = null
     }
 

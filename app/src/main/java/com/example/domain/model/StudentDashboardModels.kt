@@ -8,6 +8,7 @@ data class StudentProfileSummary(
     val role: String = "student",
     val planLabel: String = "Free",
     val learningLevel: String = "Beginner",
+    val dailyGoalMinutes: Int = 20,
     val timezone: String = "Asia/Dhaka"
 )
 
@@ -21,7 +22,36 @@ data class StudentDashboardStats(
     val quizzesCompleted: Int = 0,
     val activeChatRooms: Int = 0,
     val readingPassagesCompleted: Int = 0,
-    val readingMinutes: Int = 0
+    val readingMinutes: Int = 0,
+    val purchasedCoursesCount: Int = 0
+)
+
+data class PurchasedCourseItem(
+    val courseId: String,
+    val title: String,
+    val subtitle: String = "",
+    val level: String = "Beginner",
+    val category: String = "General",
+    val price: Double = 0.0,
+    val currency: String = "BDT",
+    val amountPaid: Double = 0.0,
+    val paidAt: String = "",
+    val tranId: String = "",
+    val totalLessons: Int = 0,
+    val completedLessons: Int = 0,
+    val completionPercent: Int = 0
+)
+
+data class RecommendedCourseItem(
+    val courseId: String,
+    val title: String,
+    val subtitle: String = "",
+    val level: String = "Beginner",
+    val category: String = "General",
+    val isPremium: Boolean = false,
+    val price: Double = 0.0,
+    val totalLessons: Int = 0,
+    val durationDays: Int = 30
 )
 
 data class WeeklyActivityDay(
@@ -89,6 +119,8 @@ data class ReadingReportSummary(
 data class StudentDashboardData(
     val user: StudentProfileSummary = StudentProfileSummary(),
     val stats: StudentDashboardStats = StudentDashboardStats(),
+    val purchasedCourses: List<PurchasedCourseItem> = emptyList(),
+    val recommendedCourses: List<RecommendedCourseItem> = emptyList(),
     val weekRangeLabel: String = "",
     val weeklyActivity: List<WeeklyActivityDay> = emptyList(),
     val streakCalendar: StreakCalendarData = StreakCalendarData(),

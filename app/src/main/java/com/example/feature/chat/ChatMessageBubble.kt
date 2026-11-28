@@ -1,5 +1,9 @@
 package com.example.feature.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -19,10 +23,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +49,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -160,6 +167,7 @@ private fun IncomingBubble(
     timeLabel: String,
     onReply: () -> Unit
 ) {
+    val context = LocalContext.current
     val isDark = LocalIsDarkTheme.current
     val paletteIdx = remember(msg.senderId) {
         abs(msg.senderId.hashCode()) % AvatarPalette.size
@@ -263,11 +271,13 @@ private fun IncomingBubble(
                         msg.replyTo?.let { quote ->
                             ReplyQuoteCard(quote = quote, isOutgoingBubble = false)
                         }
-                        Text(
-                            text = msg.displayTextForViewer(),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (isDark) Color(0xFFF1F5F3) else Color(0xFF111827)
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = msg.displayTextForViewer(),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isDark) Color(0xFFF1F5F3) else Color(0xFF111827)
+                            )
+                        }
                     }
                 }
                 IconButton(
@@ -281,6 +291,20 @@ private fun IncomingBubble(
                         contentDescription = "Reply to ${msg.senderName}",
                         tint = mutedColor,
                         modifier = Modifier.size(16.dp)
+                    )
+                }
+                IconButton(
+                    onClick = { copyChatText(context, msg.displayTextForViewer()) },
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .size(36.dp)
+                        .testTag("chat_copy_incoming_${msg.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = "Copy message from ${msg.senderName}",
+                        tint = mutedColor,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
@@ -305,6 +329,7 @@ private fun OutgoingBubble(
     onReply: () -> Unit,
     onRequestAiCorrection: () -> Unit
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -332,12 +357,14 @@ private fun OutgoingBubble(
                 msg.replyTo?.let { quote ->
                     ReplyQuoteCard(quote = quote, isOutgoingBubble = true)
                 }
-                Text(
-                    text = msg.text,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Normal
-                )
+                SelectionContainer {
+                    Text(
+                        text = msg.text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
 
                 OutgoingAiSection(
                     ai = msg.aiCorrection,
@@ -347,13 +374,32 @@ private fun OutgoingBubble(
             }
         }
 
-        if (timeLabel.isNotBlank()) {
-            Text(
-                text = timeLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (LocalIsDarkTheme.current) Color(0xFF9CA3AF) else Color(0xFF6B7280),
-                modifier = Modifier.padding(top = 3.dp, end = 4.dp)
-            )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(top = 2.dp, end = 4.dp)
+        ) {
+            IconButton(
+                onClick = { copyChatText(context, msg.text) },
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .size(28.dp)
+                    .testTag("chat_copy_outgoing_${msg.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = "Copy your message",
+                    tint = if (LocalIsDarkTheme.current) Color(0xFF9CA3AF) else Color(0xFF6B7280),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            if (timeLabel.isNotBlank()) {
+                Text(
+                    text = timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (LocalIsDarkTheme.current) Color(0xFF9CA3AF) else Color(0xFF6B7280)
+                )
+            }
         }
     }
 }
@@ -440,21 +486,25 @@ private fun OutgoingAiSection(
                             tint = SparkleOrange,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = annotated,
-                            style = MaterialTheme.typography.bodyMedium,
-                            lineHeight = 20.sp
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = annotated,
+                                style = MaterialTheme.typography.bodyMedium,
+                                lineHeight = 20.sp
+                            )
+                        }
                     }
                 }
 
                 AnimatedVisibility(visible = showExplanation && ai.explanationBn.isNotBlank()) {
-                    Text(
-                        text = ai.explanationBn,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFFEF3C7),
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = ai.explanationBn,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFFEF3C7),
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -596,4 +646,11 @@ fun formatDateDivider(iso: String): String {
             else -> DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US).format(date)
         }
     }.getOrDefault("Today")
+}
+
+private fun copyChatText(context: Context, text: String) {
+    if (text.isBlank()) return
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+    cm.setPrimaryClip(ClipData.newPlainText("Chat Message", text))
+    Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()
 }

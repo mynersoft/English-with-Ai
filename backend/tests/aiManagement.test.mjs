@@ -14,6 +14,10 @@ import {
   lookupModelPricing,
   normalizeAiConfigPatch,
 } from "../src/lib/aiConfigUtils.js";
+import {
+  normalizeSpeakingModelOutput,
+  parseAiJsonObject,
+} from "../src/lib/speakingJson.js";
 
 test("buildDefaultAiConfig uses env defaults and never exposes API keys", () => {
   const cfg = buildDefaultAiConfig({
@@ -184,4 +188,37 @@ test("Admin AI route uses withAdmin guard and never reads client-sent secret key
   const content = fs.readFileSync(routePath, "utf8");
   assert.equal(content.includes("withAdmin("), true);
   assert.equal(content.includes("AI_API_KEY"), false);
+});
+
+test("normalizeSpeakingModelOutput recovers truncated JSON with escaped Bangla text", () => {
+  const truncatedRaw = `{
+  "reply": "I think you mean you wake up and brush your teeth! What do you eat for breakfast?",
+  "correction": {
+    "hasMistake": true,
+    "original": "I get a really in the morning and press my trip",
+    "corrected": "I get up early in the morning and brush my teeth.",
+    "explanationBn": "\\u09b8\\u0995\\u09be\\u09b2\\u09c7 \\u0998\\u09c1\\u09ae \\u09a5\\u09c7\\u0995\\u09c7 \\u0993\\u09a0\\u09be 'get up'\\u0964\\u09b`;
+
+  const result = normalizeSpeakingModelOutput({
+    raw: truncatedRaw,
+    originalMessage: "I get a really in the morning and press my trip",
+    allowCorrection: true,
+  });
+
+  assert.equal(
+    result.reply,
+    "I think you mean you wake up and brush your teeth! What do you eat for breakfast?"
+  );
+  assert.equal(result.correction.hasMistake, true);
+  assert.equal(result.correction.corrected, "I get up early in the morning and brush my teeth.");
+  assert.equal(result.correction.explanationBn.includes("সকালে"), true);
+  assert.equal(result.correction.explanationBn.includes("\\u09"), false);
+});
+
+test("parseAiJsonObject repairs fenced and truncated chat grammar JSON", () => {
+  const fencedTruncated = '```json\n{"hasMistake": true, "correctedText": "I feel like going", "explanationBn": "ঠিক বাক্য: I feel like going';
+  const parsed = parseAiJsonObject(fencedTruncated);
+  assert.equal(parsed.hasMistake, true);
+  assert.equal(parsed.correctedText, "I feel like going");
+  assert.equal(parsed.explanationBn, "ঠিক বাক্য: I feel like going");
 });

@@ -208,6 +208,47 @@ export function validateMediaUpload({ mediaType, mimeType = "", fileName = "", s
   return { type, rule, ext };
 }
 
+export const AVATAR_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+export const AVATAR_FALLBACK_MAX_BYTES = 256 * 1024; // 256 KB inline fallback when Cloudinary is unconfigured
+const AVATAR_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+const AVATAR_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+
+export function validateStudentAvatarUpload({ mimeType = "", fileName = "", sizeBytes = 0 }) {
+  const normalizedMime = String(mimeType || "").trim().toLowerCase().split(";")[0];
+  const extMatch = String(fileName || "").trim().toLowerCase().match(/(\.[a-z0-9]+)$/);
+  const ext = extMatch ? extMatch[1] : "";
+
+  const mimeOk = normalizedMime && AVATAR_MIME_TYPES.has(normalizedMime);
+  const extOk = ext && AVATAR_EXTENSIONS.has(ext);
+  if (!mimeOk && !extOk) {
+    throw new AppError(
+      400,
+      "UNSUPPORTED_FILE_TYPE",
+      "Unsupported avatar image format. Please choose a JPG, PNG, or WebP photo."
+    );
+  }
+
+  const bytes = Number(sizeBytes || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    throw new AppError(400, "EMPTY_FILE", "Avatar image cannot be empty.");
+  }
+  if (bytes > AVATAR_MAX_BYTES) {
+    throw new AppError(413, "FILE_TOO_LARGE", "Avatar image exceeds the 5 MB limit.");
+  }
+
+  const resolvedMime = mimeOk
+    ? normalizedMime === "image/jpg"
+      ? "image/jpeg"
+      : normalizedMime
+    : ext === ".png"
+      ? "image/png"
+      : ext === ".webp"
+        ? "image/webp"
+        : "image/jpeg";
+
+  return { mimeType: resolvedMime, bytes };
+}
+
 export function buildSignedUploadParams({ mediaType, cloudName, apiKey, apiSecret, timestamp = Math.floor(Date.now() / 1000) }) {
   const type = String(mediaType || "").trim().toLowerCase();
   const rule = MEDIA_UPLOAD_RULES[type];

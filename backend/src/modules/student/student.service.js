@@ -16,6 +16,9 @@ import ReadingPassage from "@/models/ReadingPassage";
 import UserReadingProgress from "@/models/UserReadingProgress";
 import ReadingAttempt from "@/models/ReadingAttempt";
 import ReadingDailyActivity from "@/models/ReadingDailyActivity";
+import CoursePurchase from "@/models/CoursePurchase";
+import Course from "@/models/Course";
+import LessonProgress from "@/models/LessonProgress";
 import { normalizeReadingGoalMinutes } from "@/lib/readingUtils";
 
 function formatLevelLabel(level) {
@@ -87,6 +90,9 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
     readingProgressDocs,
     readingAttemptsDocs,
     readingDailyDocs,
+    paidCoursePurchases,
+    publishedCourses,
+    lessonProgressDocs,
   ] = await Promise.all([
     VocabularyDailyActivity.find({
       userId,
@@ -136,6 +142,18 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       date: { $gte: sixtyDaysAgoStr, $lte: todayStr },
     })
       .select("date readingSeconds completedPassageIds")
+      .lean(),
+    CoursePurchase.find({ userId, status: "paid" })
+      .sort({ paidAt: -1, createdAt: -1 })
+      .select("courseId courseTitle tranId amount currency paidAt createdAt")
+      .lean(),
+    Course.find({ isPublished: true })
+      .sort({ isPremium: -1, updatedAt: -1 })
+      .limit(20)
+      .select("_id title subtitle level category price isPremium totalLessons durationDays")
+      .lean(),
+    LessonProgress.find({ userId })
+      .select("courseId isCompleted")
       .lean(),
   ]);
 
@@ -295,6 +313,83 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
     };
   });
 
+  // Build purchased courses & recommended courses summary
+  const completedLessonsByCourse = new Map();
+  for (const lp of lessonProgressDocs) {
+    if (!lp.courseId || !lp.isCompleted) continue;
+    const cid = String(lp.courseId);
+    completedLessonsByCourse.set(cid, (completedLessonsByCourse.get(cid) || 0) + 1);
+  }
+
+  const publishedCourseMap = new Map(publishedCourses.map((c) => [String(c._id), c]));
+  const missingPurchasedCourseIds = [];
+  const seenPurchasedIds = new Set();
+  const uniquePaidPurchases = [];
+  for (const p of paidCoursePurchases) {
+    const cid = p.courseId ? String(p.courseId) : "";
+    if (!cid || seenPurchasedIds.has(cid)) continue;
+    seenPurchasedIds.add(cid);
+    uniquePaidPurchases.push(p);
+    if (!publishedCourseMap.has(cid)) {
+      missingPurchasedCourseIds.push(p.courseId);
+    }
+  }
+  if (missingPurchasedCourseIds.length > 0) {
+    const extraCourses = await Course.find({ _id: { $in: missingPurchasedCourseIds } })
+      .select("_id title subtitle level category price isPremium totalLessons durationDays")
+      .lean();
+    for (const c of extraCourses) {
+      publishedCourseMap.set(String(c._id), c);
+    }
+  }
+
+  const purchasedCourses = uniquePaidPurchases.map((p) => {
+    const cid = String(p.courseId);
+    const c = publishedCourseMap.get(cid);
+    const totalLessons = Number(c?.totalLessons || 0);
+    const completedLessons = completedLessonsByCourse.get(cid) || 0;
+    const completionPercent = totalLessons > 0
+      ? Math.min(100, Math.round((completedLessons / totalLessons) * 100))
+      : 0;
+    return {
+      courseId: cid,
+      title: c?.title || p.courseTitle || "Premium Course",
+      subtitle: c?.subtitle || "",
+      level: c?.level || "Beginner",
+      category: c?.category || "General",
+      price: Number(c?.price || p.amount || 0),
+      currency: p.currency || "BDT",
+      amountPaid: Number(p.amount || 0),
+      paidAt: p.paidAt ? new Date(p.paidAt).toISOString() : (p.createdAt ? new Date(p.createdAt).toISOString() : ""),
+      tranId: p.tranId || "",
+      totalLessons,
+      completedLessons,
+      completionPercent,
+    };
+  });
+
+  const recommendedCourses = publishedCourses
+    .filter((c) => !seenPurchasedIds.has(String(c._id)))
+    .slice(0, 3)
+    .map((c) => ({
+      courseId: String(c._id),
+      title: c.title || "English Course",
+      subtitle: c.subtitle || "",
+      level: c.level || "Beginner",
+      category: c.category || "General",
+      isPremium: Boolean(c.isPremium),
+      price: Number(c.price || 0),
+      totalLessons: Number(c.totalLessons || 0),
+      durationDays: Number(c.durationDays || 30),
+    }));
+
+  const hasActiveSubscription =
+    (userDoc.subscriptionStatus === "active" || userDoc.subscriptionStatus === "trial") &&
+    (!userDoc.subscriptionExpiresAt || new Date(userDoc.subscriptionExpiresAt) > now);
+  const resolvedPlanLabel = userDoc.role === "admin"
+    ? "Admin"
+    : (hasActiveSubscription || purchasedCourses.length > 0 ? "Premium" : "Free");
+
   return {
     user: {
       id: String(userDoc._id),
@@ -302,8 +397,9 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       email: userDoc.email || "",
       photoUrl: userDoc.photoUrl || null,
       role: userDoc.role || "student",
-      planLabel: userDoc.role === "admin" ? "Admin" : "Free",
+      planLabel: resolvedPlanLabel,
       learningLevel: levelLabel,
+      dailyGoalMinutes: Number(userDoc.dailyGoalMinutes || 20),
       timezone,
     },
     stats: {
@@ -316,7 +412,10 @@ export async function buildStudentDashboardData({ userDoc, now = new Date() }) {
       activeChatRooms: activeChatRoomsCount,
       readingPassagesCompleted: readingCompletedCount,
       readingMinutes: readingTotalMinutes,
+      purchasedCoursesCount: purchasedCourses.length,
     },
+    purchasedCourses,
+    recommendedCourses,
     weekRangeLabel,
     weeklyActivity,
     streakCalendar: {

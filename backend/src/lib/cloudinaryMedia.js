@@ -1,12 +1,14 @@
 import { v2 as cloudinary } from "cloudinary";
 import { AppError } from "./errors.js";
 import {
+  AVATAR_FALLBACK_MAX_BYTES,
   MEDIA_UPLOAD_RULES,
   buildSignedUploadParams,
   validateMediaUpload,
+  validateStudentAvatarUpload,
 } from "./courseUtils.js";
 
-export { validateMediaUpload };
+export { validateMediaUpload, validateStudentAvatarUpload };
 
 let cloudinaryConfigured = false;
 
@@ -113,4 +115,71 @@ export async function deleteCourseMedia(publicId, mediaType = "image") {
   } catch (err) {
     console.error(`Cloudinary destroy failed for ${cleanId}:`, err?.message || err);
   }
+}
+
+export function hasCloudinaryConfig() {
+  return Boolean(
+    String(process.env.CLOUDINARY_CLOUD_NAME || "").trim() &&
+      String(process.env.CLOUDINARY_API_KEY || "").trim() &&
+      String(process.env.CLOUDINARY_API_SECRET || "").trim()
+  );
+}
+
+export async function uploadStudentAvatar({ buffer, mimeType = "", fileName = "", userId = "" }) {
+  const { mimeType: resolvedMime, bytes } = validateStudentAvatarUpload({
+    mimeType,
+    fileName,
+    sizeBytes: buffer?.length || 0,
+  });
+
+  if (!hasCloudinaryConfig()) {
+    if (bytes <= AVATAR_FALLBACK_MAX_BYTES) {
+      const base64 = buffer.toString("base64");
+      return {
+        url: `data:${resolvedMime};base64,${base64}`,
+        publicId: "",
+        storage: "inline",
+        bytes,
+      };
+    }
+    throw new AppError(
+      503,
+      "STORAGE_NOT_CONFIGURED",
+      "Cloudinary media storage is not configured on the server."
+    );
+  }
+
+  ensureCloudinary();
+
+  const safeUid =
+    String(userId || "student")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || "student";
+  const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const publicId = `english-ai/avatars/${safeUid}-${uniqueSuffix}`;
+
+  const result = await new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: "image",
+        public_id: publicId,
+        overwrite: false,
+        use_filename: false,
+        transformation: [
+          { width: 512, height: 512, crop: "limit", quality: "auto:good" },
+        ],
+      },
+      (err, res) => (err ? reject(err) : resolve(res))
+    );
+    uploadStream.end(buffer);
+  });
+
+  return {
+    url: result.secure_url,
+    publicId: result.public_id,
+    storage: "cloudinary",
+    bytes: Number(result.bytes || bytes),
+  };
 }

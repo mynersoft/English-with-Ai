@@ -3,4 +3,11 @@
     <cache-path
         name="handwriting_cache"
         path="handwriting/" />
+    <cache-path
+        name="avatar_camera_cache"
+        path="avatars_camera/" />
+    <files-path
+        name="avatar_files"
+        path="avatars/" />
 </paths>
+

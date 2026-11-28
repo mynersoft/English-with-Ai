@@ -82,6 +82,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
+import com.example.core.ui.StudentAvatarImage
 import com.example.ui.theme.AppThemeManager
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.LocalIsDarkTheme
@@ -104,6 +105,7 @@ fun StudentSidebarContainer(
     selectedTab: AppMainTab,
     displayName: String,
     email: String,
+    avatarUrl: String? = null,
     level: String,
     planLabel: String,
     streakDays: Int,
@@ -154,6 +156,7 @@ fun StudentSidebarContainer(
                 selectedTab = selectedTab,
                 displayName = displayName,
                 email = email,
+                avatarUrl = avatarUrl,
                 level = level,
                 planLabel = planLabel,
                 streakDays = streakDays,
@@ -242,6 +245,7 @@ private fun StudentSidebarDrawerContent(
     selectedTab: AppMainTab,
     displayName: String,
     email: String,
+    avatarUrl: String? = null,
     level: String,
     planLabel: String,
     streakDays: Int,
@@ -311,10 +315,9 @@ private fun StudentSidebarDrawerContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(modifier = Modifier.size(48.dp)) {
-                        Image(
-                            painter = painterResource(id = R.drawable.img_student_avatar),
+                        StudentAvatarImage(
+                            photoUrl = avatarUrl,
                             contentDescription = "$displayName avatar",
-                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(46.dp)
                                 .clip(CircleShape)

@@ -1,5 +1,7 @@
 package com.example.feature.dashboard
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModel
@@ -11,6 +13,7 @@ import com.example.core.common.handleFirestoreError
 import com.example.core.network.toUserFriendlyBackendMessage
 import com.example.core.ui.BannerTone
 import com.example.data.repository.AuthRepository
+import com.example.data.repository.StudentAvatarRepository
 import com.example.data.repository.UserRepository
 import com.example.domain.model.AccountStatus
 import com.example.domain.model.LearningLevel
@@ -39,7 +42,9 @@ data class DashboardActionState(
     val bannerTone: BannerTone = BannerTone.INFO,
     val backendSyncError: String? = null,
     val isSyncingBackend: Boolean = false,
-    val isAdmin: Boolean = false
+    val isAdmin: Boolean = false,
+    val avatarUrl: String? = null,
+    val isUploadingAvatar: Boolean = false
 )
 
 class DashboardViewModel(
@@ -162,6 +167,76 @@ class DashboardViewModel(
                 bannerMessage = message,
                 bannerTone = BannerTone.ERROR
             )
+        }
+    }
+
+    fun hydrateAvatar(context: Context, remotePhotoUrl: String? = null) {
+        if (!remotePhotoUrl.isNullOrBlank() && remotePhotoUrl != "null") {
+            StudentAvatarRepository.cacheRemoteAvatarUrlIfPresent(context, currentUserId, remotePhotoUrl)
+        }
+        val resolved = StudentAvatarRepository.resolveBestAvatarUrl(context, currentUserId, remotePhotoUrl)
+        if (!resolved.isNullOrBlank() && _actionState.value.avatarUrl != resolved) {
+            _actionState.update { it.copy(avatarUrl = resolved) }
+        }
+    }
+
+    fun uploadAvatar(
+        context: Context,
+        sourceUri: Uri,
+        onFinished: (Boolean) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            _actionState.update { it.copy(isUploadingAvatar = true, bannerMessage = null) }
+            val result = StudentAvatarRepository.uploadAvatar(context, currentUserId, sourceUri)
+            result.onSuccess { outcome ->
+                _actionState.update {
+                    it.copy(
+                        isUploadingAvatar = false,
+                        avatarUrl = outcome.avatarUrl,
+                        bannerMessage = outcome.message,
+                        bannerTone = if (outcome.syncedToCloud) BannerTone.SUCCESS else BannerTone.INFO
+                    )
+                }
+                onFinished(outcome.syncedToCloud)
+            }.onFailure { err ->
+                _actionState.update {
+                    it.copy(
+                        isUploadingAvatar = false,
+                        bannerMessage = err.message ?: "Could not process the selected photo.",
+                        bannerTone = BannerTone.ERROR
+                    )
+                }
+                onFinished(false)
+            }
+        }
+    }
+
+    fun removeAvatar(
+        context: Context,
+        onFinished: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            _actionState.update { it.copy(isUploadingAvatar = true, bannerMessage = null) }
+            val result = StudentAvatarRepository.removeAvatar(context, currentUserId)
+            result.onSuccess {
+                _actionState.update {
+                    it.copy(
+                        isUploadingAvatar = false,
+                        avatarUrl = null,
+                        bannerMessage = "Profile photo removed.",
+                        bannerTone = BannerTone.INFO
+                    )
+                }
+                onFinished()
+            }.onFailure { err ->
+                _actionState.update {
+                    it.copy(
+                        isUploadingAvatar = false,
+                        bannerMessage = err.message ?: "Could not remove profile photo.",
+                        bannerTone = BannerTone.ERROR
+                    )
+                }
+            }
         }
     }
 

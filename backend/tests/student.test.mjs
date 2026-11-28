@@ -45,10 +45,11 @@ test("buildMonthCalendar extracts active days for current month", () => {
   assert.deepEqual(cal.activeDaysOfMonth, [5, 25]);
 });
 
-test("Student dashboard, activity & pattern progress routes enforce withAuth", () => {
+test("Student dashboard, activity, avatar & pattern progress routes enforce withAuth", () => {
   const routes = [
     "../src/app/api/v1/student/dashboard/route.js",
     "../src/app/api/v1/student/activity/route.js",
+    "../src/app/api/v1/student/avatar/route.js",
     "../src/app/api/v1/patterns/[id]/progress/route.js",
   ];
   for (const rel of routes) {
@@ -56,6 +57,30 @@ test("Student dashboard, activity & pattern progress routes enforce withAuth", (
     assert.match(src, /withAuth/, `${rel} must use withAuth`);
     assert.ok(!/body\.userId|searchParams\.get\(["']userId/.test(src), `${rel} must not trust client userId`);
   }
+});
+
+test("validateStudentAvatarUpload enforces image MIME/extension and file size limits", async () => {
+  const { validateStudentAvatarUpload } = await import("../src/lib/courseUtils.js");
+  const valid = validateStudentAvatarUpload({
+    mimeType: "image/jpeg",
+    fileName: "selfie.jpg",
+    sizeBytes: 1024 * 40,
+  });
+  assert.equal(valid.mimeType, "image/jpeg");
+  assert.equal(valid.bytes, 1024 * 40);
+
+  assert.throws(
+    () => validateStudentAvatarUpload({ mimeType: "application/pdf", fileName: "doc.pdf", sizeBytes: 1024 }),
+    (err) => err.code === "UNSUPPORTED_FILE_TYPE"
+  );
+  assert.throws(
+    () => validateStudentAvatarUpload({ mimeType: "image/png", fileName: "empty.png", sizeBytes: 0 }),
+    (err) => err.code === "EMPTY_FILE"
+  );
+  assert.throws(
+    () => validateStudentAvatarUpload({ mimeType: "image/png", fileName: "huge.png", sizeBytes: 6 * 1024 * 1024 }),
+    (err) => err.code === "FILE_TOO_LARGE"
+  );
 });
 
 test("Student dashboard service computes readingReport, readingActive, and reading module", () => {
@@ -67,3 +92,4 @@ test("Student dashboard service computes readingReport, readingActive, and readi
   assert.match(src, /UserReadingProgress/);
   assert.match(src, /ReadingAttempt/);
 });
+

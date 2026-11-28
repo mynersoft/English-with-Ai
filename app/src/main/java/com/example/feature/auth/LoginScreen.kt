@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
@@ -37,15 +38,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
+import android.view.View
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -71,11 +77,23 @@ fun LoginScreen(
     onNavigateToForgotPassword: (String) -> Unit,
     onClearBanner: () -> Unit
 ) {
-    var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    val view = LocalView.current
+    val savedLastEmail = remember { AuthPreferences.getLastLoginEmail(context) }
+
+    var email by rememberSaveable(savedLastEmail) { mutableStateOf(savedLastEmail) }
+    var password by remember { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val busy = uiState.isLoading || uiState.isGoogleLoading
+
+    DisposableEffect(view) {
+        val previousImportance = view.importantForAutofill
+        view.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        onDispose {
+            view.importantForAutofill = previousImportance
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -137,6 +155,18 @@ fun LoginScreen(
                         placeholder = { Text("student@example.com") },
                         leadingIcon = {
                             Icon(Icons.Filled.Email, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            if (email.isNotBlank() && !busy) {
+                                IconButton(
+                                    onClick = { email = "" },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("login_clear_email_button")
+                                ) {
+                                    Icon(Icons.Filled.Clear, contentDescription = "Clear email")
+                                }
+                            }
                         },
                         singleLine = true,
                         enabled = !busy,

@@ -1,4 +1,4 @@
-
+import { decodeUnicodeEscapes, parseAiJsonObject } from "./speakingJson.js";
 
 /**
  * Computes word-level diff tokens between an original English chat message and the
@@ -59,15 +59,7 @@ export function computeCorrectionTokens(originalText, correctedText) {
 }
 
 function parseCorrectionJson(raw) {
-  const cleaned = String(raw || "").replace(/```json|```/gi, "").trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1) return null;
-  try {
-    return JSON.parse(cleaned.slice(start, end + 1));
-  } catch {
-    return null;
-  }
+  return parseAiJsonObject(raw);
 }
 
 /**
@@ -121,7 +113,7 @@ export async function correctEnglishChatMessage(text, { userId = "system", isPre
       system,
       messages: [{ role: "user", content: original }],
       json: true,
-      maxTokens: Math.min(400, Number(config?.maxOutputTokens || 300)),
+      maxTokens: Math.max(512, Number(config?.maxOutputTokens || 512)),
       temperature: Math.min(0.4, Number(config?.temperature ?? 0.2)),
       feature: "chat_grammar",
       userId,
@@ -139,7 +131,9 @@ export async function correctEnglishChatMessage(text, { userId = "system", isPre
       };
     }
 
-    const corrected = typeof parsed.correctedText === "string" ? parsed.correctedText.trim() : "";
+    const corrected = typeof parsed.correctedText === "string"
+      ? decodeUnicodeEscapes(parsed.correctedText)
+      : "";
     const hasMistake =
       parsed.hasMistake === true &&
       corrected.length > 0 &&
@@ -161,7 +155,9 @@ export async function correctEnglishChatMessage(text, { userId = "system", isPre
       correctedText: corrected,
       tokens: computeCorrectionTokens(original, corrected),
       explanationBn:
-        typeof parsed.explanationBn === "string" ? parsed.explanationBn.trim() : "",
+        typeof parsed.explanationBn === "string"
+          ? decodeUnicodeEscapes(parsed.explanationBn)
+          : "",
     };
   } catch (err) {
     console.warn("Chat AI grammar correction skipped due to provider error:", err?.message);
