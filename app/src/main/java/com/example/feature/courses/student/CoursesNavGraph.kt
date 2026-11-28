@@ -24,6 +24,7 @@ fun CoursesRoute(
     val catalogState by vm.catalogState.collectAsStateWithLifecycle()
     val detailState by vm.detailState.collectAsStateWithLifecycle()
     val lessonState by vm.lessonState.collectAsStateWithLifecycle()
+    val checkoutState by vm.checkoutState.collectAsStateWithLifecycle()
 
     var currentScreen by rememberSaveable { mutableStateOf(CourseStudentScreen.CATALOG) }
     var activeCourseId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -68,6 +69,7 @@ fun CoursesRoute(
         CourseStudentScreen.DETAIL -> {
             CourseDetailScreen(
                 state = detailState,
+                isStartingCheckout = checkoutState.isStartingCheckout,
                 onBack = {
                     currentScreen = CourseStudentScreen.CATALOG
                     vm.loadCatalog(catalogState.pagination.page)
@@ -78,13 +80,21 @@ fun CoursesRoute(
                     activeLessonId = lessonId
                     currentScreen = CourseStudentScreen.LESSON
                     vm.loadLesson(lessonId)
+                },
+                onPurchaseCourse = { cusPhone ->
+                    val targetCourseId = detailState.course?.id ?: activeCourseId
+                    if (!targetCourseId.isNullOrBlank()) {
+                        vm.startCoursePurchase(targetCourseId, cusPhone)
+                    }
                 }
             )
         }
 
         CourseStudentScreen.LESSON -> {
+            val lessonCourseId = lessonState.course?.id ?: activeCourseId
             StudentLessonViewerScreen(
                 state = lessonState,
+                isStartingCheckout = checkoutState.isStartingCheckout,
                 onBack = {
                     currentScreen = CourseStudentScreen.DETAIL
                     activeCourseId?.let { vm.loadCourseDetail(it) }
@@ -96,8 +106,40 @@ fun CoursesRoute(
                 onNavigateLesson = { nextOrPrevId ->
                     activeLessonId = nextOrPrevId
                     vm.loadLesson(nextOrPrevId)
+                },
+                onPurchaseCourse = lessonCourseId?.let { cid ->
+                    { vm.startCoursePurchase(cid) }
                 }
             )
         }
+    }
+
+    checkoutState.session?.let { session ->
+        SslCommerzCheckoutDialog(
+            session = session,
+            isVerifying = checkoutState.isVerifyingPayment,
+            errorMessage = checkoutState.error,
+            onCallbackReached = { tranId, courseId ->
+                vm.verifySslCommerzPayment(
+                    tranId = tranId,
+                    courseId = courseId,
+                    activeLessonId = if (currentScreen == CourseStudentScreen.LESSON) activeLessonId else null,
+                    closeOnTerminalOutcome = true
+                )
+            },
+            onManualVerify = { tranId, courseId ->
+                vm.verifySslCommerzPayment(
+                    tranId = tranId,
+                    courseId = courseId,
+                    activeLessonId = if (currentScreen == CourseStudentScreen.LESSON) activeLessonId else null,
+                    closeOnTerminalOutcome = false
+                )
+            },
+            onDismiss = {
+                vm.dismissCheckout(
+                    activeLessonId = if (currentScreen == CourseStudentScreen.LESSON) activeLessonId else null
+                )
+            }
+        )
     }
 }

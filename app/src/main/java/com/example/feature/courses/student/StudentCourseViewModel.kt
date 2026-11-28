@@ -11,6 +11,7 @@ import com.example.domain.model.LessonNavLink
 import com.example.domain.model.LessonProgressModel
 import com.example.domain.model.LessonSummary
 import com.example.domain.model.ModuleWithLessons
+import com.example.domain.model.SslCommerzCheckoutSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +53,13 @@ data class StudentLessonViewerUiState(
     val error: String? = null
 )
 
+data class CourseCheckoutUiState(
+    val isStartingCheckout: Boolean = false,
+    val isVerifyingPayment: Boolean = false,
+    val session: SslCommerzCheckoutSession? = null,
+    val error: String? = null
+)
+
 class StudentCourseViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = CourseRepository(application)
 
@@ -63,6 +71,9 @@ class StudentCourseViewModel(application: Application) : AndroidViewModel(applic
 
     private val _lessonState = MutableStateFlow(StudentLessonViewerUiState())
     val lessonState: StateFlow<StudentLessonViewerUiState> = _lessonState.asStateFlow()
+
+    private val _checkoutState = MutableStateFlow(CourseCheckoutUiState())
+    val checkoutState: StateFlow<CourseCheckoutUiState> = _checkoutState.asStateFlow()
 
     fun loadCatalog(page: Int = 1) {
         val s = _catalogState.value
@@ -231,6 +242,129 @@ class StudentCourseViewModel(application: Application) : AndroidViewModel(applic
             runCatching { repo.getStudentCourseDetail(lesson.courseId) }.onSuccess { payload ->
                 _detailState.update {
                     it.copy(course = payload.course, modules = payload.modules)
+                }
+            }
+        }
+    }
+
+    fun startCoursePurchase(courseId: String, cusPhone: String = "") {
+        if (_checkoutState.value.isStartingCheckout) return
+        viewModelScope.launch {
+            _checkoutState.update { it.copy(isStartingCheckout = true, error = null) }
+            _detailState.update { it.copy(error = null, message = null) }
+            runCatching {
+                repo.initCourseSslCommerzCheckout(courseId = courseId, cusPhone = cusPhone)
+            }.onSuccess { session ->
+                val urlLower = session.gatewayUrl.trim().lowercase()
+                if (!urlLower.startsWith("https://") && !urlLower.startsWith("http://")) {
+                    val msg = "Invalid payment gateway URL received."
+                    _checkoutState.update { it.copy(isStartingCheckout = false, error = msg) }
+                    _detailState.update { it.copy(error = msg) }
+                    return@onSuccess
+                }
+                _checkoutState.update {
+                    it.copy(
+                        isStartingCheckout = false,
+                        session = session,
+                        error = null
+                    )
+                }
+            }.onFailure { err ->
+                val msg = err.message ?: "Unable to start SSLCOMMERZ payment."
+                _checkoutState.update { it.copy(isStartingCheckout = false, error = msg) }
+                _detailState.update { it.copy(error = msg) }
+                if (_lessonState.value.isLockedError) {
+                    _lessonState.update { it.copy(error = msg) }
+                }
+            }
+        }
+    }
+
+    fun verifySslCommerzPayment(
+        tranId: String,
+        courseId: String,
+        activeLessonId: String? = null,
+        closeOnTerminalOutcome: Boolean = false
+    ) {
+        if (_checkoutState.value.isVerifyingPayment) return
+        viewModelScope.launch {
+            _checkoutState.update { it.copy(isVerifyingPayment = true, error = null) }
+            runCatching {
+                repo.getCoursePurchaseStatus(tranId)
+            }.onSuccess { result ->
+                if (result.status == "paid" || result.hasAccess) {
+                    val unlockedMsg = result.message.ifBlank {
+                        "Course unlocked! Payment verified via SSLCOMMERZ."
+                    }
+                    _checkoutState.update {
+                        it.copy(isVerifyingPayment = false, session = null, error = null)
+                    }
+                    _detailState.update { it.copy(message = unlockedMsg, error = null) }
+                    loadCourseDetail(courseId)
+                    loadCatalog(_catalogState.value.pagination.page)
+                    if (!activeLessonId.isNullOrBlank()) {
+                        loadLesson(activeLessonId)
+                    }
+                } else if (
+                    closeOnTerminalOutcome &&
+                    result.status in listOf("cancelled", "failed", "validation_failed")
+                ) {
+                    val statusMsg = result.message.ifBlank { "Payment was not completed." }
+                    _checkoutState.update {
+                        it.copy(isVerifyingPayment = false, session = null, error = null)
+                    }
+                    _detailState.update { it.copy(error = statusMsg) }
+                    if (!activeLessonId.isNullOrBlank() && _lessonState.value.isLockedError) {
+                        _lessonState.update { it.copy(error = statusMsg) }
+                    }
+                } else {
+                    val pendingMsg = result.message.ifBlank {
+                        "Payment is still pending verification."
+                    }
+                    _checkoutState.update {
+                        it.copy(isVerifyingPayment = false, error = pendingMsg)
+                    }
+                }
+            }.onFailure { err ->
+                _checkoutState.update {
+                    it.copy(
+                        isVerifyingPayment = false,
+                        error = err.message ?: "Unable to verify payment status."
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissCheckout(activeLessonId: String? = null) {
+        val currentSession = _checkoutState.value.session
+        if (currentSession == null) {
+            _checkoutState.update { it.copy(error = null) }
+            return
+        }
+        viewModelScope.launch {
+            _checkoutState.update { it.copy(isVerifyingPayment = true) }
+            val statusResult = runCatching {
+                repo.getCoursePurchaseStatus(currentSession.tranId)
+            }.getOrNull()
+
+            _checkoutState.update {
+                it.copy(isVerifyingPayment = false, session = null, error = null)
+            }
+
+            if (statusResult != null && (statusResult.status == "paid" || statusResult.hasAccess)) {
+                _detailState.update {
+                    it.copy(
+                        message = statusResult.message.ifBlank {
+                            "Course unlocked! Payment verified via SSLCOMMERZ."
+                        },
+                        error = null
+                    )
+                }
+                loadCourseDetail(currentSession.courseId)
+                loadCatalog(_catalogState.value.pagination.page)
+                if (!activeLessonId.isNullOrBlank()) {
+                    loadLesson(activeLessonId)
                 }
             }
         }

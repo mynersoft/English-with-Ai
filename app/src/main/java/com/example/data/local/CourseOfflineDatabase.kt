@@ -34,6 +34,7 @@ data class CachedCourseEntity(
     val enrollmentStatus: String,
     val continueLessonId: String?,
     val hasAccess: Boolean,
+    val isPurchased: Boolean = false,
     val isOfflineAvailable: Boolean,
     val updatedAt: String?,
     val cachedAtMs: Long
@@ -150,7 +151,7 @@ interface CourseOfflineDao {
         CachedLessonEntity::class,
         CachedLessonProgressEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class CourseOfflineDatabase : RoomDatabase() {

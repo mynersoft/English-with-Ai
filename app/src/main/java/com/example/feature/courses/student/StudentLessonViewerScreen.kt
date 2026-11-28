@@ -10,16 +10,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -38,10 +41,12 @@ import com.example.feature.courses.ui.LessonContentRenderer
 @Composable
 fun StudentLessonViewerScreen(
     state: StudentLessonViewerUiState,
+    isStartingCheckout: Boolean = false,
     onBack: () -> Unit,
     onToggleComplete: (Boolean) -> Unit,
     onVideoProgress: (blockId: String, positionSeconds: Int, durationSeconds: Int) -> Unit,
-    onNavigateLesson: (String) -> Unit
+    onNavigateLesson: (String) -> Unit,
+    onPurchaseCourse: (() -> Unit)? = null
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -123,7 +128,34 @@ fun StudentLessonViewerScreen(
                             textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(4.dp))
-                        Button(onClick = onBack, modifier = Modifier.minimumInteractiveComponentSize()) {
+                        if (onPurchaseCourse != null) {
+                            Button(
+                                onClick = onPurchaseCourse,
+                                enabled = !isStartingCheckout,
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("lesson_locked_buy_course_button")
+                            ) {
+                                if (isStartingCheckout) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Opening SSLCOMMERZ...")
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Filled.ShoppingCart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Buy Course with SSLCOMMERZ")
+                                }
+                            }
+                        }
+                        OutlinedButton(onClick = onBack, modifier = Modifier.minimumInteractiveComponentSize()) {
                             Text("Back to Course")
                         }
                     }

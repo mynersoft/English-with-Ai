@@ -48,6 +48,10 @@ data class ActiveCallUiState(
     val engineState: CallEngineState = CallEngineState(),
     val elapsedSeconds: Int = 0,
     val joining: Boolean = false,
+    val isRandomSession: Boolean = false,
+    val isSearchingNextRandom: Boolean = false,
+    val randomAttemptCount: Int = 0,
+    val randomStatusText: String? = null,
     val endedNotice: String? = null,
     val error: String? = null
 )
@@ -69,7 +73,17 @@ class CallViewModel(
     private var pollJob: Job? = null
     private var timerJob: Job? = null
     private var engineStateJob: Job? = null
+    private var randomSearchJob: Job? = null
     private var lastSignalCursorIso: String? = null
+
+    private var isRandomSessionActive: Boolean = false
+    private var randomAppContext: Context? = null
+    private var randomAudioMuted: Boolean = false
+    private var randomVideoEnabled: Boolean = true
+    private val randomExcludeUserIds = linkedSetOf<String>()
+    private var randomAttemptCounter: Int = 0
+    private var peerEverJoinedCurrentRoom: Boolean = false
+    private var roomRingStartedAtMs: Long = 0L
 
     fun loadLobby(silent: Boolean = false) {
         viewModelScope.launch {
@@ -102,7 +116,7 @@ class CallViewModel(
     }
 
     fun refreshIncomingInvites() {
-        if (_activeCall.value.room != null) return
+        if (_activeCall.value.room != null || _activeCall.value.isSearchingNextRandom) return
         viewModelScope.launch {
             callRepo.fetchIncomingInvites()
                 .onSuccess { invites ->
@@ -134,6 +148,7 @@ class CallViewModel(
         videoEnabled: Boolean = true
     ) {
         if (_lobby.value.busy) return
+        resetRandomSessionState()
         val appContext = context.applicationContext
         viewModelScope.launch {
             _lobby.update { it.copy(busy = true, error = null) }
@@ -145,12 +160,120 @@ class CallViewModel(
             )
                 .onSuccess { joined ->
                     _lobby.update { it.copy(busy = false) }
-                    beginEngineSession(appContext, joined.room, joined.transport, audioMuted, videoEnabled)
+                    beginEngineSession(
+                        appContext = appContext,
+                        room = joined.room,
+                        transport = joined.transport,
+                        audioMuted = audioMuted,
+                        videoEnabled = videoEnabled,
+                        isRandomSession = false
+                    )
                 }
                 .onFailure { err ->
                     _lobby.update {
                         it.copy(busy = false, error = err.message ?: "Unable to start 1-on-1 call.")
                     }
+                }
+        }
+    }
+
+    fun startRandomCall(
+        context: Context,
+        audioMuted: Boolean = false,
+        videoEnabled: Boolean = true
+    ) {
+        if (_lobby.value.busy || _activeCall.value.isSearchingNextRandom) return
+        resetRandomSessionState()
+        isRandomSessionActive = true
+        randomAppContext = context.applicationContext
+        randomAudioMuted = audioMuted
+        randomVideoEnabled = videoEnabled
+        connectNextRandomPartner(
+            previousRoom = null,
+            statusMessage = "Finding a free student not in another call..."
+        )
+    }
+
+    fun skipToNextRandomPartner() {
+        val currentRoom = _activeCall.value.room
+        if (!isRandomSessionActive && currentRoom?.effectiveRandom != true) return
+        val appContext = randomAppContext ?: return
+        isRandomSessionActive = true
+        randomAppContext = appContext
+
+        val peerId = currentRoom?.let { resolvePartnerUserId(it) }
+        if (!peerId.isNullOrBlank()) {
+            randomExcludeUserIds.add(peerId)
+        }
+        connectNextRandomPartner(
+            previousRoom = currentRoom,
+            statusMessage = "Connecting you to the next free student..."
+        )
+    }
+
+    private fun connectNextRandomPartner(
+        previousRoom: CallRoomSummary?,
+        statusMessage: String
+    ) {
+        val appContext = randomAppContext ?: return
+        randomSearchJob?.cancel()
+        tearDownEngineOnly()
+        randomAttemptCounter += 1
+        val attemptNumber = randomAttemptCounter
+
+        _lobby.update { it.copy(busy = true, error = null) }
+        _activeCall.value = ActiveCallUiState(
+            isRandomSession = true,
+            isSearchingNextRandom = true,
+            randomAttemptCount = attemptNumber,
+            randomStatusText = statusMessage
+        )
+
+        randomSearchJob = viewModelScope.launch {
+            if (previousRoom != null) {
+                if (previousRoom.status == "ringing" && previousRoom.isHost) {
+                    runCatching { callRepo.respondToCall(previousRoom.id, "cancel") }
+                } else {
+                    runCatching { callRepo.leaveRoom(previousRoom.id, endRoom = false) }
+                }
+            }
+            delay(280L)
+            if (!isRandomSessionActive) return@launch
+
+            callRepo.startRandomCall(
+                excludeUserIds = randomExcludeUserIds.toList(),
+                previousRoomId = previousRoom?.id,
+                audioMuted = randomAudioMuted,
+                videoEnabled = randomVideoEnabled
+            )
+                .onSuccess { joined ->
+                    if (!isRandomSessionActive) {
+                        runCatching { callRepo.respondToCall(joined.room.id, "cancel") }
+                        _lobby.update { it.copy(busy = false) }
+                        return@launch
+                    }
+                    val randomRoom = joined.room.copy(isRandom = true)
+                    val matchedPeerId = resolvePartnerUserId(randomRoom)
+                    if (!matchedPeerId.isNullOrBlank()) {
+                        randomExcludeUserIds.add(matchedPeerId)
+                    }
+                    _lobby.update { it.copy(busy = false) }
+                    beginEngineSession(
+                        appContext = appContext,
+                        room = randomRoom,
+                        transport = joined.transport,
+                        audioMuted = randomAudioMuted,
+                        videoEnabled = randomVideoEnabled,
+                        isRandomSession = true
+                    )
+                }
+                .onFailure { err ->
+                    resetRandomSessionState()
+                    _lobby.update { it.copy(busy = false) }
+                    _activeCall.value = ActiveCallUiState(
+                        endedNotice = err.message ?: "No free students available right now. Please try again."
+                    )
+                    loadLobby(silent = true)
                 }
         }
     }
@@ -166,6 +289,7 @@ class CallViewModel(
         onCreated: () -> Unit = {}
     ) {
         if (_lobby.value.busy || title.trim().length < 2) return
+        resetRandomSessionState()
         val appContext = context.applicationContext
         viewModelScope.launch {
             _lobby.update { it.copy(busy = true, error = null) }
@@ -180,7 +304,14 @@ class CallViewModel(
                 .onSuccess { joined ->
                     _lobby.update { it.copy(busy = false) }
                     onCreated()
-                    beginEngineSession(appContext, joined.room, joined.transport, audioMuted, videoEnabled)
+                    beginEngineSession(
+                        appContext = appContext,
+                        room = joined.room,
+                        transport = joined.transport,
+                        audioMuted = audioMuted,
+                        videoEnabled = videoEnabled,
+                        isRandomSession = false
+                    )
                 }
                 .onFailure { err ->
                     _lobby.update {
@@ -198,6 +329,7 @@ class CallViewModel(
         videoEnabled: Boolean = true
     ) {
         if (_lobby.value.busy || roomId.isBlank()) return
+        resetRandomSessionState()
         val appContext = context.applicationContext
         viewModelScope.launch {
             _lobby.update { it.copy(busy = true, error = null) }
@@ -210,7 +342,14 @@ class CallViewModel(
             )
                 .onSuccess { joined ->
                     _lobby.update { it.copy(busy = false) }
-                    beginEngineSession(appContext, joined.room, joined.transport, audioMuted, videoEnabled)
+                    beginEngineSession(
+                        appContext = appContext,
+                        room = joined.room,
+                        transport = joined.transport,
+                        audioMuted = audioMuted,
+                        videoEnabled = videoEnabled,
+                        isRandomSession = joined.room.effectiveRandom
+                    )
                 }
                 .onFailure { err ->
                     _lobby.update {
@@ -228,6 +367,7 @@ class CallViewModel(
         onSuccessCloseDialog: () -> Unit = {}
     ) {
         if (_lobby.value.busy || roomCode.trim().length < 4) return
+        resetRandomSessionState()
         val appContext = context.applicationContext
         viewModelScope.launch {
             _lobby.update { it.copy(busy = true, error = null) }
@@ -239,7 +379,14 @@ class CallViewModel(
                 .onSuccess { joined ->
                     _lobby.update { it.copy(busy = false) }
                     onSuccessCloseDialog()
-                    beginEngineSession(appContext, joined.room, joined.transport, audioMuted, videoEnabled)
+                    beginEngineSession(
+                        appContext = appContext,
+                        room = joined.room,
+                        transport = joined.transport,
+                        audioMuted = audioMuted,
+                        videoEnabled = videoEnabled,
+                        isRandomSession = false
+                    )
                 }
                 .onFailure { err ->
                     _lobby.update {
@@ -255,7 +402,13 @@ class CallViewModel(
         audioMuted: Boolean = false,
         videoEnabled: Boolean = true
     ) {
+        resetRandomSessionState()
         val appContext = context.applicationContext
+        if (room.effectiveRandom) {
+            randomAppContext = appContext
+            randomAudioMuted = audioMuted
+            randomVideoEnabled = videoEnabled
+        }
         viewModelScope.launch {
             _lobby.update {
                 it.copy(
@@ -273,7 +426,14 @@ class CallViewModel(
                 .onSuccess { joined ->
                     _lobby.update { it.copy(busy = false) }
                     if (joined != null) {
-                        beginEngineSession(appContext, joined.room, joined.transport, audioMuted, videoEnabled)
+                        beginEngineSession(
+                            appContext = appContext,
+                            room = joined.room,
+                            transport = joined.transport,
+                            audioMuted = audioMuted,
+                            videoEnabled = videoEnabled,
+                            isRandomSession = joined.room.effectiveRandom
+                        )
                     } else {
                         joinRoom(appContext, room.id, audioMuted = audioMuted, videoEnabled = videoEnabled)
                     }
@@ -302,11 +462,15 @@ class CallViewModel(
         room: CallRoomSummary,
         transport: CallTransportSession,
         audioMuted: Boolean,
-        videoEnabled: Boolean
+        videoEnabled: Boolean,
+        isRandomSession: Boolean
     ) {
         tearDownEngineOnly()
         ActiveCallTracker.setActiveCall(room.id)
         lastSignalCursorIso = null
+        peerEverJoinedCurrentRoom = room.participantCount > 1
+        roomRingStartedAtMs = System.currentTimeMillis()
+        randomAppContext = appContext
 
         val engine = CallEngineFactory.create(appContext, transport.provider)
         _activeEngine.value = engine
@@ -315,7 +479,13 @@ class CallViewModel(
             transport = transport,
             engineState = engine.state.value,
             elapsedSeconds = 0,
-            joining = true
+            joining = true,
+            isRandomSession = isRandomSession,
+            isSearchingNextRandom = false,
+            randomAttemptCount = randomAttemptCounter,
+            randomStatusText = if (isRandomSession && room.participantCount <= 1) {
+                "Ringing ${room.targetName.ifBlank { "free student" }}..."
+            } else null
         )
 
         engineStateJob?.cancel()
@@ -354,7 +524,7 @@ class CallViewModel(
         }
 
         _activeCall.update { it.copy(joining = false) }
-        if (room.mode != CallMode.DIRECT || room.participantCount > 1) {
+        if (!room.mode.isOneOnOne || room.participantCount > 1) {
             startElapsedTimer()
         }
         startRoomPollLoop(room.id)
@@ -382,12 +552,67 @@ class CallViewModel(
                     videoEnabled = engState.localVideoEnabled
                 ).onSuccess { poll ->
                     val updatedRoom = poll.room
-                    _activeCall.update { it.copy(room = updatedRoom) }
+                    if (updatedRoom.participantCount > 1) {
+                        peerEverJoinedCurrentRoom = true
+                    }
+                    _activeCall.update {
+                        it.copy(
+                            room = updatedRoom.copy(isRandom = it.room?.isRandom == true || updatedRoom.isRandom)
+                        )
+                    }
+
+                    // Auto-skip to next free student if random partner doesn't answer within timeout
+                    if (isRandomSessionActive &&
+                        updatedRoom.isHost &&
+                        updatedRoom.status == "ringing" &&
+                        !peerEverJoinedCurrentRoom &&
+                        System.currentTimeMillis() - roomRingStartedAtMs >= RANDOM_RING_TIMEOUT_MS
+                    ) {
+                        val partnerId = resolvePartnerUserId(updatedRoom)
+                        if (!partnerId.isNullOrBlank()) {
+                            randomExcludeUserIds.add(partnerId)
+                        }
+                        val partnerName = updatedRoom.targetName.ifBlank { "Partner" }
+                        connectNextRandomPartner(
+                            previousRoom = updatedRoom,
+                            statusMessage = "$partnerName didn't answer. Connecting to next free student..."
+                        )
+                        return@launch
+                    }
 
                     if (updatedRoom.status == "ended" ||
                         updatedRoom.status == "declined" ||
                         updatedRoom.status == "missed"
                     ) {
+                        val shouldAutoReconnect = isRandomSessionActive && (
+                            updatedRoom.status == "declined" ||
+                                updatedRoom.status == "missed" ||
+                                updatedRoom.endedReason in setOf("declined", "cancelled", "no_answer") ||
+                                !peerEverJoinedCurrentRoom
+                            )
+                        if (shouldAutoReconnect) {
+                            val partnerId = resolvePartnerUserId(updatedRoom)
+                            if (!partnerId.isNullOrBlank()) {
+                                randomExcludeUserIds.add(partnerId)
+                            }
+                            val partnerName = updatedRoom.targetName
+                                .ifBlank { updatedRoom.hostName }
+                                .ifBlank { "Partner" }
+                            val reasonText = when {
+                                updatedRoom.status == "declined" || updatedRoom.endedReason == "declined" ->
+                                    "$partnerName declined. Connecting to next free student..."
+                                updatedRoom.status == "missed" || updatedRoom.endedReason == "no_answer" ->
+                                    "$partnerName didn't answer. Connecting to next free student..."
+                                else ->
+                                    "$partnerName cancelled. Connecting to next free student..."
+                            }
+                            connectNextRandomPartner(
+                                previousRoom = null,
+                                statusMessage = reasonText
+                            )
+                            return@launch
+                        }
+
                         val notice = when (updatedRoom.status) {
                             "declined" -> "Call was declined."
                             "missed" -> "No answer."
@@ -418,12 +643,16 @@ class CallViewModel(
 
     fun toggleMic() {
         val engine = _activeEngine.value ?: return
-        engine.setMicMuted(!engine.state.value.localAudioMuted)
+        val nextMuted = !engine.state.value.localAudioMuted
+        randomAudioMuted = nextMuted
+        engine.setMicMuted(nextMuted)
     }
 
     fun toggleVideo() {
         val engine = _activeEngine.value ?: return
-        engine.setVideoEnabled(!engine.state.value.localVideoEnabled)
+        val nextVideo = !engine.state.value.localVideoEnabled
+        randomVideoEnabled = nextVideo
+        engine.setVideoEnabled(nextVideo)
     }
 
     fun switchCamera() {
@@ -436,11 +665,17 @@ class CallViewModel(
     }
 
     fun leaveActiveCall(endRoomForAll: Boolean = false) {
-        val roomId = _activeCall.value.room?.id
+        val currentRoom = _activeCall.value.room
+        resetRandomSessionState()
+        _lobby.update { it.copy(busy = false) }
         finishLocalCall(notice = null)
-        if (!roomId.isNullOrBlank()) {
+        if (currentRoom != null) {
             viewModelScope.launch {
-                callRepo.leaveRoom(roomId = roomId, endRoom = endRoomForAll)
+                if (currentRoom.status == "ringing" && currentRoom.isHost && currentRoom.mode.isOneOnOne) {
+                    callRepo.respondToCall(roomId = currentRoom.id, action = "cancel")
+                } else {
+                    callRepo.leaveRoom(roomId = currentRoom.id, endRoom = endRoomForAll)
+                }
                 loadLobby(silent = true)
             }
         } else {
@@ -454,6 +689,26 @@ class CallViewModel(
 
     fun clearEndedNotice() {
         _activeCall.update { it.copy(endedNotice = null, error = null) }
+    }
+
+    private fun resolvePartnerUserId(room: CallRoomSummary): String? {
+        val selfId = room.selfUserId
+        val remoteParticipant = room.participants.firstOrNull { it.userId.isNotBlank() && it.userId != selfId }?.userId
+        if (!remoteParticipant.isNullOrBlank()) return remoteParticipant
+        return if (room.isHost) {
+            room.targetUserId?.takeIf { it.isNotBlank() && it != selfId }
+        } else {
+            room.hostUserId.takeIf { it.isNotBlank() && it != selfId }
+        }
+    }
+
+    private fun resetRandomSessionState() {
+        isRandomSessionActive = false
+        randomSearchJob?.cancel()
+        randomSearchJob = null
+        randomExcludeUserIds.clear()
+        randomAttemptCounter = 0
+        peerEverJoinedCurrentRoom = false
     }
 
     private fun finishLocalCall(notice: String?) {
@@ -475,11 +730,14 @@ class CallViewModel(
     }
 
     override fun onCleared() {
+        resetRandomSessionState()
         tearDownEngineOnly()
         super.onCleared()
     }
 
     companion object {
+        private const val RANDOM_RING_TIMEOUT_MS = 22_000L
+
         fun selectEngineProviderLabel(provider: CallProviderType): String {
             return when (provider) {
                 CallProviderType.FREE_P2P -> "Free P2P ($0)"

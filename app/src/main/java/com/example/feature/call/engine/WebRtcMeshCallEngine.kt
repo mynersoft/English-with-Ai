@@ -105,7 +105,7 @@ class WebRtcMeshCallEngine(
 
         _state.update {
             it.copy(
-                phase = if (room.mode == CallMode.DIRECT && room.status == "ringing" && room.participantCount <= 1) {
+                phase = if (room.mode.isOneOnOne && room.status == "ringing" && room.participantCount <= 1) {
                     CallConnectionPhase.RINGING
                 } else {
                     CallConnectionPhase.CONNECTING
@@ -231,7 +231,7 @@ class WebRtcMeshCallEngine(
 
         _state.update { cur ->
             val phase = when {
-                remoteIds.isEmpty() && currentMode == CallMode.DIRECT && cur.phase == CallConnectionPhase.RINGING ->
+                remoteIds.isEmpty() && currentMode.isOneOnOne && cur.phase == CallConnectionPhase.RINGING ->
                     CallConnectionPhase.RINGING
                 cur.peerConnectionStates.values.any { st -> st == "CONNECTED" || st == "COMPLETED" } ->
                     CallConnectionPhase.CONNECTED

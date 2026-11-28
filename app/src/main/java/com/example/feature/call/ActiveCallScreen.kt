@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -48,6 +50,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -78,9 +81,9 @@ fun ActiveCallScreen(
     onToggleVideo: () -> Unit,
     onSwitchCamera: () -> Unit,
     onToggleSpeaker: () -> Unit,
+    onSkipNextRandom: () -> Unit = {},
     onLeaveCall: (endRoomForAll: Boolean) -> Unit
 ) {
-    val room = state.room ?: return
     val context = LocalContext.current
     val isDark = LocalIsDarkTheme.current
     val stageBg = if (isDark) Color(0xFF070C14) else Color(0xFF101826)
@@ -91,9 +94,34 @@ fun ActiveCallScreen(
         onLeaveCall(false)
     }
 
+    val room = state.room
+    if (room == null) {
+        if (!state.isSearchingNextRandom) return
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(stageBg)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            RandomSearchingStageCard(
+                attemptCount = state.randomAttemptCount,
+                statusText = state.randomStatusText,
+                tileBg = tileBg,
+                emerald = emerald,
+                onCancel = { onLeaveCall(false) }
+            )
+        }
+        return
+    }
+
     val selfId = room.selfUserId
     val remoteParticipants = room.participants.filter { it.userId != selfId }
     val engState = state.engineState
+    val isRandomCall = state.isRandomSession || room.effectiveRandom
+    val isGroupMode = !room.mode.isOneOnOne
 
     Box(
         modifier = Modifier
@@ -111,9 +139,12 @@ fun ActiveCallScreen(
                 remoteParticipants.isEmpty() -> {
                     WaitingStageCard(
                         room = room,
+                        isRandomCall = isRandomCall,
+                        randomStatusText = state.randomStatusText,
                         phase = engState.phase,
                         tileBg = tileBg,
                         emerald = emerald,
+                        onSkipNextRandom = onSkipNextRandom,
                         onCopyCode = { code -> copyRoomCode(context, code) }
                     )
                 }
@@ -196,6 +227,7 @@ fun ActiveCallScreen(
         // Top Call Header
         ActiveCallTopHeader(
             room = room,
+            isRandomCall = isRandomCall,
             elapsedSeconds = state.elapsedSeconds,
             phase = engState.phase,
             providerLabel = state.transport?.providerLabel ?: engState.providerLabel,
@@ -211,12 +243,14 @@ fun ActiveCallScreen(
             videoEnabled = engState.localVideoEnabled,
             speakerOn = engState.isSpeakerphone,
             canSwitchCamera = engState.hasCameraCapture && engState.localVideoEnabled,
-            isHostGroup = room.isHost && room.mode != CallMode.DIRECT,
+            isHostGroup = room.isHost && isGroupMode,
+            isRandomCall = isRandomCall,
             onToggleMic = onToggleMic,
             onToggleVideo = onToggleVideo,
             onSwitchCamera = onSwitchCamera,
             onToggleSpeaker = onToggleSpeaker,
-            onEndCall = { onLeaveCall(room.isHost && room.mode != CallMode.DIRECT && room.participantCount <= 1) },
+            onSkipNextRandom = onSkipNextRandom,
+            onEndCall = { onLeaveCall(room.isHost && isGroupMode && room.participantCount <= 1) },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
@@ -227,6 +261,7 @@ fun ActiveCallScreen(
 @Composable
 private fun ActiveCallTopHeader(
     room: CallRoomSummary,
+    isRandomCall: Boolean,
     elapsedSeconds: Int,
     phase: CallConnectionPhase,
     providerLabel: String,
@@ -251,10 +286,11 @@ private fun ActiveCallTopHeader(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
-                        imageVector = when (room.mode) {
-                            CallMode.DIRECT -> Icons.Filled.PhoneInTalk
-                            CallMode.GROUP_PUBLIC -> Icons.Filled.Public
-                            CallMode.GROUP_PRIVATE -> Icons.Filled.Lock
+                        imageVector = when {
+                            isRandomCall || room.mode == CallMode.RANDOM -> Icons.Filled.Shuffle
+                            room.mode == CallMode.DIRECT -> Icons.Filled.PhoneInTalk
+                            room.mode == CallMode.GROUP_PUBLIC -> Icons.Filled.Public
+                            else -> Icons.Filled.Lock
                         },
                         contentDescription = null,
                         tint = Color(0xFF34D399),
@@ -266,8 +302,23 @@ private fun ActiveCallTopHeader(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+                    if (isRandomCall) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF10B981).copy(alpha = 0.24f)
+                        ) {
+                            Text(
+                                text = "RANDOM",
+                                color = Color(0xFF6EE7B7),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 Row(
@@ -338,11 +389,84 @@ private fun ActiveCallTopHeader(
 }
 
 @Composable
+private fun RandomSearchingStageCard(
+    attemptCount: Int,
+    statusText: String?,
+    tileBg: Color,
+    emerald: Color,
+    onCancel: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = tileBg,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .testTag("random_call_searching_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(CircleShape)
+                    .background(emerald.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = emerald,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(68.dp)
+                )
+                Icon(
+                    imageVector = Icons.Filled.Shuffle,
+                    contentDescription = null,
+                    tint = emerald,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Text(
+                text = if (attemptCount > 1) "Finding Next Free Student (#$attemptCount)" else "Finding Free Student...",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = statusText?.takeIf { it.isNotBlank() }
+                    ?: "Matching you with an available student who is not in another call.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.78f)
+            )
+            OutlinedButton(
+                onClick = onCancel,
+                border = BorderStroke(1.dp, Color(0xFFFCA5A5).copy(alpha = 0.65f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFCA5A5)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("random_search_cancel_button")
+            ) {
+                Icon(Icons.Filled.CallEnd, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Stop Searching", fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
 private fun WaitingStageCard(
     room: CallRoomSummary,
+    isRandomCall: Boolean,
+    randomStatusText: String?,
     phase: CallConnectionPhase,
     tileBg: Color,
     emerald: Color,
+    onSkipNextRandom: () -> Unit,
     onCopyCode: (String) -> Unit
 ) {
     Surface(
@@ -373,31 +497,56 @@ private fun WaitingStageCard(
                     )
                 }
                 Icon(
-                    imageVector = if (room.mode == CallMode.DIRECT) Icons.Filled.PhoneInTalk else Icons.Filled.Groups,
+                    imageVector = when {
+                        isRandomCall || room.mode == CallMode.RANDOM -> Icons.Filled.Shuffle
+                        room.mode == CallMode.DIRECT -> Icons.Filled.PhoneInTalk
+                        else -> Icons.Filled.Groups
+                    },
                     contentDescription = null,
                     tint = emerald,
                     modifier = Modifier.size(32.dp)
                 )
             }
             Text(
-                text = when (room.mode) {
-                    CallMode.DIRECT -> "Calling ${room.targetName.ifBlank { room.title }}..."
-                    CallMode.GROUP_PRIVATE -> "Private Room Ready"
-                    CallMode.GROUP_PUBLIC -> "Waiting for Learners to Join"
+                text = when {
+                    isRandomCall || room.mode == CallMode.RANDOM ->
+                        "Calling ${room.targetName.ifBlank { "Free Student" }}..."
+                    room.mode == CallMode.DIRECT -> "Calling ${room.targetName.ifBlank { room.title }}..."
+                    room.mode == CallMode.GROUP_PRIVATE -> "Private Room Ready"
+                    else -> "Waiting for Learners to Join"
                 },
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = when (room.mode) {
-                    CallMode.DIRECT -> "Waiting for your classmate to accept the 1-on-1 call."
-                    CallMode.GROUP_PRIVATE -> "Share the private room code below so friends can join your English video session."
-                    CallMode.GROUP_PUBLIC -> "Your public room is visible in the lobby. Anyone practicing English can join."
+                text = when {
+                    isRandomCall || room.mode == CallMode.RANDOM ->
+                        randomStatusText?.takeIf { it.isNotBlank() }
+                            ?: "Matched with a free student. If they decline or cancel, we'll automatically connect you to the next free student."
+                    room.mode == CallMode.DIRECT -> "Waiting for your classmate to accept the 1-on-1 call."
+                    room.mode == CallMode.GROUP_PRIVATE -> "Share the private room code below so friends can join your English video session."
+                    else -> "Your public room is visible in the lobby. Anyone practicing English can join."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.78f)
             )
+
+            if (isRandomCall) {
+                OutlinedButton(
+                    onClick = onSkipNextRandom,
+                    border = BorderStroke(1.dp, emerald.copy(alpha = 0.7f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF6EE7B7)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("active_call_skip_next_button")
+                ) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Next Student", fontWeight = FontWeight.Bold)
+                }
+            }
 
             if (room.mode == CallMode.GROUP_PRIVATE && room.roomCode.isNotBlank()) {
                 Button(
@@ -507,10 +656,12 @@ private fun ActiveCallControlsBar(
     speakerOn: Boolean,
     canSwitchCamera: Boolean,
     isHostGroup: Boolean,
+    isRandomCall: Boolean,
     onToggleMic: () -> Unit,
     onToggleVideo: () -> Unit,
     onSwitchCamera: () -> Unit,
     onToggleSpeaker: () -> Unit,
+    onSkipNextRandom: () -> Unit,
     onEndCall: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -555,6 +706,15 @@ private fun ActiveCallControlsBar(
                 testTag = "call_toggle_speaker_button",
                 onClick = onToggleSpeaker
             )
+            if (isRandomCall) {
+                CallControlRoundButton(
+                    icon = Icons.Filled.SkipNext,
+                    label = "Next",
+                    active = true,
+                    testTag = "call_next_random_button",
+                    onClick = onSkipNextRandom
+                )
+            }
 
             Surface(
                 shape = CircleShape,

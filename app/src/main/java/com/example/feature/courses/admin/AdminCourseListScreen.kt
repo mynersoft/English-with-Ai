@@ -488,7 +488,7 @@ private fun AdminCourseCard(
                         )
                         StatusChip(
                             text = if (course.isPremium) {
-                                if (course.price > 0) "$${course.price.toInt()}" else "Premium"
+                                if (course.price > 0) "৳${course.price.toInt()}" else "Premium"
                             } else {
                                 "Free"
                             },
@@ -899,7 +899,7 @@ fun AdminCourseEditorDialog(
                         OutlinedTextField(
                             value = price,
                             onValueChange = { price = it },
-                            label = { Text("Price (USD)") },
+                            label = { Text("Price (BDT ৳)") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.fillMaxWidth()

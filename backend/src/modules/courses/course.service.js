@@ -13,9 +13,21 @@ import {
   slugifyCourseText,
 } from "@/lib/courseUtils";
 import Course from "@/models/Course";
+import CoursePurchase from "@/models/CoursePurchase";
 import Module from "@/models/Module";
 import Lesson from "@/models/Lesson";
 import LessonProgress from "@/models/LessonProgress";
+
+async function getPurchasedCourseIdSet(firebaseUid) {
+  if (!firebaseUid) return new Set();
+  const docs = await CoursePurchase.find({
+    userId: firebaseUid,
+    status: "paid",
+  })
+    .select("courseId")
+    .lean();
+  return new Set(docs.map((d) => String(d.courseId)));
+}
 
 export function assertCourseObjectId(id, label = "ID") {
   if (!id || !mongoose.Types.ObjectId.isValid(String(id))) {
@@ -981,6 +993,7 @@ export async function studentListCourses({
 
   const courseIds = courses.map((c) => c._id);
   const hasPremiumAccess = hasStudentPremiumAccess(userDoc);
+  const purchasedCourseIds = await getPurchasedCourseIdSet(userDoc?.firebaseUid);
 
   let publishedModules = [];
   let publishedLessons = [];
@@ -1060,13 +1073,17 @@ export async function studentListCourses({
       enrollmentStatus = "in_progress";
     }
 
+    const isPurchased = purchasedCourseIds.has(cid);
+    const hasAccess = !c.isPremium || hasPremiumAccess || isPurchased;
+
     return formatCourseDoc(c, {
       totalModules: pubModules,
       totalLessons: pubLessons,
       completedLessons: stats.completed,
       completionPercentage,
       enrollmentStatus,
-      hasAccess: !c.isPremium || hasPremiumAccess,
+      isPurchased,
+      hasAccess,
     });
   });
 
@@ -1099,11 +1116,16 @@ export async function studentGetCourseDetail({
   const updatedAfterDate = parseOptionalIsoDate(updatedAfter);
   const { publishedModules, orderedLessons, lessonsByMod } = await getPublishedCourseHierarchy(oid);
 
-  const progressDocs = userDoc?.firebaseUid
-    ? await LessonProgress.find({ userId: userDoc.firebaseUid, courseId: oid }).lean()
-    : [];
+  const [progressDocs, purchasedDoc] = userDoc?.firebaseUid
+    ? await Promise.all([
+        LessonProgress.find({ userId: userDoc.firebaseUid, courseId: oid }).lean(),
+        CoursePurchase.exists({ userId: userDoc.firebaseUid, courseId: oid, status: "paid" }),
+      ])
+    : [[], null];
   const progressMap = new Map(progressDocs.map((p) => [String(p.lessonId), p]));
   const hasPremiumAccess = hasStudentPremiumAccess(userDoc);
+  const isPurchased = Boolean(purchasedDoc);
+  const hasCourseAccess = !course.isPremium || hasPremiumAccess || isPurchased;
 
   let completedLessons = 0;
   let touchedLessons = 0;
@@ -1117,7 +1139,12 @@ export async function studentGetCourseDetail({
       .map((lesson) => {
         const lid = String(lesson._id);
         const prog = progressMap.get(lid) || null;
-        const locked = isLessonLockedForStudent({ course, lesson, hasPremiumAccess });
+        const locked = isLessonLockedForStudent({
+          course,
+          lesson,
+          hasPremiumAccess,
+          hasPurchasedCourse: isPurchased,
+        });
         if (prog) {
           touchedLessons += 1;
           if (prog.isCompleted) completedLessons += 1;
@@ -1169,10 +1196,12 @@ export async function studentGetCourseDetail({
       completionPercentage,
       enrollmentStatus,
       continueLessonId: continueLessonId || firstAccessibleLessonId,
-      hasAccess: !course.isPremium || hasPremiumAccess,
+      isPurchased,
+      hasAccess: hasCourseAccess,
     }),
     modules: formattedModules,
     hasPremiumAccess,
+    isPurchased,
     serverTimestamp: new Date().toISOString(),
   };
 }
@@ -1194,12 +1223,20 @@ export async function studentGetLessonDetail({ lessonId, userDoc = null }) {
   }
 
   const hasPremiumAccess = hasStudentPremiumAccess(userDoc);
-  const locked = isLessonLockedForStudent({ course, lesson, hasPremiumAccess });
+  const isPurchased = userDoc?.firebaseUid
+    ? Boolean(await CoursePurchase.exists({ userId: userDoc.firebaseUid, courseId: course._id, status: "paid" }))
+    : false;
+  const locked = isLessonLockedForStudent({
+    course,
+    lesson,
+    hasPremiumAccess,
+    hasPurchasedCourse: isPurchased,
+  });
   if (locked) {
     throw new AppError(
       403,
       "PREMIUM_REQUIRED",
-      "Upgrade to Premium to access this lesson."
+      "Purchase this course or upgrade to Premium to access this lesson."
     );
   }
 
@@ -1219,7 +1256,8 @@ export async function studentGetLessonDetail({ lessonId, userDoc = null }) {
       isLocked: false,
     }),
     course: formatCourseDoc(course, {
-      hasAccess: !course.isPremium || hasPremiumAccess,
+      isPurchased,
+      hasAccess: !course.isPremium || hasPremiumAccess || isPurchased,
     }),
     module: formatModuleDoc(mod),
     progress: formatProgressDoc(progressDoc),
@@ -1262,8 +1300,11 @@ export async function upsertLessonProgress({ lessonId, userDoc, body = {} }) {
   }
 
   const hasPremiumAccess = hasStudentPremiumAccess(userDoc);
-  if (isLessonLockedForStudent({ course, lesson, hasPremiumAccess })) {
-    throw new AppError(403, "PREMIUM_REQUIRED", "Upgrade to Premium to record progress for this lesson.");
+  const isPurchased = userDoc?.firebaseUid
+    ? Boolean(await CoursePurchase.exists({ userId: userDoc.firebaseUid, courseId: course._id, status: "paid" }))
+    : false;
+  if (isLessonLockedForStudent({ course, lesson, hasPremiumAccess, hasPurchasedCourse: isPurchased })) {
+    throw new AppError(403, "PREMIUM_REQUIRED", "Purchase this course or upgrade to Premium to record progress for this lesson.");
   }
 
   const existing = await LessonProgress.findOne({

@@ -137,9 +137,35 @@ data class CourseSummary(
     val enrollmentStatus: EnrollmentStatus = EnrollmentStatus.NOT_STARTED,
     val continueLessonId: String? = null,
     val hasAccess: Boolean = true,
+    val isPurchased: Boolean = false,
     val isOfflineAvailable: Boolean = false,
     val createdAt: String? = null,
     val updatedAt: String? = null
+)
+
+data class SslCommerzCheckoutSession(
+    val purchaseId: String,
+    val tranId: String,
+    val courseId: String,
+    val courseTitle: String,
+    val amount: Double,
+    val currency: String = "BDT",
+    val gatewayUrl: String,
+    val isSandbox: Boolean = true
+)
+
+data class CoursePurchaseStatusResult(
+    val purchaseId: String,
+    val tranId: String,
+    val courseId: String,
+    val status: String,
+    val amount: Double,
+    val currency: String = "BDT",
+    val cardType: String = "",
+    val cardIssuer: String = "",
+    val bankTranId: String = "",
+    val hasAccess: Boolean = false,
+    val message: String = ""
 )
 
 data class CourseDetailPayload(
@@ -195,6 +221,8 @@ data class StudentCourseListResponse(
 )
 
 object CourseDomainUtils {
+    const val DEFAULT_PREMIUM_COURSE_PRICE_BDT = 499.0
+
     fun <T> reorderList(items: List<T>, fromIndex: Int, toIndex: Int): List<T> {
         if (fromIndex == toIndex) return items
         if (fromIndex !in items.indices || toIndex !in items.indices) return items
@@ -220,6 +248,24 @@ object CourseDomainUtils {
         return lessonIsPremium
     }
 
+    fun resolveDisplayCoursePrice(price: Double): Double {
+        return if (price.isFinite() && price >= 10.0) price else DEFAULT_PREMIUM_COURSE_PRICE_BDT
+    }
+
+    fun formatCoursePrice(price: Double, currency: String = "BDT"): String {
+        val resolved = resolveDisplayCoursePrice(price)
+        val formattedNumber = if (resolved % 1.0 == 0.0) {
+            resolved.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.2f", resolved)
+        }
+        return if (currency.equals("BDT", ignoreCase = true)) {
+            "৳$formattedNumber"
+        } else {
+            "${currency.uppercase(Locale.US)} $formattedNumber"
+        }
+    }
+
     fun formatDurationSeconds(seconds: Int): String {
         val safe = seconds.coerceAtLeast(0)
         val mins = safe / 60
@@ -242,7 +288,7 @@ object CourseJsonMapper {
             category = obj.optString("category", "General").ifBlank { "General" },
             durationDays = obj.optInt("durationDays", 30).coerceAtLeast(1),
             isPremium = obj.optBoolean("isPremium", false),
-            price = obj.optDouble("price", 0.0),
+            price = obj.optDouble("price", 0.0).let { if (it.isNaN()) 0.0 else it },
             isPublished = obj.optBoolean("isPublished", false),
             totalModules = obj.optInt("totalModules", 0),
             totalLessons = obj.optInt("totalLessons", 0),
@@ -251,8 +297,38 @@ object CourseJsonMapper {
             enrollmentStatus = EnrollmentStatus.fromApi(obj.optString("enrollmentStatus")),
             continueLessonId = obj.optString("continueLessonId").takeIf { it.isNotBlank() && it != "null" },
             hasAccess = obj.optBoolean("hasAccess", true),
+            isPurchased = obj.optBoolean("isPurchased", false),
             createdAt = obj.optString("createdAt").takeIf { it.isNotBlank() && it != "null" },
             updatedAt = obj.optString("updatedAt").takeIf { it.isNotBlank() && it != "null" }
+        )
+    }
+
+    fun parseSslCommerzSession(obj: JSONObject): SslCommerzCheckoutSession {
+        return SslCommerzCheckoutSession(
+            purchaseId = obj.optString("purchaseId"),
+            tranId = obj.optString("tranId"),
+            courseId = obj.optString("courseId"),
+            courseTitle = obj.optString("courseTitle"),
+            amount = obj.optDouble("amount", 0.0).let { if (it.isNaN()) 0.0 else it },
+            currency = obj.optString("currency", "BDT").ifBlank { "BDT" },
+            gatewayUrl = obj.optString("gatewayUrl"),
+            isSandbox = obj.optBoolean("isSandbox", true)
+        )
+    }
+
+    fun parsePurchaseStatus(obj: JSONObject): CoursePurchaseStatusResult {
+        return CoursePurchaseStatusResult(
+            purchaseId = obj.optString("purchaseId"),
+            tranId = obj.optString("tranId"),
+            courseId = obj.optString("courseId"),
+            status = obj.optString("status", "pending"),
+            amount = obj.optDouble("amount", 0.0).let { if (it.isNaN()) 0.0 else it },
+            currency = obj.optString("currency", "BDT").ifBlank { "BDT" },
+            cardType = obj.optString("cardType"),
+            cardIssuer = obj.optString("cardIssuer"),
+            bankTranId = obj.optString("bankTranId"),
+            hasAccess = obj.optBoolean("hasAccess", false),
+            message = obj.optString("message")
         )
     }
 

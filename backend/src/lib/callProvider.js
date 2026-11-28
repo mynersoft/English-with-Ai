@@ -236,6 +236,38 @@ export function buildClientJoinTransportConfig({ room, user, env = process.env }
   };
 }
 
+export function isOneOnOneCallMode(mode) {
+  return mode === "direct" || mode === "random";
+}
+
+export function collectBusyUserIdsFromRooms(rooms = []) {
+  const busy = new Set();
+  for (const room of rooms || []) {
+    if (!room) continue;
+    const status = String(room.status || "");
+    if (status !== "ringing" && status !== "active") continue;
+    const participants = Array.isArray(room.participants) ? room.participants : [];
+    for (const p of participants) {
+      if (p?.userId) busy.add(String(p.userId));
+    }
+    if (status === "ringing" || participants.length > 0) {
+      if (room.hostUserId) busy.add(String(room.hostUserId));
+    }
+    if (room.targetUserId && (status === "ringing" || isOneOnOneCallMode(room.mode))) {
+      busy.add(String(room.targetUserId));
+    }
+  }
+  return busy;
+}
+
+export function pickRandomFreeCandidate(candidates = [], onlineUserIds = new Set(), randomFn = Math.random) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  const onlinePool = candidates.filter((c) => onlineUserIds.has(String(c._id || c.id)));
+  const pool = onlinePool.length > 0 ? onlinePool : candidates;
+  const idx = Math.min(pool.length - 1, Math.max(0, Math.floor(randomFn() * pool.length)));
+  return pool[idx];
+}
+
 export function buildCallInvitePushPayload({ room, callerName }) {
   const safeCaller = String(callerName || room?.hostName || "Student").trim() || "Student";
   return {

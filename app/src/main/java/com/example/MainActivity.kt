@@ -602,8 +602,8 @@ private fun AuthenticatedNavGraph(
         }
     }
 
-    LaunchedEffect(currentUserId, isOnline, activeCallState.room?.id) {
-        if (isOnline && activeCallState.room == null) {
+    LaunchedEffect(currentUserId, isOnline, activeCallState.room?.id, activeCallState.isSearchingNextRandom) {
+        if (isOnline && activeCallState.room == null && !activeCallState.isSearchingNextRandom) {
             while (isActive) {
                 callViewModel.refreshIncomingInvites()
                 delay(6_000L)
@@ -655,7 +655,7 @@ private fun AuthenticatedNavGraph(
 
     val (lightStatusBars, lightNavigationBars) = when {
         currentRoute == AppRoutes.ADMIN -> false to false
-        currentRoute == AppRoutes.VIDEO_CALLS && activeCallState.room != null -> false to false
+        currentRoute == AppRoutes.VIDEO_CALLS && (activeCallState.room != null || activeCallState.isSearchingNextRandom) -> false to false
         currentRoute == AppRoutes.MAIN_TABS && selectedTab == AppMainTab.SPEAKING ->
             (!appDark) to (if (isImeVisible) !appDark else !appDark)
         else ->
@@ -982,7 +982,7 @@ private fun AuthenticatedNavGraph(
                     onBack = { navController.popBackStack() }
                 )
                 OfflineFloatingBanner(
-                    visible = !isOnline && activeCallState.room == null,
+                    visible = !isOnline && activeCallState.room == null && !activeCallState.isSearchingNextRandom,
                     isReconnecting = actionState.isSyncingBackend,
                     onRetry = {
                         if (NetworkMonitor.isDeviceOnline(context)) {
@@ -1064,7 +1064,7 @@ private fun AuthenticatedNavGraph(
     }
 
         val incomingInvite = callLobbyState.incomingInvites.firstOrNull()
-        if (incomingInvite != null && activeCallState.room == null) {
+        if (incomingInvite != null && activeCallState.room == null && !activeCallState.isSearchingNextRandom) {
             IncomingCallBanner(
                 invite = incomingInvite,
                 busy = callLobbyState.busy,

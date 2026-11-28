@@ -58,7 +58,8 @@ object CallInviteNotifier {
         context: Context,
         callRoomId: String,
         callerName: String,
-        title: String
+        title: String,
+        isRandom: Boolean = false
     ): Boolean {
         val appContext = context.applicationContext
         if (callRoomId.isBlank()) return false
@@ -82,10 +83,13 @@ object CallInviteNotifier {
         )
 
         val safeCaller = callerName.ifBlank { "Classmate" }
+        val effectiveRandom = isRandom || title.contains("Random", ignoreCase = true)
+        val notificationTitle = if (effectiveRandom) "Incoming Random Call" else "Incoming Video Call"
+        val defaultInviteText = if (effectiveRandom) "Random 1-on-1 English Practice" else "1-on-1 English Call"
         val built = NotificationCompat.Builder(appContext, CallNotificationConstants.CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Incoming Video Call")
-            .setContentText("$safeCaller is inviting you: ${title.ifBlank { "1-on-1 English Call" }}")
+            .setContentTitle(notificationTitle)
+            .setContentText("$safeCaller is inviting you: ${title.ifBlank { defaultInviteText }}")
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)

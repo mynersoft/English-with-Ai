@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -104,7 +105,7 @@ fun VideoCallRoute(
         callViewModel.searchStudents("")
     }
 
-    if (activeState.room != null) {
+    if (activeState.room != null || activeState.isSearchingNextRandom) {
         ActiveCallScreen(
             state = activeState,
             engine = activeEngine,
@@ -112,6 +113,7 @@ fun VideoCallRoute(
             onToggleVideo = { callViewModel.toggleVideo() },
             onSwitchCamera = { callViewModel.switchCamera() },
             onToggleSpeaker = { callViewModel.toggleSpeakerphone() },
+            onSkipNextRandom = { callViewModel.skipToNextRandomPartner() },
             onLeaveCall = { endForAll -> callViewModel.leaveActiveCall(endRoomForAll = endForAll) }
         )
     } else {
@@ -129,6 +131,12 @@ fun VideoCallRoute(
                 callViewModel.startDirectCall(
                     context = context,
                     targetUserId = studentId,
+                    videoEnabled = videoEnabled
+                )
+            },
+            onStartRandomCall = { videoEnabled ->
+                callViewModel.startRandomCall(
+                    context = context,
                     videoEnabled = videoEnabled
                 )
             },
@@ -173,6 +181,7 @@ private fun CallLobbyScreen(
     onRefresh: () -> Unit,
     onSearchStudents: (String) -> Unit,
     onStartDirectCall: (studentId: String, videoEnabled: Boolean) -> Unit,
+    onStartRandomCall: (videoEnabled: Boolean) -> Unit,
     onCreateGroupRoom: (CallMode, String, String, String, Boolean, () -> Unit) -> Unit,
     onJoinRoom: (roomId: String, videoEnabled: Boolean) -> Unit,
     onJoinByCode: (code: String, videoEnabled: Boolean, () -> Unit) -> Unit,
@@ -464,6 +473,18 @@ private fun CallLobbyScreen(
 
                         else -> {
                             item {
+                                RandomCallHeroCard(
+                                    cardBg = cardBg,
+                                    borderColor = borderColor,
+                                    accentGreen = accentGreen,
+                                    buttonGreen = buttonGreen,
+                                    busy = state.busy,
+                                    onStartRandom = {
+                                        runWithCallPermissions { vid -> onStartRandomCall(vid) }
+                                    }
+                                )
+                            }
+                            item {
                                 OutlinedTextField(
                                     value = state.studentSearch,
                                     onValueChange = onSearchStudents,
@@ -736,6 +757,79 @@ private fun DirectCallStudentCard(
                 Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Call", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RandomCallHeroCard(
+    cardBg: Color,
+    borderColor: Color,
+    accentGreen: Color,
+    buttonGreen: Color,
+    busy: Boolean,
+    onStartRandom: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = cardBg,
+        border = BorderStroke(1.2.dp, accentGreen.copy(alpha = 0.45f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("call_random_hero_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(accentGreen.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Shuffle,
+                        contentDescription = null,
+                        tint = accentGreen
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Random 1-on-1 Call",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Auto-matches with a free student not in another call. If declined or cancelled, connects to the next student.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Button(
+                onClick = onStartRandom,
+                enabled = !busy,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = buttonGreen,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .minimumInteractiveComponentSize()
+                    .testTag("call_random_start_button")
+            ) {
+                Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Start Random Call", fontWeight = FontWeight.Bold)
             }
         }
     }

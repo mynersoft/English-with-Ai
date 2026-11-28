@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -45,6 +47,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,10 +66,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.ui.theme.LocalIsDarkTheme
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.domain.model.CourseDomainUtils
 import com.example.domain.model.EnrollmentStatus
 import com.example.domain.model.LessonSummary
 import com.example.domain.model.ModuleWithLessons
@@ -75,12 +80,15 @@ import com.example.domain.model.ModuleWithLessons
 @Composable
 fun CourseDetailScreen(
     state: StudentCourseDetailUiState,
+    isStartingCheckout: Boolean = false,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onDownloadOffline: () -> Unit,
-    onOpenLesson: (String) -> Unit
+    onOpenLesson: (String) -> Unit,
+    onPurchaseCourse: (cusPhone: String) -> Unit = {}
 ) {
     var lockedLessonDialog by remember { mutableStateOf<LessonSummary?>(null) }
+    var cusPhoneInput by remember(state.course?.id) { mutableStateOf("") }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -233,6 +241,13 @@ fun CourseDetailScreen(
                                                     MaterialTheme.colorScheme.onSurfaceVariant
                                                 }
                                             )
+                                            if (course.isPremium && course.hasAccess) {
+                                                DetailChip(
+                                                    text = if (course.isPurchased) "Purchased" else "Unlocked",
+                                                    bg = if (isDark) Color(0xFF133A29) else Color(0xFFD1FAE5),
+                                                    fg = if (isDark) Color(0xFF34D399) else Color(0xFF065F46)
+                                                )
+                                            }
                                         }
 
                                         Text(
@@ -324,6 +339,104 @@ fun CourseDetailScreen(
                             }
                         }
 
+                        if (course.isPremium && !course.hasAccess) {
+                            item(key = "course_purchase_card") {
+                                val priceLabel = CourseDomainUtils.formatCoursePrice(course.price)
+                                Card(
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                    ),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("course_purchase_card")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Unlock Full Premium Course",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = "Pay with bKash, Nagad, Rocket or Cards via SSLCOMMERZ",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = MaterialTheme.colorScheme.primary
+                                            ) {
+                                                Text(
+                                                    text = priceLabel,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                )
+                                            }
+                                        }
+
+                                        OutlinedTextField(
+                                            value = cusPhoneInput,
+                                            onValueChange = { raw ->
+                                                cusPhoneInput = raw.filter { it.isDigit() || it == '+' }.take(16)
+                                            },
+                                            label = { Text("Mobile Number (Optional)") },
+                                            placeholder = { Text("017XXXXXXXX") },
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("course_purchase_phone_input")
+                                        )
+
+                                        Button(
+                                            onClick = { onPurchaseCourse(cusPhoneInput) },
+                                            enabled = !isStartingCheckout,
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .minimumInteractiveComponentSize()
+                                                .testTag("course_purchase_sslcommerz_button")
+                                        ) {
+                                            if (isStartingCheckout) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("Opening SSLCOMMERZ...", fontWeight = FontWeight.Bold)
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Filled.ShoppingCart,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    text = "Buy Now with SSLCOMMERZ · $priceLabel",
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Modules & Lessons Hierarchy
                         items(state.modules, key = { it.id }) { mod ->
                             StudentModuleCard(
@@ -344,15 +457,32 @@ fun CourseDetailScreen(
     }
 
     lockedLessonDialog?.let { locked ->
+        val coursePriceLabel = state.course?.let { CourseDomainUtils.formatCoursePrice(it.price) } ?: "৳499"
         AlertDialog(
             onDismissRequest = { lockedLessonDialog = null },
             title = { Text("Premium Lesson Locked", fontWeight = FontWeight.Bold) },
             text = {
-                Text("\"${locked.title}\" requires an active Premium plan. Free preview lessons in this course remain open.")
+                Text("\"${locked.title}\" is part of this premium course. Purchase the course via SSLCOMMERZ ($coursePriceLabel) to unlock all lessons.")
             },
             confirmButton = {
-                TextButton(onClick = { lockedLessonDialog = null }) {
-                    Text("Got it")
+                Button(
+                    onClick = {
+                        lockedLessonDialog = null
+                        onPurchaseCourse(cusPhoneInput)
+                    },
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("locked_lesson_buy_button")
+                ) {
+                    Text("Buy Course · $coursePriceLabel")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { lockedLessonDialog = null },
+                    modifier = Modifier.minimumInteractiveComponentSize()
+                ) {
+                    Text("Cancel")
                 }
             }
         )

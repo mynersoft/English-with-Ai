@@ -32,11 +32,19 @@ class ChatMessagingService : FirebaseMessagingService() {
             "call_invite" -> {
                 val callRoomId = data["callRoomId"].orEmpty()
                 if (callRoomId.isBlank()) return
+                val callMode = data["callMode"].orEmpty()
                 com.example.core.call.CallInviteNotifier.showIncomingCallInvite(
                     context = applicationContext,
                     callRoomId = callRoomId,
                     callerName = data["callerName"].orEmpty().ifBlank { "Classmate" },
-                    title = data["title"].orEmpty().ifBlank { "1-on-1 English Video Call" }
+                    title = data["title"].orEmpty().ifBlank {
+                        if (callMode.equals("random", ignoreCase = true)) {
+                            "Random 1-on-1 English Call"
+                        } else {
+                            "1-on-1 English Video Call"
+                        }
+                    },
+                    isRandom = callMode.equals("random", ignoreCase = true)
                 )
             }
 

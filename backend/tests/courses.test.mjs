@@ -99,6 +99,7 @@ test("hasStudentPremiumAccess and isLessonLockedForStudent enforce access contro
   assert.equal(isLessonLockedForStudent({ course: premiumCourse, lesson: freePreviewLesson, hasPremiumAccess: false }), false);
   assert.equal(isLessonLockedForStudent({ course: premiumCourse, lesson: paidLesson, hasPremiumAccess: false }), true);
   assert.equal(isLessonLockedForStudent({ course: premiumCourse, lesson: paidLesson, hasPremiumAccess: true }), false);
+  assert.equal(isLessonLockedForStudent({ course: premiumCourse, lesson: paidLesson, hasPremiumAccess: false, hasPurchasedCourse: true }), false);
 });
 
 test("calculateCourseCompletionPercent and resolvePrevNextLessons compute accurately", () => {

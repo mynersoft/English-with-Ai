@@ -55,6 +55,102 @@ class CallRepository {
         parseJoinResult(data)
     }
 
+    suspend fun startRandomCall(
+        excludeUserIds: List<String> = emptyList(),
+        previousRoomId: String? = null,
+        topic: String = "Random 1-on-1 English Practice",
+        audioMuted: Boolean = false,
+        videoEnabled: Boolean = true
+    ): Result<CallJoinResult> = safeCall {
+        val payload = JSONObject()
+            .put("topic", topic.trim())
+            .put("audioMuted", audioMuted)
+            .put("videoEnabled", videoEnabled)
+            .put("excludeUserIds", JSONArray(excludeUserIds.distinct()))
+        if (!previousRoomId.isNullOrBlank()) {
+            payload.put("previousRoomId", previousRoomId)
+        }
+        try {
+            val data = requestJson("POST", "/api/calls/random", payload)
+            parseJoinResult(data)
+        } catch (err: BackendApiException) {
+            if (err.httpStatus == 404 && err.code != "NO_FREE_PARTNER") {
+                startRandomCallClientFallback(
+                    excludeUserIds = excludeUserIds,
+                    topic = topic,
+                    audioMuted = audioMuted,
+                    videoEnabled = videoEnabled
+                )
+            } else {
+                throw err
+            }
+        }
+    }
+
+    private suspend fun startRandomCallClientFallback(
+        excludeUserIds: List<String>,
+        topic: String,
+        audioMuted: Boolean,
+        videoEnabled: Boolean
+    ): CallJoinResult {
+        val excluded = excludeUserIds.map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+        val lobbyData = requestJson("GET", "/api/calls/rooms")
+        val lobby = parseLobbySnapshot(lobbyData)
+
+        // If someone is already calling us in a random/direct invite not excluded, connect immediately
+        val matchingInvite = lobby.incomingInvites.firstOrNull { invite ->
+            invite.status == "ringing" &&
+                invite.hostUserId.isNotBlank() &&
+                !excluded.contains(invite.hostUserId) &&
+                invite.effectiveRandom
+        }
+        if (matchingInvite != null) {
+            val acceptPayload = JSONObject()
+                .put("action", "accept")
+                .put("audioMuted", audioMuted)
+                .put("videoEnabled", videoEnabled)
+            val acceptData = requestJson("POST", "/api/calls/rooms/${matchingInvite.id}/respond", acceptPayload)
+            if (acceptData.has("transport") && !acceptData.isNull("transport")) {
+                val res = parseJoinResult(acceptData)
+                return res.copy(room = res.room.copy(isRandom = true))
+            }
+        }
+
+        val busyIds = collectBusyUserIds(
+            lobby.publicRooms + lobby.privateRooms + lobby.directCalls
+        )
+        excluded.addAll(busyIds)
+
+        val studentsData = requestJson("GET", "/api/chat/students")
+        val studentsArr = studentsData.optJSONArray("students") ?: JSONArray()
+        val candidates = buildList {
+            for (i in 0 until studentsArr.length()) {
+                val obj = studentsArr.optJSONObject(i) ?: continue
+                val id = obj.optString("id").trim()
+                if (id.isNotEmpty() && !excluded.contains(id)) {
+                    add(id)
+                }
+            }
+        }
+        if (candidates.isEmpty()) {
+            throw BackendApiException(
+                "No free students available right now. Everyone else is in another call or declined.",
+                "NO_FREE_PARTNER",
+                404
+            )
+        }
+        val pickedId = candidates.random()
+        val directPayload = JSONObject()
+            .put("mode", CallMode.DIRECT.apiValue)
+            .put("targetUserId", pickedId)
+            .put("topic", topic.trim())
+            .put("audioMuted", audioMuted)
+            .put("videoEnabled", videoEnabled)
+        val createdData = requestJson("POST", "/api/calls/rooms", directPayload)
+        val joined = parseJoinResult(createdData)
+        return joined.copy(room = joined.room.copy(isRandom = true))
+    }
+
     suspend fun createGroupRoom(
         mode: CallMode,
         title: String,
@@ -286,12 +382,14 @@ class CallRepository {
                     isSelf = p.optBoolean("isSelf", false)
                 )
             }
+            val mode = CallMode.fromApi(o.optString("mode"))
+            val topic = o.optString("topic")
             return CallRoomSummary(
                 id = o.optString("id"),
-                mode = CallMode.fromApi(o.optString("mode")),
+                mode = mode,
                 visibility = o.optString("visibility", "public"),
                 title = o.optString("title", "English Video Room"),
-                topic = o.optString("topic"),
+                topic = topic,
                 learningLevel = o.optString("learningLevel", "all"),
                 hostUserId = o.optString("hostUserId"),
                 hostName = o.optString("hostName", "Learner"),
@@ -299,6 +397,8 @@ class CallRepository {
                 targetName = o.optString("targetName"),
                 roomCode = o.optString("roomCode"),
                 status = o.optString("status", "active"),
+                endedReason = o.optString("endedReason"),
+                isRandom = o.optBoolean("isRandom", mode == CallMode.RANDOM || topic.contains("Random", ignoreCase = true)),
                 provider = CallProviderType.fromApi(o.optString("provider")),
                 maxParticipants = o.optInt("maxParticipants", 6),
                 participantCount = o.optInt("participantCount", participants.size),
@@ -309,6 +409,24 @@ class CallRepository {
                 createdAt = o.optString("createdAt"),
                 updatedAt = o.optString("updatedAt")
             )
+        }
+
+        fun collectBusyUserIds(rooms: List<CallRoomSummary>): Set<String> {
+            val busy = mutableSetOf<String>()
+            for (room in rooms) {
+                if (room.status != "ringing" && room.status != "active") continue
+                for (p in room.participants) {
+                    if (p.userId.isNotBlank()) busy.add(p.userId)
+                }
+                if (room.status == "ringing" || room.participants.isNotEmpty()) {
+                    if (room.hostUserId.isNotBlank()) busy.add(room.hostUserId)
+                }
+                val targetId = room.targetUserId
+                if (!targetId.isNullOrBlank() && (room.status == "ringing" || room.mode.isOneOnOne)) {
+                    busy.add(targetId)
+                }
+            }
+            return busy
         }
 
         fun parseSignal(o: JSONObject): CallSignalMessage {

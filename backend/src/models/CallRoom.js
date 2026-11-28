@@ -17,7 +17,7 @@ const callRoomSchema = new mongoose.Schema(
   {
     mode: {
       type: String,
-      enum: ["direct", "group_public", "group_private"],
+      enum: ["direct", "random", "group_public", "group_private"],
       required: true,
       index: true,
     },

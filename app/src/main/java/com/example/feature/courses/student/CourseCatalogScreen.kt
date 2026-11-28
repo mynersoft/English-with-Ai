@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.domain.model.CourseDomainUtils
 import com.example.domain.model.CourseSummary
 import com.example.domain.model.EnrollmentStatus
 import com.example.ui.theme.LocalIsDarkTheme
@@ -330,10 +331,23 @@ private fun StudentCourseCatalogCard(
                     )
                     val isDark = LocalIsDarkTheme.current
                     if (course.isPremium) {
+                        val badgeLabel = when {
+                            course.isPurchased -> "Purchased"
+                            course.hasAccess -> "Unlocked"
+                            else -> "Buy · ${CourseDomainUtils.formatCoursePrice(course.price)}"
+                        }
                         BadgePill(
-                            text = if (course.hasAccess) "Premium Unlocked" else "Premium",
-                            bg = if (isDark) Color(0xFF3E2B0D) else Color(0xFFFEF3C7),
-                            fg = if (isDark) Color(0xFFFBBF24) else Color(0xFF92400E),
+                            text = badgeLabel,
+                            bg = if (course.hasAccess) {
+                                if (isDark) Color(0xFF133A29) else Color(0xFFD1FAE5)
+                            } else {
+                                if (isDark) Color(0xFF3E2B0D) else Color(0xFFFEF3C7)
+                            },
+                            fg = if (course.hasAccess) {
+                                if (isDark) Color(0xFF34D399) else Color(0xFF065F46)
+                            } else {
+                                if (isDark) Color(0xFFFBBF24) else Color(0xFF92400E)
+                            },
                             icon = Icons.Filled.WorkspacePremium
                         )
                     } else {

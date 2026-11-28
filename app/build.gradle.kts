@@ -183,6 +183,11 @@ secrets {
     ignoreList.add("AGORA_APP_ID")
     ignoreList.add("DAILY_API_KEY")
     ignoreList.add("DAILY_DOMAIN")
+    ignoreList.add("SSLCOMMERZ_STORE_ID")
+    ignoreList.add("SSLCOMMERZ_STORE_PASSWORD")
+    ignoreList.add("SSLCOMMERZ_SANDBOX")
+    ignoreList.add("SSLCOMMERZ_CURRENCY")
+    ignoreList.add("SSLCOMMERZ_DEFAULT_PRICE")
 }
 
 // Firebase Google Services

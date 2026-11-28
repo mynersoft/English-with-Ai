@@ -115,6 +115,7 @@ class CourseSystemUnitTest {
             put("completionPercentage", 50)
             put("enrollmentStatus", "in_progress")
             put("hasAccess", true)
+            put("isPurchased", true)
         }
         val parsedCourse = CourseJsonMapper.parseCourse(courseJson)
         assertEquals("course_1", parsedCourse.id)
@@ -122,6 +123,7 @@ class CourseSystemUnitTest {
         assertEquals(EnrollmentStatus.IN_PROGRESS, parsedCourse.enrollmentStatus)
         assertEquals(50, parsedCourse.completionPercentage)
         assertTrue(parsedCourse.isPremium)
+        assertTrue(parsedCourse.isPurchased)
 
         val blocksInput = listOf(
             LessonContentBlock(
@@ -175,5 +177,51 @@ class CourseSystemUnitTest {
         assertNotNull(parsedLesson.progress)
         assertEquals(82, parsedLesson.progress?.lastPositionSeconds)
         assertEquals("blk_1", parsedLesson.progress?.lastContentId)
+    }
+
+    @Test
+    fun `SSLCOMMERZ price formatting and payload parsing handle fallback and verified purchase`() {
+        assertEquals("৳499", CourseDomainUtils.formatCoursePrice(0.0))
+        assertEquals("৳499", CourseDomainUtils.formatCoursePrice(5.0))
+        assertEquals("৳990", CourseDomainUtils.formatCoursePrice(990.0))
+        assertEquals("৳499.50", CourseDomainUtils.formatCoursePrice(499.5))
+        assertEquals("USD 25", CourseDomainUtils.formatCoursePrice(25.0, "USD"))
+
+        val sessionJson = JSONObject().apply {
+            put("purchaseId", "pur_123")
+            put("tranId", "SSL_COURSE_ABC")
+            put("courseId", "course_1")
+            put("courseTitle", "IELTS Speaking Mastery")
+            put("amount", 990)
+            put("currency", "BDT")
+            put("gatewayUrl", "https://sandbox.sslcommerz.com/gwprocess/v4/gw.php?Q=PAY")
+            put("isSandbox", true)
+        }
+        val session = CourseJsonMapper.parseSslCommerzSession(sessionJson)
+        assertEquals("pur_123", session.purchaseId)
+        assertEquals("SSL_COURSE_ABC", session.tranId)
+        assertEquals(990.0, session.amount, 0.01)
+        assertEquals("BDT", session.currency)
+        assertTrue(session.isSandbox)
+        assertTrue(session.gatewayUrl.startsWith("https://"))
+
+        val statusJson = JSONObject().apply {
+            put("purchaseId", "pur_123")
+            put("tranId", "SSL_COURSE_ABC")
+            put("courseId", "course_1")
+            put("status", "paid")
+            put("amount", 990)
+            put("currency", "BDT")
+            put("cardType", "BKASH-BKash")
+            put("cardIssuer", "bKash MobileBanking")
+            put("bankTranId", "BANK123")
+            put("hasAccess", true)
+            put("message", "Payment verified! Course is unlocked.")
+        }
+        val status = CourseJsonMapper.parsePurchaseStatus(statusJson)
+        assertEquals("paid", status.status)
+        assertTrue(status.hasAccess)
+        assertEquals("BKASH-BKash", status.cardType)
+        assertEquals("BANK123", status.bankTranId)
     }
 }

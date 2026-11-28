@@ -18,6 +18,7 @@ import com.example.domain.model.CourseDomainUtils
 import com.example.domain.model.CourseJsonMapper
 import com.example.domain.model.CourseLevel
 import com.example.domain.model.CoursePagination
+import com.example.domain.model.CoursePurchaseStatusResult
 import com.example.domain.model.CourseSummary
 import com.example.domain.model.EnrollmentStatus
 import com.example.domain.model.LessonContentBlock
@@ -26,6 +27,7 @@ import com.example.domain.model.LessonProgressModel
 import com.example.domain.model.LessonSummary
 import com.example.domain.model.LessonViewerPayload
 import com.example.domain.model.ModuleWithLessons
+import com.example.domain.model.SslCommerzCheckoutSession
 import com.example.domain.model.StudentCourseListResponse
 import com.example.domain.model.UploadedMediaResult
 import com.google.firebase.Firebase
@@ -643,6 +645,31 @@ class CourseRepository(private val context: Context) {
         }
     }
 
+    suspend fun initCourseSslCommerzCheckout(
+        courseId: String,
+        cusPhone: String = ""
+    ): SslCommerzCheckoutSession = withContext(Dispatchers.IO) {
+        val body = JSONObject().apply {
+            put("courseId", courseId)
+            if (cusPhone.isNotBlank()) put("cusPhone", cusPhone.trim())
+        }
+        val data = NetworkClient.executeAuthorizedJson(
+            method = "POST",
+            path = "/api/payments/sslcommerz/init",
+            body = body
+        )
+        CourseJsonMapper.parseSslCommerzSession(data)
+    }
+
+    suspend fun getCoursePurchaseStatus(tranId: String): CoursePurchaseStatusResult =
+        withContext(Dispatchers.IO) {
+            val data = NetworkClient.executeAuthorizedJson(
+                method = "GET",
+                path = "/api/payments/sslcommerz/status?tranId=${enc(tranId)}"
+            )
+            CourseJsonMapper.parsePurchaseStatus(data)
+        }
+
     /* ========================================================================
      * INTERNAL HELPERS & ROOM MAPPERS
      * ====================================================================== */
@@ -801,6 +828,7 @@ private fun CourseSummary.toEntity(userId: String, nowMs: Long) = CachedCourseEn
     enrollmentStatus = enrollmentStatus.apiValue,
     continueLessonId = continueLessonId,
     hasAccess = hasAccess,
+    isPurchased = isPurchased,
     isOfflineAvailable = isOfflineAvailable,
     updatedAt = updatedAt,
     cachedAtMs = nowMs
@@ -827,6 +855,7 @@ private fun CachedCourseEntity.toDomain() = CourseSummary(
     enrollmentStatus = EnrollmentStatus.fromApi(enrollmentStatus),
     continueLessonId = continueLessonId,
     hasAccess = hasAccess,
+    isPurchased = isPurchased,
     isOfflineAvailable = isOfflineAvailable,
     updatedAt = updatedAt
 )

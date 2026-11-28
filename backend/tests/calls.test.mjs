@@ -6,9 +6,12 @@ import { fileURLToPath } from "node:url";
 import {
   buildCallInvitePushPayload,
   buildClientJoinTransportConfig,
+  collectBusyUserIdsFromRooms,
   createLiveKitAccessToken,
   generateSecureRoomCode,
+  isOneOnOneCallMode,
   normalizeRoomCode,
+  pickRandomFreeCandidate,
   resolveCallProviderConfig,
   resolveIceServers,
 } from "../src/lib/callProvider.js";
@@ -120,7 +123,7 @@ test("buildCallInvitePushPayload builds safe call_invite payload", () => {
 
 test("All video call API routes wrap handlers with withAuth and never trust client userId", () => {
   const callRoutes = collectRouteFiles(path.join(backendRoot, "src/app/api/calls"));
-  assert.ok(callRoutes.length >= 9, "Expected all 9 call API route files");
+  assert.ok(callRoutes.length >= 10, "Expected all 10 call API route files including random");
   for (const file of callRoutes) {
     const src = fs.readFileSync(file, "utf8");
     assert.ok(
@@ -132,4 +135,54 @@ test("All video call API routes wrap handlers with withAuth and never trust clie
       `Route ${path.relative(backendRoot, file)} must not trust client-supplied userId`
     );
   }
+});
+
+test("collectBusyUserIdsFromRooms identifies users currently in active or ringing calls", () => {
+  assert.equal(isOneOnOneCallMode("direct"), true);
+  assert.equal(isOneOnOneCallMode("random"), true);
+  assert.equal(isOneOnOneCallMode("group_public"), false);
+
+  const busy = collectBusyUserIdsFromRooms([
+    {
+      mode: "direct",
+      status: "ringing",
+      hostUserId: "u1",
+      targetUserId: "u2",
+      participants: [{ userId: "u1" }],
+    },
+    {
+      mode: "group_public",
+      status: "active",
+      hostUserId: "u3",
+      participants: [{ userId: "u3" }, { userId: "u4" }],
+    },
+    {
+      mode: "random",
+      status: "declined",
+      hostUserId: "u5",
+      targetUserId: "u6",
+      participants: [],
+    },
+  ]);
+
+  assert.equal(busy.has("u1"), true);
+  assert.equal(busy.has("u2"), true);
+  assert.equal(busy.has("u3"), true);
+  assert.equal(busy.has("u4"), true);
+  assert.equal(busy.has("u5"), false);
+  assert.equal(busy.has("u6"), false);
+});
+
+test("pickRandomFreeCandidate prioritizes online free students and falls back to all free candidates", () => {
+  const candidates = [
+    { _id: "u1", name: "OfflineOne" },
+    { _id: "u2", name: "OnlineOne" },
+    { _id: "u3", name: "OfflineTwo" },
+  ];
+  const onlinePicked = pickRandomFreeCandidate(candidates, new Set(["u2"]), () => 0.9);
+  assert.equal(onlinePicked._id, "u2");
+
+  const fallbackPicked = pickRandomFreeCandidate(candidates, new Set(), () => 0.5);
+  assert.equal(fallbackPicked._id, "u2");
+  assert.equal(pickRandomFreeCandidate([], new Set(["u2"])), null);
 });

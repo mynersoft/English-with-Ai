@@ -129,8 +129,8 @@ export function hasStudentPremiumAccess(userDoc, now = new Date()) {
   return true;
 }
 
-export function isLessonLockedForStudent({ course, lesson, hasPremiumAccess }) {
-  if (hasPremiumAccess) return false;
+export function isLessonLockedForStudent({ course, lesson, hasPremiumAccess, hasPurchasedCourse = false }) {
+  if (hasPremiumAccess || hasPurchasedCourse) return false;
   // Lesson explicitly marked premium is always locked for non-premium users.
   if (Boolean(lesson?.isPremium)) return true;
   // Free lessons inside a course are accessible unless both course and lesson require premium.

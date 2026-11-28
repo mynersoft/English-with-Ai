@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -84,7 +85,7 @@ fun IncomingCallBanner(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Videocam,
+                            imageVector = if (invite.effectiveRandom) Icons.Filled.Shuffle else Icons.Filled.Videocam,
                             contentDescription = null,
                             tint = accentGreen,
                             modifier = Modifier.size(24.dp)
@@ -92,7 +93,11 @@ fun IncomingCallBanner(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Incoming 1-on-1 Video Call",
+                            text = if (invite.effectiveRandom) {
+                                "Incoming Random Practice Call"
+                            } else {
+                                "Incoming 1-on-1 Video Call"
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             color = accentGreen,
                             fontWeight = FontWeight.Bold

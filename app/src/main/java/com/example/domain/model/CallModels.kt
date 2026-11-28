@@ -2,8 +2,12 @@ package com.example.domain.model
 
 enum class CallMode(val apiValue: String, val label: String) {
     DIRECT("direct", "1-on-1 Call"),
+    RANDOM("random", "Random Call"),
     GROUP_PUBLIC("group_public", "Public Group"),
     GROUP_PRIVATE("group_private", "Private Group");
+
+    val isOneOnOne: Boolean
+        get() = this == DIRECT || this == RANDOM
 
     companion object {
         fun fromApi(raw: String?): CallMode =
@@ -83,6 +87,8 @@ data class CallRoomSummary(
     val targetName: String = "",
     val roomCode: String = "",
     val status: String = "active", // ringing | active | ended | declined | missed
+    val endedReason: String = "",
+    val isRandom: Boolean = false,
     val provider: CallProviderType = CallProviderType.FREE_P2P,
     val maxParticipants: Int = 6,
     val participantCount: Int = 0,
@@ -95,6 +101,9 @@ data class CallRoomSummary(
 ) {
     val selfUserId: String
         get() = participants.firstOrNull { it.isSelf }?.userId ?: if (isHost) hostUserId else targetUserId.orEmpty()
+
+    val effectiveRandom: Boolean
+        get() = isRandom || mode == CallMode.RANDOM || topic.contains("Random", ignoreCase = true)
 }
 
 data class CallLobbySnapshot(

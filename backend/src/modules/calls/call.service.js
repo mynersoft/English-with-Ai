@@ -5,17 +5,23 @@ import { extractInvalidFcmTokens } from "@/lib/chatNotifications";
 import {
   buildCallInvitePushPayload,
   buildClientJoinTransportConfig,
+  collectBusyUserIdsFromRooms,
   generateSecureRoomCode,
+  isOneOnOneCallMode,
   normalizeRoomCode,
+  pickRandomFreeCandidate,
   resolveCallProviderConfig,
 } from "@/lib/callProvider";
 import CallRoom from "@/models/CallRoom";
 import CallSignal from "@/models/CallSignal";
+import ChatPresence from "@/models/ChatPresence";
 import User from "@/models/User";
 
 const RINGING_TIMEOUT_MS = 65_000;
+const RANDOM_RINGING_TIMEOUT_MS = 25_000;
 const PARTICIPANT_HEARTBEAT_TTL_MS = 35_000;
 const EMPTY_ROOM_GRACE_MS = 90_000;
+const ONLINE_PRESENCE_WINDOW_MS = 180_000;
 const VALID_SIGNAL_TYPES = new Set(["offer", "answer", "ice", "renegotiate", "bye"]);
 const VALID_LEVELS = new Set(["all", "beginner", "intermediate", "advanced"]);
 
@@ -57,7 +63,7 @@ function serializeCallRoom(room, currentUserIdStr) {
   }));
 
   let displayTitle = room.title;
-  if (room.mode === "direct") {
+  if (isOneOnOneCallMode(room.mode)) {
     displayTitle = isHost
       ? room.targetName || room.title || "Video Call"
       : room.hostName || room.title || "Video Call";
@@ -69,6 +75,7 @@ function serializeCallRoom(room, currentUserIdStr) {
   return {
     id: String(room._id),
     mode: room.mode,
+    isRandom: room.mode === "random",
     visibility: room.visibility,
     title: displayTitle,
     topic: room.topic || "",
@@ -79,6 +86,7 @@ function serializeCallRoom(room, currentUserIdStr) {
     targetName: room.targetName || "",
     roomCode: canSeeRoomCode ? room.roomCode || "" : "",
     status: room.status,
+    endedReason: room.endedReason || "",
     provider: room.provider || "free_p2p",
     maxParticipants: room.maxParticipants || 6,
     participantCount: participants.length,
@@ -94,12 +102,24 @@ function serializeCallRoom(room, currentUserIdStr) {
 export async function cleanupStaleCalls() {
   const now = Date.now();
   const ringCutoff = new Date(now - RINGING_TIMEOUT_MS);
+  const randomRingCutoff = new Date(now - RANDOM_RINGING_TIMEOUT_MS);
   const participantCutoff = new Date(now - PARTICIPANT_HEARTBEAT_TTL_MS);
   const emptyCutoff = new Date(now - EMPTY_ROOM_GRACE_MS);
 
   await Promise.all([
     CallRoom.updateMany(
       { mode: "direct", status: "ringing", createdAt: { $lt: ringCutoff } },
+      {
+        $set: {
+          status: "missed",
+          endedReason: "no_answer",
+          endedAt: new Date(now),
+          participants: [],
+        },
+      }
+    ),
+    CallRoom.updateMany(
+      { mode: "random", status: "ringing", createdAt: { $lt: randomRingCutoff } },
       {
         $set: {
           status: "missed",
@@ -205,7 +225,7 @@ export async function listCallLobby(userDoc) {
       .limit(20)
       .lean(),
     CallRoom.find({
-      mode: "direct",
+      mode: { $in: ["direct", "random"] },
       $or: [{ hostUserId: userDoc._id }, { targetUserId: userDoc._id }],
     })
       .sort({ updatedAt: -1 })
@@ -230,7 +250,7 @@ export async function getIncomingInvites(userDoc) {
   await cleanupStaleCalls();
   const uid = String(userDoc._id);
   const invites = await CallRoom.find({
-    mode: "direct",
+    mode: { $in: ["direct", "random"] },
     targetUserId: userDoc._id,
     status: "ringing",
   })
@@ -425,7 +445,7 @@ async function joinRoomDocument(userDoc, room, { audioMuted = false, videoEnable
   if (room.mode === "group_private" && !(room.invitedUserIds || []).some((id) => String(id) === uid)) {
     room.invitedUserIds.push(userDoc._id);
   }
-  if (room.mode === "direct" && room.status === "ringing" && String(room.targetUserId) === uid) {
+  if (isOneOnOneCallMode(room.mode) && room.status === "ringing" && String(room.targetUserId) === uid) {
     room.status = "active";
     room.startedAt = now;
   }
@@ -449,7 +469,7 @@ export async function joinCallRoom(userDoc, roomIdRaw, body = {}) {
     throw new AppError(409, "CALL_ENDED", "This call has already ended.");
   }
 
-  if (room.mode === "direct") {
+  if (isOneOnOneCallMode(room.mode)) {
     const allowed =
       String(room.hostUserId) === uid ||
       (room.targetUserId && String(room.targetUserId) === uid);
@@ -506,7 +526,7 @@ export async function respondToCall(userDoc, roomIdRaw, body = {}) {
   const isHost = String(room.hostUserId) === uid;
   const isTarget = room.targetUserId && String(room.targetUserId) === uid;
 
-  if (room.mode === "direct") {
+  if (isOneOnOneCallMode(room.mode)) {
     if (!isHost && !isTarget) {
       throw new AppError(403, "FORBIDDEN", "You cannot modify this call.");
     }
@@ -585,7 +605,7 @@ export async function leaveCallRoom(userDoc, roomIdRaw, body = {}) {
 
   room.participants = remaining;
   const endRoomRequested = Boolean(body?.endRoom) && String(room.hostUserId) === uid;
-  if (room.mode === "direct" || endRoomRequested || remaining.length === 0) {
+  if (isOneOnOneCallMode(room.mode) || endRoomRequested || remaining.length === 0) {
     room.status = "ended";
     room.endedReason = endRoomRequested ? "host_ended" : "completed";
     room.endedAt = new Date();
@@ -595,6 +615,151 @@ export async function leaveCallRoom(userDoc, roomIdRaw, body = {}) {
   return {
     left: true,
     room: serializeCallRoom(room.toObject(), uid),
+  };
+}
+
+export async function startRandomCall(userDoc, body = {}) {
+  await cleanupStaleCalls();
+  const uid = String(userDoc._id);
+  const providerConfig = resolveCallProviderConfig(process.env);
+  const audioMuted = Boolean(body?.audioMuted);
+  const videoEnabled = body?.videoEnabled !== false;
+  const topic = String(body?.topic || "Random 1-on-1 English Practice").trim().slice(0, 160);
+
+  if (body?.previousRoomId && mongoose.Types.ObjectId.isValid(String(body.previousRoomId))) {
+    const prevRoom = await CallRoom.findById(body.previousRoomId);
+    if (
+      prevRoom &&
+      (prevRoom.status === "ringing" || prevRoom.status === "active") &&
+      (String(prevRoom.hostUserId) === uid || String(prevRoom.targetUserId) === uid)
+    ) {
+      const remaining = (prevRoom.participants || []).filter((p) => String(p.userId) !== uid);
+      if (remaining.length > 0) {
+        await CallSignal.insertMany(
+          remaining.map((p) => ({
+            roomId: prevRoom._id,
+            fromUserId: userDoc._id,
+            toUserId: p.userId,
+            type: "bye",
+            payload: JSON.stringify({ userId: uid }),
+          }))
+        );
+      }
+      prevRoom.status = "ended";
+      prevRoom.endedReason = "skipped";
+      prevRoom.endedAt = new Date();
+      prevRoom.participants = [];
+      await prevRoom.save();
+    }
+  }
+
+  const rawExcluded = Array.isArray(body?.excludeUserIds) ? body.excludeUserIds : [];
+  const excludedSet = new Set([uid]);
+  for (const rawId of rawExcluded.slice(0, 50)) {
+    const s = String(rawId || "").trim();
+    if (mongoose.Types.ObjectId.isValid(s)) {
+      excludedSet.add(s);
+    }
+  }
+
+  // If another free student is currently ringing us in a random call, connect immediately
+  const incomingRandom = await CallRoom.findOne({
+    mode: "random",
+    targetUserId: userDoc._id,
+    status: "ringing",
+  }).sort({ createdAt: -1 });
+
+  if (incomingRandom && !excludedSet.has(String(incomingRandom.hostUserId))) {
+    return joinRoomDocument(userDoc, incomingRandom, { audioMuted, videoEnabled });
+  }
+
+  // Collect every user currently busy in any ringing or active call (1-on-1, random, or group)
+  const activeRooms = await CallRoom.find({
+    status: { $in: ["ringing", "active"] },
+  })
+    .select("mode status hostUserId targetUserId participants.userId")
+    .lean();
+
+  const busyUserIds = collectBusyUserIdsFromRooms(activeRooms);
+  for (const busyId of busyUserIds) {
+    excludedSet.add(busyId);
+  }
+
+  const excludedObjectIds = Array.from(excludedSet)
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const presenceCutoff = new Date(Date.now() - ONLINE_PRESENCE_WINDOW_MS);
+  const [candidates, onlinePresence] = await Promise.all([
+    User.find({
+      _id: { $nin: excludedObjectIds },
+      status: "active",
+    })
+      .sort({ lastLoginAt: -1, updatedAt: -1 })
+      .select("_id name learningLevel role lastLoginAt")
+      .limit(50)
+      .lean(),
+    ChatPresence.find({ lastSeenAt: { $gte: presenceCutoff } })
+      .select("userId")
+      .lean(),
+  ]);
+
+  if (!candidates.length) {
+    throw new AppError(
+      404,
+      "NO_FREE_PARTNER",
+      "No free students available right now. Everyone else is in another call or declined."
+    );
+  }
+
+  const onlineUserIds = new Set(onlinePresence.map((p) => String(p.userId)));
+  const partner = pickRandomFreeCandidate(candidates, onlineUserIds);
+  if (!partner) {
+    throw new AppError(
+      404,
+      "NO_FREE_PARTNER",
+      "No free students available right now. Please try again shortly."
+    );
+  }
+
+  const selfParticipant = {
+    userId: userDoc._id,
+    name: userDoc.name || "Learner",
+    badge: userBadgeLabel(userDoc),
+    audioMuted,
+    videoEnabled,
+    joinedAt: new Date(),
+    lastHeartbeatAt: new Date(),
+  };
+
+  const created = await CallRoom.create({
+    mode: "random",
+    visibility: "private",
+    title: `${userDoc.name || "Learner"} & ${partner.name || "Learner"}`,
+    topic,
+    learningLevel: "all",
+    hostUserId: userDoc._id,
+    hostName: userDoc.name || "Learner",
+    targetUserId: partner._id,
+    targetName: partner.name || "Learner",
+    invitedUserIds: [userDoc._id, partner._id],
+    participants: [selfParticipant],
+    maxParticipants: 2,
+    status: "ringing",
+    provider: providerConfig.provider,
+    startedAt: new Date(),
+  });
+
+  const plain = created.toObject();
+  await dispatchIncomingCallPush({
+    room: plain,
+    targetUserId: partner._id,
+    callerName: userDoc.name || "Learner",
+  });
+
+  return {
+    room: serializeCallRoom(plain, uid),
+    transport: buildClientJoinTransportConfig({ room: plain, user: userDoc, env: process.env }),
   };
 }
 
